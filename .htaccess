@@ -1,0 +1,59 @@
+# ============================================================================
+# SiteWatch - Apache configuration
+# Works on XAMPP, cPanel and standard Apache 2.2/2.4 hosts.
+# ============================================================================
+
+Options -Indexes
+ServerSignature Off
+
+# ---------------------------------------------------------------------------
+# Block direct web access to application internals
+# ---------------------------------------------------------------------------
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteRule ^(app|config|database|storage|cron|vendor|tests)(/|$) - [F,L]
+    RewriteRule ^(\.env|\.env\.example|composer\.json|composer\.lock|phpunit\.xml|README\.md)$ - [F,L]
+</IfModule>
+
+# Sensitive files (belt and braces in case mod_rewrite is unavailable)
+<FilesMatch "^(\.env|\.env\.example|\.htaccess|\.gitignore|composer\.json|composer\.lock|phpunit\.xml)$">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order allow,deny
+        Deny from all
+    </IfModule>
+</FilesMatch>
+
+<FilesMatch "\.(log|lock|sql|md|bak|dist|ini|sh)$">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order allow,deny
+        Deny from all
+    </IfModule>
+</FilesMatch>
+
+# ---------------------------------------------------------------------------
+# Security headers (also set by PHP; harmless duplication)
+# ---------------------------------------------------------------------------
+<IfModule mod_headers.c>
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set X-Frame-Options "SAMEORIGIN"
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+</IfModule>
+
+# ---------------------------------------------------------------------------
+# Static asset caching
+# ---------------------------------------------------------------------------
+<IfModule mod_expires.c>
+    ExpiresActive On
+    ExpiresByType text/css "access plus 7 days"
+    ExpiresByType application/javascript "access plus 7 days"
+    ExpiresByType image/svg+xml "access plus 30 days"
+    ExpiresByType image/png "access plus 30 days"
+</IfModule>
+
+DirectoryIndex index.php

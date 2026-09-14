@@ -1,0 +1,12 @@
+/vendor/
+/.env
+/storage/logs/*
+/storage/cache/*
+/storage/locks/*
+/storage/install.lock
+!/storage/**/.gitkeep
+/.phpunit.cache/
+
+# Generated reports / research artifacts (not source)
+/output/
+/storage/research/
