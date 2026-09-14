@@ -341,23 +341,23 @@ final class NotificationManager
             'warning' => '#D97706',
             'info'    => '#2563EB',
         ];
-        $color = $colors[$tone] ?? '#6C5CE7';
+        $color = $colors[$tone] ?? '#C2410C';
         $rowsHtml = '';
         foreach ($rows as [$label, $value]) {
             $rowsHtml .= '<tr><td style="padding:9px 12px;border-bottom:1px solid #E5E7EB;color:#64748B;font-size:13px;width:38%;vertical-align:top;">' . e($label) . '</td>'
                 . '<td style="padding:9px 12px;border-bottom:1px solid #E5E7EB;color:#0F172A;font-size:13px;word-break:break-word;">' . e($value) . '</td></tr>';
         }
         $cta = $ctaUrl !== ''
-            ? '<p style="margin:24px 0 0;"><a href="' . e($ctaUrl) . '" style="display:inline-block;background:#6C5CE7;color:#ffffff;text-decoration:none;font-weight:600;font-size:14px;padding:11px 20px;border-radius:8px;">' . e($ctaLabel) . '</a></p>'
+            ? '<p style="margin:24px 0 0;"><a href="' . e($ctaUrl) . '" style="display:inline-block;background:#C2410C;color:#ffffff;text-decoration:none;font-weight:600;font-size:14px;padding:11px 20px;border-radius:8px;">' . e($ctaLabel) . '</a></p>'
             : '';
         $introHtml = $intro !== '' ? '<p style="margin:0 0 16px;color:#334155;font-size:14px;line-height:1.5;">' . $intro . '</p>' : '';
 
         return '<!doctype html><html><body style="margin:0;padding:24px;background:#F8FAFC;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif;">'
-            . '<div style="max-width:600px;margin:0 auto;background:#ffffff;border:1px solid #E5E7EB;border-radius:14px;overflow:hidden;">'
+            . '<div style="max-width:600px;margin:0 auto;background:#ffffff;border:1px solid #E2E8F0;border-radius:10px;overflow:hidden;">'
             . '<div style="padding:20px 24px;border-bottom:1px solid #E5E7EB;display:flex;align-items:center;">'
             . '<span style="font-size:16px;font-weight:700;color:#0F172A;">' . e($this->appName()) . '</span></div>'
             . '<div style="padding:24px;">'
-            . '<span style="display:inline-block;background:' . $color . ';color:#fff;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:4px 10px;border-radius:999px;">' . e($badge) . '</span>'
+            . '<span style="display:inline-block;background:' . $color . ';color:#fff;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:4px 10px;border-radius:6px;">' . e($badge) . '</span>'
             . '<h1 style="font-size:20px;line-height:1.3;margin:14px 0 18px;color:#0F172A;">' . e($subject) . '</h1>'
             . $introHtml
             . '<table cellpadding="0" cellspacing="0" style="width:100%;border:1px solid #E5E7EB;border-radius:10px;border-collapse:separate;overflow:hidden;">' . $rowsHtml . '</table>'

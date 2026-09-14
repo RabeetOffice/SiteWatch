@@ -177,18 +177,44 @@
     SW.chartColors = function () {
         const dark = SW.theme.current() === 'dark';
         return {
-            grid: dark ? '#1F2937' : '#EEF2F7',
-            text: dark ? '#94A3B8' : '#64748B',
-            primary: dark ? '#8B7CF6' : '#6C5CE7',
-            primarySoft: dark ? 'rgba(139,124,246,0.18)' : 'rgba(108,92,231,0.12)',
+            grid: dark ? '#262B31' : '#E9EEF4',
+            text: dark ? '#A8B0BA' : '#64748B',
+            primary: dark ? '#FB923C' : '#EA580C',
+            primarySoft: dark ? 'rgba(251,146,60,0.16)' : 'rgba(234,88,12,0.10)',
             success: dark ? '#22C55E' : '#16A34A',
-            warning: dark ? '#FBBF24' : '#F59E0B',
-            danger: dark ? '#F87171' : '#DC2626',
-            info: dark ? '#60A5FA' : '#2563EB',
-            neutral: dark ? '#475569' : '#CBD5E1',
+            successSoft: dark ? 'rgba(34,197,94,0.16)' : 'rgba(22,163,74,0.10)',
+            warning: dark ? '#FBBF24' : '#D97706',
+            danger: dark ? '#EF4444' : '#DC2626',
+            info: dark ? '#93C5FD' : '#1D4ED8',
+            neutral: dark ? '#6B7480' : '#94A3B8',
             tooltipBg: dark ? '#E5E7EB' : '#111827',
-            tooltipText: dark ? '#0F172A' : '#FFFFFF',
+            tooltipText: dark ? '#111827' : '#FFFFFF',
         };
+    };
+
+    /**
+     * Shared Chart.js defaults. Every chart page calls this before building a
+     * chart so legends, tooltips and typography stay consistent.
+     */
+    SW.chartDefaults = function () {
+        const c = SW.chartColors();
+        if (typeof Chart === 'undefined') return c;
+        Chart.defaults.color = c.text;
+        Chart.defaults.borderColor = c.grid;
+        Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
+        Chart.defaults.font.size = 11.5;
+        Chart.defaults.animation = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches ? false : Chart.defaults.animation;
+        Chart.defaults.plugins.legend.display = false;
+        Chart.defaults.plugins.legend.labels.boxWidth = 10;
+        Chart.defaults.plugins.legend.labels.boxHeight = 10;
+        Chart.defaults.plugins.legend.labels.usePointStyle = true;
+        Chart.defaults.plugins.tooltip.backgroundColor = c.tooltipBg;
+        Chart.defaults.plugins.tooltip.titleColor = c.tooltipText;
+        Chart.defaults.plugins.tooltip.bodyColor = c.tooltipText;
+        Chart.defaults.plugins.tooltip.cornerRadius = 6;
+        Chart.defaults.plugins.tooltip.padding = 10;
+        Chart.defaults.plugins.tooltip.displayColors = false;
+        return c;
     };
 
     // ------------------------------------------------------------------
@@ -348,7 +374,31 @@
             (input.closest('.input-group') || input).insertAdjacentElement('afterend', fb);
             if (!first) first = input;
         });
-        if (first) first.focus();
+        if (first) {
+            // Reveal any collapsed section containing an invalid field.
+            let parent = first.closest('details');
+            while (parent) { parent.open = true; parent = parent.parentElement ? parent.parentElement.closest('details') : null; }
+            const pane = first.closest('.tab-pane');
+            if (pane && !pane.classList.contains('active')) {
+                const trigger = document.querySelector('[data-bs-target="#' + pane.id + '"]');
+                if (trigger && window.bootstrap) { bootstrap.Tab.getOrCreateInstance(trigger).show(); }
+            }
+            first.focus();
+            if (typeof first.scrollIntoView === 'function') first.scrollIntoView({ block: 'center' });
+        }
+    };
+
+    /**
+     * Dropdowns inside horizontally scrolling containers (data tables) must not
+     * be clipped: the fixed positioning strategy lifts the menu out of the
+     * scroll box so row actions stay reachable at every width.
+     */
+    SW.dropdowns = function (root) {
+        if (!window.bootstrap) return;
+        SW.qsa('[data-bs-toggle="dropdown"]', root).forEach(function (el) {
+            if (bootstrap.Dropdown.getInstance(el)) return;
+            new bootstrap.Dropdown(el, { popperConfig: { strategy: 'fixed' } });
+        });
     };
     SW.tooltips = function (root) {
         SW.qsa('[data-bs-toggle="tooltip"]', root).forEach(function (el) {
@@ -366,7 +416,7 @@
         let timer = null, running = false, stopped = false;
         const indicator = document.getElementById('refreshIndicator');
         const setIndicator = function (active) {
-            if (!indicator) return;
+            if (!indicator || indicator.classList.contains('failed')) return;
             indicator.classList.toggle('paused', !active);
             const txt = indicator.querySelector('.txt');
             if (txt) txt.textContent = active ? 'Auto-refresh' : 'Refresh paused';
@@ -389,21 +439,41 @@
     // Engine status widget
     // ------------------------------------------------------------------
     SW.updateEngine = function (engine) {
+        if (!engine) return;
+        const healthy = engine.state === 'running';
+        const detail = engine.message || ('Last monitoring run: ' + (engine.last_run_ago || 'never'));
         const el = document.getElementById('engineStatus');
-        if (!el || !engine) return;
-        el.className = 'sw-engine state-' + engine.state;
-        const label = el.querySelector('[data-engine-label]');
-        const meta = el.querySelector('[data-engine-meta]');
-        if (label) label.textContent = engine.label;
-        if (meta) meta.textContent = 'Last run: ' + (engine.last_run_ago || 'never');
-        el.setAttribute('data-bs-original-title', engine.message || ('Last run ' + (engine.last_run_ago || 'never')));
+        if (el) {
+            // updateEngine owns the class list of this element; keep responsive
+            // display utilities here so they survive a refresh.
+            el.className = 'sw-engine d-none d-md-inline-flex state-' + engine.state;
+            const label = el.querySelector('[data-engine-label]');
+            const meta = el.querySelector('[data-engine-meta]');
+            if (label) label.textContent = engine.label;
+            if (meta) meta.textContent = engine.last_run_ago && engine.last_run_ago !== 'never' ? 'Last run ' + engine.last_run_ago : 'Never run';
+            el.setAttribute('data-bs-original-title', detail);
+            el.setAttribute('title', detail);
+        }
         const banner = document.getElementById('monitorBanner');
         if (banner) {
             banner.className = 'monitor-banner state-' + engine.state;
-            banner.querySelector('[data-monitor-title]').textContent = engine.state === 'running' ? 'Monitoring is active' : engine.state === 'never' ? 'Monitoring is not set up yet' : 'Monitoring needs attention';
-            banner.querySelector('[data-monitor-detail]').textContent = 'Last run: ' + (engine.last_run_ago || 'never') + '. ' + (engine.state === 'running' ? 'Check each website for its latest result.' : 'Website statuses may be outdated.');
+            banner.hidden = healthy;
+            const title = banner.querySelector('[data-monitor-title]');
+            const text = banner.querySelector('[data-monitor-detail]');
+            if (title) {
+                title.textContent = engine.state === 'never' ? 'Monitoring has never run'
+                    : engine.state === 'problem' ? 'The last monitoring run failed'
+                    : engine.state === 'unknown' ? 'Unable to refresh monitoring status'
+                    : 'Monitoring is not running';
+            }
+            if (text) {
+                text.textContent = engine.state === 'unknown'
+                    ? 'Showing the previous result. We will retry automatically.'
+                    : detail + ' Website statuses on this page may be out of date.';
+            }
         }
     };
+
     SW.updateIncidentCount = function (count) {
         const el = document.getElementById('navIncidentCount');
         if (el) el.textContent = count > 0 ? String(count) : '';
@@ -422,16 +492,38 @@
         const toggle = document.getElementById('sidebarToggle');
         const collapse = document.getElementById('sidebarCollapse');
         const backdrop = document.getElementById('sidebarBackdrop');
+        const sidebarEl = document.getElementById('sidebar');
+        const closeSidebar = function (returnFocus) {
+            if (!html.classList.contains('sidebar-open')) return;
+            html.classList.remove('sidebar-open');
+            if (toggle) {
+                toggle.setAttribute('aria-expanded', 'false');
+                if (returnFocus) toggle.focus();
+            }
+        };
+        const openSidebar = function () {
+            html.classList.add('sidebar-open');
+            if (toggle) toggle.setAttribute('aria-expanded', 'true');
+            const firstLink = sidebarEl && sidebarEl.querySelector('.sw-nav-link');
+            if (firstLink) firstLink.focus();
+        };
         if (toggle) {
             toggle.setAttribute('aria-controls', 'sidebar');
             toggle.setAttribute('aria-expanded', 'false');
-            toggle.addEventListener('click', function () { html.classList.toggle('sidebar-open'); toggle.setAttribute('aria-expanded', String(html.classList.contains('sidebar-open'))); });
+            toggle.addEventListener('click', function () {
+                if (html.classList.contains('sidebar-open')) { closeSidebar(true); } else { openSidebar(); }
+            });
         }
-        if (backdrop) backdrop.addEventListener('click', function () { html.classList.remove('sidebar-open'); if (toggle) { toggle.setAttribute('aria-expanded', 'false'); toggle.focus(); } });
+        if (backdrop) backdrop.addEventListener('click', function () { closeSidebar(true); });
         document.addEventListener('keydown', function (event) {
-            if (event.key === 'Escape' && html.classList.contains('sidebar-open')) {
-                html.classList.remove('sidebar-open'); if (toggle) { toggle.setAttribute('aria-expanded', 'false'); toggle.focus(); }
-            }
+            if (event.key === 'Escape') closeSidebar(true);
+        });
+        // Keep focus inside the mobile navigation while it is open.
+        document.addEventListener('focusin', function (event) {
+            if (!html.classList.contains('sidebar-open') || !sidebarEl) return;
+            if (sidebarEl.contains(event.target) || (toggle && toggle.contains(event.target))) return;
+            const firstLink = sidebarEl.querySelector('.sw-nav-link');
+            if (firstLink) firstLink.focus();
         });
         const printReport = document.getElementById('printReport');
         if (printReport) printReport.addEventListener('click', function () { window.print(); });
@@ -439,14 +531,15 @@
             html.classList.toggle('sidebar-collapsed');
             try { localStorage.setItem('sw-sidebar', html.classList.contains('sidebar-collapsed') ? 'collapsed' : 'expanded'); } catch (e) { /* ignore */ }
         });
-        SW.qsa('.sw-nav-link').forEach(function (a) { a.addEventListener('click', function () { html.classList.remove('sidebar-open'); }); });
+        SW.qsa('.sw-nav-link').forEach(function (a) { a.addEventListener('click', function () { closeSidebar(false); }); });
 
         // Sidebar tooltips only when collapsed on desktop
         SW.qsa('.sw-sidebar [data-bs-toggle="tooltip"]').forEach(function (el) {
             new bootstrap.Tooltip(el, { container: 'body', trigger: 'hover', delay: { show: 400, hide: 0 } });
             el.addEventListener('show.bs.tooltip', function (ev) {
                 const isCollapsed = html.classList.contains('sidebar-collapsed') && window.innerWidth >= 992;
-                if (!isCollapsed && !el.classList.contains('sw-engine')) ev.preventDefault();
+                // Only show sidebar tooltips when the label is not already visible.
+                if (!isCollapsed && !el.classList.contains('btn-icon')) ev.preventDefault();
             });
         });
         SW.tooltips(document.querySelector('.sw-topbar'));
@@ -476,12 +569,18 @@
                     const res = await SW.api('api/monitoring/status.php');
                     SW.updateEngine(res.data.engine);
                     SW.updateIncidentCount(res.data.open_incidents);
+                    const indicator = document.getElementById('refreshIndicator');
+                    if (indicator && indicator.classList.contains('failed')) {
+                        indicator.classList.remove('failed');
+                        const txt = indicator.querySelector('.txt');
+                        if (txt) txt.textContent = 'Auto-refresh';
+                    }
                 } catch (error) {
-                    const banner = document.getElementById('monitorBanner');
-                    if (banner) {
-                        banner.className = 'monitor-banner state-unknown';
-                        banner.querySelector('[data-monitor-title]').textContent = 'Unable to refresh monitoring status';
-                        banner.querySelector('[data-monitor-detail]').textContent = 'Showing previous results. Check your connection; we will retry automatically.';
+                    const indicator = document.getElementById('refreshIndicator');
+                    if (indicator) {
+                        indicator.classList.add('failed');
+                        const txt = indicator.querySelector('.txt');
+                        if (txt) txt.textContent = 'Refresh failed';
                     }
                     throw error;
                 }

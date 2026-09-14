@@ -18,10 +18,10 @@ if ($website === null) {
 }
 
 $pageTitle = 'Edit Website';
-$pageSubtitle = $website['name'] . ' · ' . $website['domain'];
+$pageContext = '<span>' . e($website['name']) . '</span><span>' . e($website['domain']) . '</span>';
 $activeNav = 'websites';
 $pageScripts = ['website-form.js'];
-$headerActions = '<a href="' . e(base_url('admin/website-details.php?id=' . $id)) . '" class="btn btn-light"><i class="bi bi-arrow-left"></i><span class="d-none d-sm-inline">Back to details</span></a>';
+$headerActions = '<a href="' . e(base_url('admin/website-details.php?id=' . $id)) . '" class="btn btn-light"><i class="bi bi-arrow-left"></i>Back to details</a>';
 $formMode = 'edit';
 
 require dirname(__DIR__) . '/includes/header.php';

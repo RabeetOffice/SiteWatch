@@ -2,6 +2,13 @@
 (function () {
     'use strict';
 
+    function outcome(title, tone, icon, items, render) {
+        if (!items.length) return '';
+        return '<section class="import-outcome"><h3><span class="activity-icon tone-' + tone + '" aria-hidden="true"><i class="bi ' + icon + '"></i></span>' +
+            SW.escape(title) + '<span class="sw-pill tone-' + tone + '">' + items.length + '</span></h3>' +
+            '<ul class="list-group list-group-flush">' + items.map(render).join('') + '</ul></section>';
+    }
+
     function renderReport(data) {
         const card = document.getElementById('importReport');
         const summary = document.getElementById('importSummary');
@@ -9,21 +16,27 @@
         if (!card) return;
         card.classList.remove('d-none');
         const c = data.counts;
-        summary.textContent = c.total + ' entries processed';
-        const section = function (title, tone, icon, items, render) {
-            if (!items.length) return '';
-            return '<div class="mb-3"><div class="d-flex align-items-center gap-2 mb-2"><span class="activity-icon tone-' + tone + '" style="width:28px;height:28px;font-size:13px"><i class="bi ' + icon + '"></i></span><b>' + title + '</b><span class="sw-pill tone-' + tone + '">' + items.length + '</span></div><ul class="list-group list-group-flush">' + items.map(render).join('') + '</ul></div>';
-        };
+        summary.textContent = c.total + (c.total === 1 ? ' entry processed' : ' entries processed');
         body.innerHTML =
-            '<div class="row g-2 mb-4">' +
-            '<div class="col-6 col-md-3"><div class="overview-item"><div class="l">Imported</div><div class="v text-success">' + c.imported + '</div></div></div>' +
-            '<div class="col-6 col-md-3"><div class="overview-item"><div class="l">Duplicates</div><div class="v text-warning">' + c.duplicates + '</div></div></div>' +
-            '<div class="col-6 col-md-3"><div class="overview-item"><div class="l">Invalid URLs</div><div class="v text-danger">' + c.invalid + '</div></div></div>' +
-            '<div class="col-6 col-md-3"><div class="overview-item"><div class="l">Failed</div><div class="v text-danger">' + c.failed + '</div></div></div></div>' +
-            section('Imported', 'success', 'bi-check-lg', data.report.imported, function (i) { return '<li class="list-group-item d-flex justify-content-between gap-2"><span><a href="' + SW.url('admin/website-details.php', { id: i.id }) + '">' + SW.escape(i.name) + '</a> <span class="text-muted">' + SW.escape(i.url) + '</span></span></li>'; }) +
-            section('Duplicates (skipped)', 'warning', 'bi-files', data.report.duplicates, function (i) { return '<li class="list-group-item d-flex justify-content-between gap-2"><span class="mono">' + SW.escape(i.input) + '</span><span class="text-muted">' + SW.escape(i.reason) + '</span></li>'; }) +
-            section('Invalid entries', 'danger', 'bi-x-lg', data.report.invalid, function (i) { return '<li class="list-group-item d-flex justify-content-between gap-2"><span class="mono">' + SW.escape(i.input) + '</span><span class="text-danger">' + SW.escape(i.reason) + '</span></li>'; }) +
-            section('Failed', 'danger', 'bi-bug', data.report.failed, function (i) { return '<li class="list-group-item d-flex justify-content-between gap-2"><span class="mono">' + SW.escape(i.input) + '</span><span class="text-danger">' + SW.escape(i.reason) + '</span></li>'; });
+            '<div class="summary-strip mb-4">' +
+            '<div class="summary-item"><div class="l">Imported</div><div class="v text-success">' + c.imported + '</div><div class="s">now monitored</div></div>' +
+            '<div class="summary-item"><div class="l">Duplicates</div><div class="v">' + c.duplicates + '</div><div class="s">already monitored</div></div>' +
+            '<div class="summary-item"><div class="l">Invalid</div><div class="v' + (c.invalid ? ' text-danger' : '') + '">' + c.invalid + '</div><div class="s">not a usable URL</div></div>' +
+            '<div class="summary-item"><div class="l">Rejected</div><div class="v' + (c.failed ? ' text-danger' : '') + '">' + c.failed + '</div><div class="s">blocked or failed</div></div>' +
+            '</div>' +
+            outcome('Imported', 'success', 'bi-check-lg', data.report.imported, function (i) {
+                return '<li class="list-group-item"><a href="' + SW.url('admin/website-details.php', { id: i.id }) + '">' + SW.escape(i.name) + '</a>' +
+                    '<span class="text-muted mono break-anywhere">' + SW.escape(i.url) + '</span></li>';
+            }) +
+            outcome('Duplicates — skipped', 'warning', 'bi-files', data.report.duplicates, function (i) {
+                return '<li class="list-group-item"><span class="mono break-anywhere">' + SW.escape(i.input) + '</span><span class="text-muted">' + SW.escape(i.reason) + '</span></li>';
+            }) +
+            outcome('Invalid entries', 'danger', 'bi-x-lg', data.report.invalid, function (i) {
+                return '<li class="list-group-item"><span class="mono break-anywhere">' + SW.escape(i.input) + '</span><span class="text-danger">' + SW.escape(i.reason) + '</span></li>';
+            }) +
+            outcome('Rejected entries', 'danger', 'bi-shield-exclamation', data.report.failed, function (i) {
+                return '<li class="list-group-item"><span class="mono break-anywhere">' + SW.escape(i.input) + '</span><span class="text-danger">' + SW.escape(i.reason) + '</span></li>';
+            });
         card.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 

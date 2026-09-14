@@ -7,7 +7,6 @@ require dirname(__DIR__) . '/bootstrap.php';
 use App\Services\ServiceFactory;
 
 $pageTitle = 'Uptime Reports';
-$pageSubtitle = 'Availability, downtime and incidents per website over any date range.';
 $activeNav = 'reports';
 $pageScripts = ['reports.js'];
 $pageData = [

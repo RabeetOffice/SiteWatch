@@ -17,19 +17,19 @@ declare(strict_types=1);
 <div data-flash="<?= e($flash['message']) ?>" data-flash-type="<?= e($flash['type'] ?? 'success') ?>" hidden></div>
 <?php endif; ?>
 
-<div class="modal fade" id="swConfirmModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered modal-sm" style="max-width:420px">
+<div class="modal fade" id="swConfirmModal" tabindex="-1" aria-labelledby="swConfirmTitle" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" style="max-width:440px">
         <div class="modal-content">
-            <div class="modal-body pt-4">
+            <div class="modal-body">
                 <div class="d-flex gap-3">
-                    <div class="activity-icon tone-danger flex-shrink-0" id="swConfirmIcon" style="width:40px;height:40px;font-size:18px"><i class="bi bi-exclamation-triangle"></i></div>
-                    <div>
-                        <h5 class="mb-1" id="swConfirmTitle">Are you sure?</h5>
-                        <p class="text-muted mb-0" id="swConfirmMessage">This action cannot be undone.</p>
+                    <div class="activity-icon tone-danger flex-shrink-0" id="swConfirmIcon" aria-hidden="true"><i class="bi bi-exclamation-triangle"></i></div>
+                    <div class="min-w-0">
+                        <h2 class="mb-1" style="font-size:16px" id="swConfirmTitle">Are you sure?</h2>
+                        <p class="text-muted mb-0 fs-13" id="swConfirmMessage">This action cannot be undone.</p>
                     </div>
                 </div>
             </div>
-            <div class="modal-footer border-0 pt-0">
+            <div class="modal-footer justify-content-end">
                 <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
                 <button type="button" class="btn btn-danger" id="swConfirmOk">Confirm</button>
             </div>
