@@ -66,7 +66,7 @@ $nav = [
                             </button>
                         </form>
                     <?php else: ?>
-                        <a class="sw-nav-link<?= $activeNav === $item['key'] ? ' active' : '' ?>" href="<?= e(base_url($item['href'])) ?>" data-bs-toggle="tooltip" data-bs-placement="right" title="<?= e($item['label']) ?>">
+                        <a class="sw-nav-link<?= $activeNav === $item['key'] ? ' active' : '' ?>" href="<?= e(base_url($item['href'])) ?>" <?= $activeNav === $item['key'] ? 'aria-current="page"' : '' ?> data-bs-toggle="tooltip" data-bs-placement="right" title="<?= e($item['label']) ?>">
                             <i class="bi <?= e($item['icon']) ?>"></i><span><?= e($item['label']) ?></span>
                             <?php if (isset($item['count'])): ?><span class="sw-nav-count" id="navIncidentCount"><?= $item['count'] > 0 ? (int) $item['count'] : '' ?></span><?php endif; ?>
                         </a>
@@ -93,3 +93,4 @@ $nav = [
         </div>
     </div>
 </aside>
+

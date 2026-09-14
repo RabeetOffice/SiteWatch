@@ -29,7 +29,7 @@
             '<div class="f"><div class="l">Duration</div><div class="v">' + SW.escape(i.duration_label) + (i.is_open ? ' <span class="text-muted fw-normal">(ongoing)</span>' : '') + '</div></div>' +
             '<div class="f"><div class="l">HTTP</div><div class="v">' + (i.http_status ? SW.httpCode(i.http_status) : '<span class="text-faint">—</span>') + '</div></div>' +
             '<div class="f"><div class="l">Reason</div><div class="v">' + SW.escape(i.title) + '</div></div>' +
-            (i.notified_at ? '<div class="f"><div class="l">Alert</div><div class="v"><i class="bi bi-bell text-success"></i> sent</div></div>' : '') +
+            '<div class="f"><div class="l">Notification</div><div class="v">' + (i.notified_at ? '<i class="bi bi-bell text-success"></i> Sent' : '<span class="text-muted">No send recorded</span>') + '</div>' +
             '</div></div></div>';
     }
 
@@ -60,6 +60,7 @@
 
     document.addEventListener('sw:ready', function () {
         if (!document.getElementById('incidentsPage')) return;
+        [['incidentSearch','Search incidents'],['incidentWebsite','Filter by website'],['incidentClient','Filter by client'],['incidentType','Filter by incident type']].forEach(function (field) { document.getElementById(field[0]).setAttribute('aria-label', field[1]); });
         fillSelects();
         const bind = function (id, key, event) { const el = document.getElementById(id); el.addEventListener(event || 'change', function () { state[key] = el.value; state.page = 1; load(); }); };
         document.getElementById('incidentSearch').addEventListener('input', SW.debounce(function () { state.q = this.value.trim(); state.page = 1; load(); }, 300));

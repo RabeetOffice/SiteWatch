@@ -87,8 +87,6 @@
         const client = el.querySelector('[data-client]');
         if (client) client.addEventListener('change', function () { self.state.client = client.value; self.state.page = 1; self.persist(); self.load(); });
         SW.qsa('[data-sort-col]', el).forEach(function (th) {
-            th.tabIndex = 0;
-            th.addEventListener('keydown', function (event) { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); th.click(); } });
             th.addEventListener('click', function () {
                 const col = th.getAttribute('data-sort-col');
                 if (self.state.sort === col) { self.state.dir = self.state.dir === 'asc' ? 'desc' : (self.state.dir === 'desc' ? '' : 'asc'); } else { self.state.sort = col; self.state.dir = ''; }
@@ -97,10 +95,6 @@
             });
         });
         const refresh = el.querySelector('[data-action="refresh"]');
-        if (search) search.setAttribute('aria-label', 'Search websites');
-        if (sort) sort.setAttribute('aria-label', 'Sort websites');
-        if (client) client.setAttribute('aria-label', 'Filter by client');
-        if (refresh) refresh.setAttribute('aria-label', 'Refresh website list');
         if (refresh) refresh.addEventListener('click', function () { self.load(); });
         const selectAll = el.querySelector('[data-select-all]');
         if (selectAll) selectAll.addEventListener('change', function () {
@@ -125,8 +119,6 @@
         SW.qsa('[data-sort-col]', this.el).forEach(function (th) {
             const active = th.getAttribute('data-sort-col') === self.state.sort;
             th.classList.toggle('sorted', active);
-            const descending = self.state.dir === 'desc' || (!self.state.dir && ['response', 'last_checked', 'newest'].includes(self.state.sort));
-            th.setAttribute('aria-sort', active ? (descending ? 'descending' : 'ascending') : 'none');
             const icon = th.querySelector('i');
             if (icon) icon.className = 'bi ' + (active ? (self.state.dir === 'asc' ? 'bi-sort-up' : self.state.dir === 'desc' ? 'bi-sort-down' : 'bi-arrow-down-up') : 'bi-arrow-down-up');
         });

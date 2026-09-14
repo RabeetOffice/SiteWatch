@@ -369,7 +369,7 @@
             if (!indicator) return;
             indicator.classList.toggle('paused', !active);
             const txt = indicator.querySelector('.txt');
-            if (txt) txt.textContent = active ? 'Auto-refresh' : 'Refresh paused';
+            if (txt) txt.textContent = active ? 'Live' : 'Paused';
         };
         const tick = async function () {
             if (stopped) return;
@@ -397,12 +397,6 @@
         if (label) label.textContent = engine.label;
         if (meta) meta.textContent = 'Last run: ' + (engine.last_run_ago || 'never');
         el.setAttribute('data-bs-original-title', engine.message || ('Last run ' + (engine.last_run_ago || 'never')));
-        const banner = document.getElementById('monitorBanner');
-        if (banner) {
-            banner.className = 'monitor-banner state-' + engine.state;
-            banner.querySelector('[data-monitor-title]').textContent = engine.state === 'running' ? 'Monitoring is active' : engine.state === 'never' ? 'Monitoring is not set up yet' : 'Monitoring needs attention';
-            banner.querySelector('[data-monitor-detail]').textContent = 'Last run: ' + (engine.last_run_ago || 'never') + '. ' + (engine.state === 'running' ? 'Check each website for its latest result.' : 'Website statuses may be outdated.');
-        }
     };
     SW.updateIncidentCount = function (count) {
         const el = document.getElementById('navIncidentCount');
@@ -422,19 +416,8 @@
         const toggle = document.getElementById('sidebarToggle');
         const collapse = document.getElementById('sidebarCollapse');
         const backdrop = document.getElementById('sidebarBackdrop');
-        if (toggle) {
-            toggle.setAttribute('aria-controls', 'sidebar');
-            toggle.setAttribute('aria-expanded', 'false');
-            toggle.addEventListener('click', function () { html.classList.toggle('sidebar-open'); toggle.setAttribute('aria-expanded', String(html.classList.contains('sidebar-open'))); });
-        }
-        if (backdrop) backdrop.addEventListener('click', function () { html.classList.remove('sidebar-open'); if (toggle) { toggle.setAttribute('aria-expanded', 'false'); toggle.focus(); } });
-        document.addEventListener('keydown', function (event) {
-            if (event.key === 'Escape' && html.classList.contains('sidebar-open')) {
-                html.classList.remove('sidebar-open'); if (toggle) { toggle.setAttribute('aria-expanded', 'false'); toggle.focus(); }
-            }
-        });
-        const printReport = document.getElementById('printReport');
-        if (printReport) printReport.addEventListener('click', function () { window.print(); });
+        if (toggle) toggle.addEventListener('click', function () { html.classList.toggle('sidebar-open'); });
+        if (backdrop) backdrop.addEventListener('click', function () { html.classList.remove('sidebar-open'); });
         if (collapse) collapse.addEventListener('click', function () {
             html.classList.toggle('sidebar-collapsed');
             try { localStorage.setItem('sw-sidebar', html.classList.contains('sidebar-collapsed') ? 'collapsed' : 'expanded'); } catch (e) { /* ignore */ }
@@ -472,19 +455,9 @@
         // Engine + incident count polling on every admin page (light request)
         if (document.getElementById('engineStatus')) {
             SW.poll(async function () {
-                try {
-                    const res = await SW.api('api/monitoring/status.php');
-                    SW.updateEngine(res.data.engine);
-                    SW.updateIncidentCount(res.data.open_incidents);
-                } catch (error) {
-                    const banner = document.getElementById('monitorBanner');
-                    if (banner) {
-                        banner.className = 'monitor-banner state-unknown';
-                        banner.querySelector('[data-monitor-title]').textContent = 'Unable to refresh monitoring status';
-                        banner.querySelector('[data-monitor-detail]').textContent = 'Showing previous results. Check your connection; we will retry automatically.';
-                    }
-                    throw error;
-                }
+                const res = await SW.api('api/monitoring/status.php');
+                SW.updateEngine(res.data.engine);
+                SW.updateIncidentCount(res.data.open_incidents);
             }, Math.max(20000, (config.refresh || 30) * 1000));
         }
 

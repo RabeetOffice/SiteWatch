@@ -63,7 +63,6 @@ if (count($parts) > 1) {
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
     <link href="<?= e(asset('css/app.css')) ?>" rel="stylesheet">
-    <link href="<?= e(asset('css/redesign.css')) ?>" rel="stylesheet">
     <script nonce="<?= e($nonce) ?>">
         (function () {
             try {
@@ -76,7 +75,6 @@ if (count($parts) > 1) {
     </script>
 </head>
 <body class="sw-body">
-<a class="skip-link" href="#mainContent">Skip to content</a>
 <div class="sw-layout">
     <?php require __DIR__ . '/sidebar.php'; ?>
     <div class="sw-main">
@@ -89,7 +87,7 @@ if (count($parts) > 1) {
             </div>
             <div class="sw-topbar-actions">
                 <?= $headerActions ?>
-                <span class="refresh-indicator d-none d-md-inline-flex" id="refreshIndicator" title="Page updates are separate from website monitoring"><span class="dot"></span><span class="txt">Auto-refresh</span></span>
+                <span class="refresh-indicator d-none d-md-inline-flex" id="refreshIndicator" title="Live updates"><span class="dot"></span><span class="txt">Live</span></span>
                 <button type="button" class="btn-icon" id="themeToggle" aria-label="Toggle dark mode" data-bs-toggle="tooltip" title="Toggle theme"><i class="bi bi-moon-stars"></i></button>
                 <div class="dropdown">
                     <button type="button" class="btn-icon" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Account menu"><span class="sw-avatar" style="width:30px;height:30px;font-size:12px"><?= e($initials) ?></span></button>
@@ -108,9 +106,4 @@ if (count($parts) > 1) {
                 </div>
             </div>
         </header>
-        <main class="sw-content" id="mainContent" tabindex="-1">
-        <div class="monitor-banner state-<?= e($engine['state']) ?>" id="monitorBanner" role="status">
-            <i class="bi bi-broadcast" aria-hidden="true"></i>
-            <div><strong data-monitor-title><?= $engine['state'] === 'running' ? 'Monitoring is active' : ($engine['state'] === 'never' ? 'Monitoring is not set up yet' : 'Monitoring needs attention') ?></strong><span data-monitor-detail>Last run: <?= e($engine['last_run_ago']) ?>. <?= $engine['state'] === 'running' ? 'Check each website for its latest result.' : 'Website statuses may be outdated.' ?></span></div>
-            <a href="<?= e(base_url('admin/settings.php?section=monitoring')) ?>">Monitoring settings <i class="bi bi-arrow-up-right"></i></a>
-        </div>
+        <main class="sw-content">

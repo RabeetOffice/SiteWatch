@@ -4,13 +4,11 @@
 
     const mode = SW.page.mode || 'uptime';
     const state = { website_id: SW.page.preset ? SW.page.preset.website_id || '' : '', client: '', from: '', to: '' };
-    let requestSequence = 0;
 
     function localDate(offsetDays) {
-        const parts = new Intl.DateTimeFormat('en-US', { timeZone: SW.config.timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date());
-        const part = function (type) { return parts.find(function (p) { return p.type === type; }).value; };
-        const d = new Date(Date.UTC(Number(part('year')), Number(part('month')) - 1, Number(part('day')) + offsetDays));
-        return d.toISOString().slice(0, 10);
+        const d = new Date();
+        d.setDate(d.getDate() + offsetDays);
+        return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
     }
 
     function sslPill(ssl) {
@@ -34,20 +32,11 @@
     }
 
     async function load() {
-        const requestId = ++requestSequence;
         const body = document.getElementById('reportBody');
-        const exportLink = document.getElementById('reportExport');
-        exportLink.setAttribute('aria-disabled', 'true');
-        exportLink.classList.add('disabled');
-        document.getElementById('printReport').disabled = true;
         body.innerHTML = SW.skeletonRows(9, 6);
         try {
             const res = await SW.api('api/reports/uptime.php', { query: state });
             const d = res.data;
-            if (requestId !== requestSequence) return;
-            state.from = d.range.from; state.to = d.range.to;
-            const coverage = document.getElementById('reportCoverage');
-            if (coverage) coverage.textContent = SW.fmt.num(d.summary.checks || 0) + ' recorded checks across ' + SW.fmt.num(d.summary.websites || 0) + (d.summary.websites === 1 ? ' website' : ' websites') + ' in this ' + d.range.days + '-day range. Check counts do not establish continuous coverage. Downtime is calculated separately from confirmed incidents.';
             document.getElementById('reportRange').textContent = d.range.from + ' → ' + d.range.to + ' · ' + d.range.days + ' day' + (d.range.days === 1 ? '' : 's') + ' (application timezone)';
             if (!d.rows.length) { body.innerHTML = '<tr><td colspan="9">' + SW.emptyState('bi-bar-chart-line', 'No websites match these filters.') + '</td></tr>'; }
             else { body.innerHTML = d.rows.map(row).join(''); }
@@ -55,11 +44,7 @@
             document.getElementById('reportExport').href = SW.url('api/reports/export.php', Object.assign({ mode: mode }, state));
             document.getElementById('reportFrom').value = d.range.from;
             document.getElementById('reportTo').value = d.range.to;
-            const scope = document.getElementById('reportWebsite');
-            document.getElementById('reportRange').textContent += ' · ' + (state.client || 'All clients') + ' · ' + scope.options[scope.selectedIndex].text;
-            exportLink.removeAttribute('aria-disabled'); exportLink.classList.remove('disabled');
-            document.getElementById('printReport').disabled = false;
-        } catch (e) { if (requestId !== requestSequence) return; body.innerHTML = '<tr><td colspan="9">' + SW.emptyState('bi-wifi-off', 'Unable to load report', e.message) + '</td></tr>'; document.querySelectorAll('[data-sum]').forEach(function (el) { el.textContent = '—'; }); document.getElementById('reportCoverage').textContent = 'Report could not be loaded. Change a filter to retry.'; }
+        } catch (e) { body.innerHTML = '<tr><td colspan="9">' + SW.emptyState('bi-wifi-off', 'Unable to load report', e.message) + '</td></tr>'; }
     }
 
     document.addEventListener('sw:ready', function () {

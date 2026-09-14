@@ -67,6 +67,7 @@ $nonce = defined('SW_CSP_NONCE') ? SW_CSP_NONCE : '';
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
     <link href="<?= e(asset('css/app.css')) ?>" rel="stylesheet">
+    <link href="<?= e(asset('css/redesign.css')) ?>" rel="stylesheet">
     <script nonce="<?= e($nonce) ?>">
         (function () { try { var t = localStorage.getItem('sw-theme'); if (t !== 'dark' && t !== 'light') { t = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'; } document.documentElement.setAttribute('data-bs-theme', t); } catch (e) {} })();
     </script>
