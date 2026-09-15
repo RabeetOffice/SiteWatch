@@ -46,8 +46,11 @@ final class ActivityRepository extends BaseRepository
         $params = [];
         $q = trim((string) ($criteria['q'] ?? ''));
         if ($q !== '') {
-            $where[] = '(a.description LIKE :q OR w.name LIKE :q OR w.domain LIKE :q OR a.action LIKE :q)';
-            $params['q'] = $this->like($q);
+            // Native prepared statements cannot reuse a named placeholder, so each comparison gets its own.
+            $where[] = '(a.description LIKE :q1 OR w.name LIKE :q2 OR w.domain LIKE :q3 OR a.action LIKE :q4)';
+            foreach ([1, 2, 3, 4] as $i) {
+                $params['q' . $i] = $this->like($q);
+            }
         }
         $action = trim((string) ($criteria['action'] ?? ''));
         if ($action !== '') {

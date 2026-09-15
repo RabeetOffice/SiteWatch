@@ -196,8 +196,11 @@ final class IncidentRepository extends BaseRepository
 
         $q = trim((string) ($criteria['q'] ?? ''));
         if ($q !== '') {
-            $where[] = '(w.name LIKE :q OR w.domain LIKE :q OR w.client_name LIKE :q OR i.title LIKE :q OR i.error_message LIKE :q)';
-            $params['q'] = $this->like($q);
+            // Native prepared statements cannot reuse a named placeholder, so each comparison gets its own.
+            $where[] = '(w.name LIKE :q1 OR w.domain LIKE :q2 OR w.client_name LIKE :q3 OR i.title LIKE :q4 OR i.error_message LIKE :q5)';
+            foreach ([1, 2, 3, 4, 5] as $i) {
+                $params['q' . $i] = $this->like($q);
+            }
         }
         if (!empty($criteria['website_id'])) {
             $where[] = 'i.website_id = :wid';
