@@ -7,7 +7,6 @@ require dirname(__DIR__) . '/bootstrap.php';
 use App\Services\ServiceFactory;
 
 $pageTitle = 'Performance Report';
-$pageSubtitle = 'Average, fastest and slowest responses per website over any date range.';
 $activeNav = 'performance';
 $pageScripts = ['reports.js'];
 $pageData = [

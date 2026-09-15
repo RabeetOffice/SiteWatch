@@ -3,18 +3,26 @@
 declare(strict_types=1);
 
 /**
- * Page shell: <head>, sidebar, topbar. Expects (optional) variables:
- *   $pageTitle     string   Page title (topbar + <title>)
- *   $pageSubtitle  string   Topbar subtitle
+ * Page shell: <head>, sidebar, topbar, page header. Expects (optional) variables:
+ *   $pageTitle     string   Page title (page header + <title>)
+ *   $pageSubtitle  string   Short context line under the page title (optional; keep it factual)
+ *   $pageContext   string   HTML rendered in the page header context row (overrides $pageSubtitle)
  *   $activeNav     string   Sidebar key (dashboard, websites, website-add, incidents, response-times,
  *                            reports, performance, notifications, monitoring-settings, settings, activity, profile)
  *   $pageScripts   array    JS files from assets/js to load after app.js
  *   $needsCharts   bool     Load Chart.js
- *   $headerActions string   HTML rendered in the topbar action area
+ *   $headerActions string   HTML rendered in the page header action area
+ *   $hidePageHead  bool     Skip the standard page header (page renders its own)
  *   $pageData      array    JSON payload exposed to JS as SW.page
  */
 
 use App\Core\App;
+use App\Monitoring\MonitoringScheduler;
+use App\Repositories\HeartbeatRepository;
+use App\Repositories\IncidentRepository;
+use App\Repositories\WebsiteRepository;
+
+require_once __DIR__ . '/brand.php';
 
 $auth = App::auth();
 $auth->requireLogin();
@@ -22,15 +30,35 @@ $currentUser = $auth->user() ?? ['name' => 'Administrator', 'email' => ''];
 
 $pageTitle = $pageTitle ?? 'Dashboard';
 $pageSubtitle = $pageSubtitle ?? '';
+$pageContext = $pageContext ?? '';
 $activeNav = $activeNav ?? '';
 $pageScripts = $pageScripts ?? [];
 $needsCharts = $needsCharts ?? false;
 $headerActions = $headerActions ?? '';
+$hidePageHead = $hidePageHead ?? false;
 $pageData = $pageData ?? [];
 
 $appName = (string) setting('app_name', 'SiteWatch') ?: 'SiteWatch';
 $csrfToken = App::csrf()->token();
 $nonce = defined('SW_CSP_NONCE') ? SW_CSP_NONCE : '';
+
+// Monitoring engine health and open incident count power the topbar chip, the
+// degraded-state banner and the sidebar badge. Never let them break a page.
+$openIncidents = 0;
+$engine = ['state' => 'never', 'label' => 'Not Running', 'last_run_ago' => 'never', 'message' => null];
+try {
+    $db = App::db();
+    $openIncidents = (new IncidentRepository($db))->countOpen();
+    $engine = (new MonitoringScheduler(new WebsiteRepository($db), new HeartbeatRepository($db), App::settings()))->engineStatus();
+} catch (Throwable) {
+    // Fall through with the defaults above.
+}
+$engineHealthy = $engine['state'] === 'running';
+$engineDetail = $engine['message'] ?? ('Last monitoring run: ' . $engine['last_run_ago']);
+$bannerTitle = $engine['state'] === 'never'
+    ? 'Monitoring has never run'
+    : ($engine['state'] === 'problem' ? 'The last monitoring run failed' : 'Monitoring is not running');
+
 $swConfig = [
     'baseUrl'  => base_url(),
     'csrf'     => $csrfToken,
@@ -58,12 +86,11 @@ if (count($parts) > 1) {
     <meta name="robots" content="noindex, nofollow">
     <meta name="csrf-token" content="<?= e($csrfToken) ?>">
     <title><?= e($pageTitle) ?> · <?= e($appName) ?></title>
-    <link rel="icon" href="<?= e(base_url('assets/images/favicon.svg')) ?>" type="image/svg+xml">
+    <link rel="icon" href="<?= e(sw_brand_asset('favicon')) ?>" type="image/svg+xml">
     <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
     <link href="<?= e(asset('css/app.css')) ?>" rel="stylesheet">
-    <link href="<?= e(asset('css/redesign.css')) ?>" rel="stylesheet">
     <script nonce="<?= e($nonce) ?>">
         (function () {
             try {
@@ -81,27 +108,34 @@ if (count($parts) > 1) {
     <?php require __DIR__ . '/sidebar.php'; ?>
     <div class="sw-main">
         <header class="sw-topbar">
-            <button type="button" class="btn-icon d-lg-none" id="sidebarToggle" aria-label="Open navigation"><i class="bi bi-list"></i></button>
-            <button type="button" class="btn-icon d-none d-lg-inline-flex" id="sidebarCollapse" aria-label="Collapse navigation" data-bs-toggle="tooltip" title="Toggle sidebar"><i class="bi bi-layout-sidebar"></i></button>
-            <div class="sw-topbar-title">
-                <h1><?= e($pageTitle) ?></h1>
-                <?php if ($pageSubtitle !== ''): ?><p><?= e($pageSubtitle) ?></p><?php endif; ?>
-            </div>
+            <button type="button" class="btn-icon d-lg-none" id="sidebarToggle" aria-label="Open navigation"><i class="bi bi-list" aria-hidden="true"></i></button>
+            <button type="button" class="btn-icon d-none d-lg-inline-flex" id="sidebarCollapse" aria-label="Collapse navigation" data-bs-toggle="tooltip" title="Toggle sidebar"><i class="bi bi-layout-sidebar" aria-hidden="true"></i></button>
+            <a class="sw-topbar-brand" href="<?= e(base_url('admin/dashboard.php')) ?>"><?= sw_brand_logo(130) ?></a>
+            <div class="sw-topbar-spacer"></div>
             <div class="sw-topbar-actions">
-                <?= $headerActions ?>
-                <span class="refresh-indicator d-none d-md-inline-flex" id="refreshIndicator" title="Page updates are separate from website monitoring"><span class="dot"></span><span class="txt">Auto-refresh</span></span>
-                <button type="button" class="btn-icon" id="themeToggle" aria-label="Toggle dark mode" data-bs-toggle="tooltip" title="Toggle theme"><i class="bi bi-moon-stars"></i></button>
+                <a class="sw-engine state-<?= e($engine['state']) ?> d-none d-md-inline-flex" id="engineStatus"
+                   href="<?= e(base_url('admin/settings.php?section=monitoring')) ?>"
+                   data-bs-toggle="tooltip" title="<?= e($engineDetail) ?>">
+                    <span class="sw-engine-dot" aria-hidden="true"></span>
+                    <span class="sw-engine-text">
+                        <span class="t">Monitoring engine</span>
+                        <span class="s" data-engine-label><?= e($engine['label']) ?></span>
+                        <span class="m d-none d-xl-inline" data-engine-meta>Last run <?= e($engine['last_run_ago']) ?></span>
+                    </span>
+                </a>
+                <span class="refresh-indicator d-none d-lg-inline-flex" id="refreshIndicator" data-bs-toggle="tooltip" title="This page refreshes itself. It is separate from the monitoring engine."><span class="dot" aria-hidden="true"></span><span class="txt">Auto-refresh</span></span>
+                <button type="button" class="btn-icon" id="themeToggle" aria-label="Toggle dark mode" data-bs-toggle="tooltip" title="Toggle theme"><i class="bi bi-moon-stars" aria-hidden="true"></i></button>
                 <div class="dropdown">
-                    <button type="button" class="btn-icon" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Account menu"><span class="sw-avatar" style="width:30px;height:30px;font-size:12px"><?= e($initials) ?></span></button>
+                    <button type="button" class="btn-icon" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Account menu"><span class="sw-avatar"><?= e($initials) ?></span></button>
                     <ul class="dropdown-menu dropdown-menu-end">
                         <li><h6 class="dropdown-header"><?= e($currentUser['name']) ?></h6></li>
-                        <li><a class="dropdown-item" href="<?= e(base_url('admin/profile.php')) ?>"><i class="bi bi-person"></i> Profile</a></li>
-                        <li><a class="dropdown-item" href="<?= e(base_url('admin/settings.php')) ?>"><i class="bi bi-gear"></i> Settings</a></li>
+                        <li><a class="dropdown-item" href="<?= e(base_url('admin/profile.php')) ?>"><i class="bi bi-person" aria-hidden="true"></i> Profile</a></li>
+                        <li><a class="dropdown-item" href="<?= e(base_url('admin/settings.php')) ?>"><i class="bi bi-gear" aria-hidden="true"></i> Settings</a></li>
                         <li><hr class="dropdown-divider"></li>
                         <li>
                             <form method="post" action="<?= e(base_url('logout.php')) ?>">
                                 <input type="hidden" name="_token" value="<?= e($csrfToken) ?>">
-                                <button type="submit" class="dropdown-item text-danger"><i class="bi bi-box-arrow-right"></i> Sign out</button>
+                                <button type="submit" class="dropdown-item text-danger"><i class="bi bi-box-arrow-right" aria-hidden="true"></i> Sign out</button>
                             </form>
                         </li>
                     </ul>
@@ -109,8 +143,24 @@ if (count($parts) > 1) {
             </div>
         </header>
         <main class="sw-content" id="mainContent" tabindex="-1">
-        <div class="monitor-banner state-<?= e($engine['state']) ?>" id="monitorBanner" role="status">
-            <i class="bi bi-broadcast" aria-hidden="true"></i>
-            <div><strong data-monitor-title><?= $engine['state'] === 'running' ? 'Monitoring is active' : ($engine['state'] === 'never' ? 'Monitoring is not set up yet' : 'Monitoring needs attention') ?></strong><span data-monitor-detail>Last run: <?= e($engine['last_run_ago']) ?>. <?= $engine['state'] === 'running' ? 'Check each website for its latest result.' : 'Website statuses may be outdated.' ?></span></div>
-            <a href="<?= e(base_url('admin/settings.php?section=monitoring')) ?>">Monitoring settings <i class="bi bi-arrow-up-right"></i></a>
+        <div class="monitor-banner state-<?= e($engine['state']) ?>" id="monitorBanner" role="status"<?= $engineHealthy ? ' hidden' : '' ?>>
+            <i class="bi bi-exclamation-triangle-fill" aria-hidden="true"></i>
+            <div>
+                <strong data-monitor-title><?= e($bannerTitle) ?></strong>
+                <span data-monitor-detail><?= e($engineDetail) ?> Website statuses on this page may be out of date.</span>
+            </div>
+            <a href="<?= e(base_url('admin/settings.php?section=monitoring')) ?>">Monitoring settings <i class="bi bi-arrow-right" aria-hidden="true"></i></a>
         </div>
+<?php if (!$hidePageHead): ?>
+        <div class="sw-page-head">
+            <div class="min-w-0">
+                <h1><?= e($pageTitle) ?></h1>
+                <?php if ($pageContext !== ''): ?>
+                    <div class="sw-page-context"><?= $pageContext ?></div>
+                <?php elseif ($pageSubtitle !== ''): ?>
+                    <div class="sw-page-context"><?= e($pageSubtitle) ?></div>
+                <?php endif; ?>
+            </div>
+            <?php if ($headerActions !== ''): ?><div class="sw-page-actions"><?= $headerActions ?></div><?php endif; ?>
+        </div>
+<?php endif; ?>

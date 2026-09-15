@@ -108,9 +108,9 @@ final class ErrorHandler
         }
         return '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Something went wrong</title>'
             . '<style>body{font-family:-apple-system,Segoe UI,Roboto,sans-serif;background:#F8FAFC;color:#0F172A;margin:0;display:flex;min-height:100vh;align-items:center;justify-content:center;padding:24px}'
-            . '.box{background:#fff;border:1px solid #E5E7EB;border-radius:16px;padding:40px;max-width:720px;width:100%;box-shadow:0 1px 3px rgba(15,23,42,.06)}'
-            . 'h1{font-size:22px;margin:0 0 8px}p{color:#64748B;margin:0 0 16px}.details{background:#0F172A;color:#E5E7EB;padding:16px;border-radius:12px;overflow:auto;font-size:12px;line-height:1.5}'
-            . 'a{color:#6C5CE7;text-decoration:none;font-weight:600}</style></head><body><div class="box">'
+            . '.box{background:#fff;border:1px solid #E2E8F0;border-radius:10px;padding:40px;max-width:720px;width:100%;box-shadow:0 1px 3px rgba(15,23,42,.06)}'
+            . 'h1{font-size:22px;margin:0 0 8px}p{color:#64748B;margin:0 0 16px}.details{background:#111827;color:#E5E7EB;padding:16px;border-radius:8px;overflow:auto;font-size:12px;line-height:1.5}'
+            . 'a{color:#C2410C;text-decoration:none;font-weight:600}</style></head><body><div class="box">'
             . '<h1>Something went wrong</h1><p>An unexpected error occurred. The problem has been logged. Please try again or contact the administrator.</p>'
             . $details . '<a href="javascript:history.back()">&larr; Go back</a></div></body></html>';
     }

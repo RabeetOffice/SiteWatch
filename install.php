@@ -265,6 +265,7 @@ $detectedUrl = $s['app']['url'] ?? $baseUrl;
 $cronPath = str_replace('\\', '/', $root) . '/cron/monitor.php';
 $steps = ['Requirements', 'Database', 'Tables', 'Admin', 'Settings', 'Complete'];
 $appName = $s['app']['name'] ?? 'SiteWatch';
+require __DIR__ . '/includes/brand.php';
 ?>
 <!doctype html>
 <html lang="en" data-bs-theme="light">
@@ -281,8 +282,10 @@ $appName = $s['app']['name'] ?? 'SiteWatch';
 </head>
 <body class="sw-body">
 <div class="auth-page" style="align-items:flex-start;padding-top:48px">
-    <div class="auth-card" style="max-width:720px">
-        <div class="brand"><span class="sw-brand-mark"><i class="bi bi-broadcast"></i></span>SiteWatch <span class="text-muted fw-normal fs-13 ms-1">installer</span></div>
+    <div class="auth-shell" style="max-width:720px">
+        <div class="auth-logo"><?= sw_brand_logo(200) ?></div>
+        <div class="auth-card">
+            <p class="lead-text mb-4">Installer</p>
 
         <?php if ($installed && $step !== 6): ?>
             <h1>Already installed</h1>
@@ -375,6 +378,7 @@ $appName = $s['app']['name'] ?? 'SiteWatch';
                 <?php $session->remove('_install'); ?>
             <?php endif; ?>
         <?php endif; ?>
+        </div>
         <div class="auth-footer">SiteWatch · PHP <?= e(PHP_VERSION) ?></div>
     </div>
 </div>

@@ -16,29 +16,29 @@
     function renderHeader(w) {
         website = w;
         const statusEl = document.getElementById('siteStatus');
-        if (statusEl) statusEl.innerHTML = '<span class="sw-badge lg sev-' + w.severity + (w.severity === 'down' ? ' live' : '') + '">' + SW.escape(w.status_label) + '</span>';
+        if (statusEl) statusEl.innerHTML = '<span class="sw-badge lg sev-' + w.severity + '">' + SW.escape(w.status_label) + '</span>';
         const last = document.getElementById('siteLastChecked');
         if (last) last.innerHTML = '<i class="bi bi-arrow-repeat"></i> Last checked ' + (w.last_checked_at ? SW.timeAgoEl(w.last_checked_at) : 'never');
         const err = document.getElementById('siteError');
-        if (err) err.innerHTML = (w.last_error_message && w.severity !== 'ok') ? '<i class="bi bi-info-circle"></i> ' + SW.escape(w.last_error_message) : '';
+        if (err) err.innerHTML = (w.last_error_message && w.severity !== 'ok') ? '<i class="bi bi-exclamation-triangle" aria-hidden="true"></i> ' + SW.escape(w.last_error_message) : '';
         setStat('status', SW.escape(w.status_label));
-        setStat('status_sub', (w.last_http_status ? 'HTTP ' + w.last_http_status : '') + (w.last_response_time !== null ? (w.last_http_status ? ' · ' : '') + SW.fmt.ms(w.last_response_time) : '') || '&nbsp;');
+        setStat('status_sub', (w.last_http_status ? 'HTTP ' + w.last_http_status : '') + (w.last_response_time !== null ? (w.last_http_status ? ' · ' : '') + SW.fmt.ms(w.last_response_time) : '') || '—');
         setStat('ssl', SW.escape(w.ssl.label));
-        setStat('ssl_sub', SW.escape(w.ssl.applicable && w.ssl.expires_at ? 'expires ' + w.ssl.expires_label : (w.ssl.error || '')) + '&nbsp;');
+        setStat('ssl_sub', SW.escape(w.ssl.applicable && w.ssl.expires_at ? 'Expires ' + w.ssl.expires_label : (w.ssl.error || '')) + '&nbsp;');
         const pause = document.getElementById('btnPause');
-        if (pause) { pause.setAttribute('data-enabled', w.monitoring_enabled ? '1' : '0'); pause.innerHTML = '<i class="bi ' + (w.monitoring_enabled ? 'bi-pause-circle' : 'bi-play-circle') + '"></i> ' + (w.monitoring_enabled ? 'Pause Monitoring' : 'Resume Monitoring'); }
+        if (pause) { pause.setAttribute('data-enabled', w.monitoring_enabled ? '1' : '0'); pause.innerHTML = '<i class="bi ' + (w.monitoring_enabled ? 'bi-pause-circle' : 'bi-play-circle') + '" aria-hidden="true"></i> ' + (w.monitoring_enabled ? 'Pause' : 'Resume'); }
     }
 
     function renderStats(stats) {
         setStat('uptime_24h', SW.escape(SW.fmt.uptime(stats.uptime_24h)));
-        setStat('uptime_24h_sub', stats.checks_24h + ' checks');
+        setStat('uptime_24h_sub', SW.fmt.num(stats.checks_24h) + (stats.checks_24h === 1 ? ' check' : ' checks'));
         setStat('uptime_7d', SW.escape(SW.fmt.uptime(stats.uptime_7d)));
         setStat('uptime_30d', SW.escape(SW.fmt.uptime(stats.uptime_30d)));
-        setStat('uptime_90d_sub', '90d: ' + SW.escape(SW.fmt.uptime(stats.uptime_90d)) + ' · all: ' + SW.escape(SW.fmt.uptime(stats.uptime_all)));
+        setStat('uptime_90d_sub', '90 days: ' + SW.escape(SW.fmt.uptime(stats.uptime_90d)) + ' · all time: ' + SW.escape(SW.fmt.uptime(stats.uptime_all)));
         setStat('avg_24h', SW.escape(SW.fmt.ms(stats.avg_24h)));
-        setStat('avg_sub', stats.min_24h !== null ? 'min ' + SW.fmt.ms(stats.min_24h) + ' · max ' + SW.fmt.ms(stats.max_24h) : 'last 24 hours');
+        setStat('avg_sub', stats.min_24h !== null ? 'Fastest ' + SW.fmt.ms(stats.min_24h) + ' · slowest ' + SW.fmt.ms(stats.max_24h) + ' in the last 24 hours' : 'No responses recorded in the last 24 hours');
         setStat('incidents_month', SW.escape(stats.incidents_month));
-        setStat('incidents_sub', stats.incidents_30d + ' in the last 30 days');
+        setStat('incidents_sub', SW.fmt.num(stats.incidents_30d) + ' in the last 30 days');
     }
 
     function renderIncidents(list) {
@@ -48,7 +48,7 @@
         el.innerHTML = list.map(function (i) {
             return '<div class="incident-row ' + (i.is_open ? 'open' : '') + '"><span class="marker"></span><div class="body">' +
                 '<div class="title">' + SW.escape(i.title) + (i.is_open ? SW.badge('OPEN', 'Open', 'down', 'no-dot') : '') + '</div>' +
-                '<div class="meta">' + SW.escape(i.started_label) + ' · ' + (i.is_open ? 'ongoing ' : '') + SW.escape(i.duration_label) + (i.http_status ? ' · HTTP ' + i.http_status : '') + '</div>' +
+                '<div class="meta">Started ' + SW.escape(i.started_label) + ' · ' + (i.is_open ? 'ongoing for ' : 'lasted ') + SW.escape(i.duration_label) + (i.http_status ? ' · HTTP ' + i.http_status : '') + '</div>' +
                 (i.error_message ? '<div class="msg">' + SW.escape(i.error_message) + '</div>' : '') + '</div></div>';
         }).join('');
     }
@@ -67,10 +67,10 @@
         else {
             body.innerHTML = data.rows.map(function (c) {
                 return '<tr><td class="nowrap fs-13" title="' + SW.escape(c.checked_at) + ' UTC">' + SW.escape(c.checked_label) + '<div class="fs-12 text-muted">' + SW.escape(SW.fmt.timeAgo(c.checked_at)) + '</div></td>' +
-                    '<td>' + SW.badge(c.status, c.status_label, c.severity) + (c.is_failure && c.is_up ? '<div class="fs-12 text-muted">unconfirmed</div>' : '') + '</td>' +
-                    '<td>' + SW.httpCode(c.http_status) + '</td><td>' + SW.responseTime(c.response_time) + '</td>' +
-                    '<td class="fs-13" style="max-width:320px"><span class="d-inline-block truncate" style="max-width:320px" title="' + SW.escape(c.error_message || '') + '">' + (c.error_message ? SW.escape(c.error_message) : '<span class="text-faint">—</span>') + '</span>' + (c.redirect_count ? '<div class="fs-12 text-muted">' + c.redirect_count + ' redirect' + (c.redirect_count === 1 ? '' : 's') + ' → ' + SW.escape(c.final_url || '') + '</div>' : '') + '</td>' +
-                    '<td class="hide-mobile">' + SW.pill(c.source === 'manual' ? 'Manual' : 'Cron', 'neutral') + '</td></tr>';
+                    '<td>' + SW.badge(c.status, c.status_label, c.severity) + (c.is_failure && c.is_up ? '<div class="fs-12 text-muted">not yet confirmed</div>' : '') + '</td>' +
+                    '<td class="num">' + SW.httpCode(c.http_status) + '</td><td class="num">' + SW.responseTime(c.response_time) + '</td>' +
+                    '<td class="fs-13" style="max-width:320px"><span class="d-inline-block truncate" style="max-width:320px" title="' + SW.escape(c.error_message || '') + '">' + (c.error_message ? SW.escape(c.error_message) : '<span class="text-faint">No errors detected</span>') + '</span>' + (c.redirect_count ? '<div class="fs-12 text-muted">' + c.redirect_count + ' redirect' + (c.redirect_count === 1 ? '' : 's') + ' → ' + SW.escape(c.final_url || '') + '</div>' : '') + '</td>' +
+                    '<td class="hide-mobile">' + SW.pill(c.source === 'manual' ? 'Manual' : 'Scheduled', 'neutral') + '</td></tr>';
             }).join('');
         }
         SW.pagination(document.getElementById('checksPagination'), data.page, data.per_page, data.total, function (p) { checksPage = p; loadChecks(); });
@@ -87,7 +87,7 @@
         const checks = document.getElementById('timelineChecks');
         const labels = document.getElementById('timelineChecksLabels');
         if (checks) {
-            if (!data.checks.length) { checks.innerHTML = '<div class="text-muted fs-13 align-self-center">No checks yet.</div>'; }
+            if (!data.checks.length) { checks.innerHTML = '<div class="text-muted fs-13 align-self-center">No checks recorded yet.</div>'; }
             else {
                 checks.innerHTML = data.checks.map(function (c) {
                     const cls = c.severity === 'ok' ? 'ok' : (c.severity === 'down' && c.is_up === false ? 'down' : (c.severity === 'down' ? 'warning' : c.severity === 'warning' ? 'warning' : 'neutral'));
@@ -105,7 +105,7 @@
                 if (d.total > 0) cls = d.uptime >= 99.9 ? 'ok' : (d.uptime >= 95 ? 'warning' : 'down');
                 const tip = d.total > 0
                     ? SW.escape(d.label) + '<br>' + SW.escape('Uptime ' + SW.fmt.uptime(d.uptime) + ' · ' + d.total + ' checks' + (d.incidents ? ' · ' + d.incidents + ' incident' + (d.incidents === 1 ? '' : 's') : '')) + (d.avg !== null ? '<br>' + SW.escape('Avg ' + SW.fmt.ms(d.avg)) : '')
-                    : SW.escape(d.label) + '<br>No data';
+                    : SW.escape(d.label) + '<br>No checks recorded';
                 return '<span class="seg ' + cls + '" data-bs-toggle="tooltip" data-bs-html="true" title="' + tip + '"></span>';
             }).join('');
             if (data.days.length) dayLabels.innerHTML = '<span>' + SW.escape(data.days[0].label) + '</span><span>Today</span>';
@@ -121,33 +121,106 @@
 
     function renderRt() {
         if (!rtData || typeof Chart === 'undefined') return;
-        const c = SW.chartColors();
+        const c = SW.chartDefaults();
         const el = document.getElementById('chartRt');
         if (rtChart) { rtChart.destroy(); rtChart = null; }
+
+        const rangeLabels = { '24h': 'last 24 hours', '7d': 'last 7 days', '30d': 'last 30 days', '90d': 'last 90 days' };
         const summary = document.getElementById('rtSummary');
-        if (summary) summary.textContent = rtData.summary.checks ? 'Avg ' + SW.fmt.ms(rtData.summary.avg) + ' · min ' + SW.fmt.ms(rtData.summary.min) + ' · max ' + SW.fmt.ms(rtData.summary.max) + ' · ' + rtData.summary.checks + ' checks' : 'No data for this range yet';
-        const datasets = [{ label: 'Average', data: rtData.values, borderColor: c.primary, backgroundColor: c.primarySoft, fill: true, tension: 0.35, pointRadius: rtData.values.length > 80 ? 0 : 2, pointHitRadius: 12, borderWidth: 2, spanGaps: true }];
-        if (rtData.max && rtData.max.some(function (v) { return v !== null; })) datasets.push({ label: 'Max', data: rtData.max, borderColor: c.warning, borderDash: [4, 4], fill: false, tension: 0.35, pointRadius: 0, borderWidth: 1.5, spanGaps: true });
+        if (summary) {
+            summary.textContent = rtData.summary.checks
+                ? 'Average ' + SW.fmt.ms(rtData.summary.avg) + ' · fastest ' + SW.fmt.ms(rtData.summary.min) + ' · slowest ' + SW.fmt.ms(rtData.summary.max) +
+                  ' · ' + SW.fmt.num(rtData.summary.checks) + ' checks in the ' + (rangeLabels[rtRange] || 'selected range')
+                : 'No checks recorded in the ' + (rangeLabels[rtRange] || 'selected range');
+        }
+
+        const hasMax = rtData.max && rtData.max.some(function (v) { return v !== null; });
+        const datasets = [{
+            label: 'Average response',
+            data: rtData.values,
+            borderColor: c.primary,
+            backgroundColor: c.primarySoft,
+            fill: true,
+            tension: 0.3,
+            pointRadius: rtData.values.length > 80 ? 0 : 2,
+            pointHoverRadius: 4,
+            pointHitRadius: 12,
+            borderWidth: 2,
+            spanGaps: true,
+        }];
+        if (hasMax) {
+            datasets.push({
+                label: 'Peak response',
+                data: rtData.max,
+                borderColor: c.warning,
+                borderDash: [4, 4],
+                fill: false,
+                tension: 0.3,
+                pointRadius: 0,
+                pointHoverRadius: 4,
+                borderWidth: 1.5,
+                spanGaps: true,
+            });
+        }
+
+        const legend = document.getElementById('rtLegend');
+        if (legend) {
+            legend.innerHTML = '<span class="item"><span class="swatch"></span>Average response</span>' +
+                (hasMax ? '<span class="item"><span class="swatch dashed"></span>Peak response</span>' : '') +
+                '<span class="item"><span class="swatch dashed"></span>Slow threshold (' + SW.fmt.ms(SW.thresholds.slow) + ')</span>';
+        }
+
         const thresholds = SW.thresholds;
         rtChart = new Chart(el, {
             type: 'line',
             data: { labels: rtData.labels, datasets: datasets },
             options: {
-                responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
-                scales: { x: { grid: { display: false }, ticks: { maxTicksLimit: 10 } }, y: { beginAtZero: true, suggestedMax: Math.max(1000, thresholds.slow * 1.1), grid: { color: c.grid }, ticks: { callback: function (v) { return SW.fmt.ms(v); }, maxTicksLimit: 6 } } },
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                scales: {
+                    x: { grid: { display: false }, ticks: { maxTicksLimit: 10 } },
+                    y: {
+                        beginAtZero: true,
+                        suggestedMax: Math.max(1000, thresholds.slow * 1.1),
+                        grid: { color: c.grid },
+                        border: { display: false },
+                        ticks: { callback: function (v) { return SW.fmt.ms(v); }, maxTicksLimit: 6 },
+                        title: { display: true, text: 'Response time', color: c.text, font: { size: 11 } },
+                    },
+                },
                 plugins: {
-                    legend: { display: datasets.length > 1, position: 'top', align: 'end', labels: { boxWidth: 10, usePointStyle: true, pointStyle: 'line' } },
-                    tooltip: { callbacks: { title: function (items) { return rtData.timestamps[items[0].dataIndex]; }, label: function (item) { return ' ' + item.dataset.label + ': ' + SW.fmt.ms(item.raw); }, afterBody: function (items) { const d = rtData.down ? rtData.down[items[0].dataIndex] : 0; return d ? [d + ' failed check' + (d === 1 ? '' : 's')] : []; } } },
+                    legend: { display: false },
+                    tooltip: {
+                        displayColors: true,
+                        callbacks: {
+                            title: function (items) { return rtData.timestamps[items[0].dataIndex]; },
+                            label: function (item) { return item.dataset.label + ': ' + SW.fmt.ms(item.raw); },
+                            afterBody: function (items) {
+                                const d = rtData.down ? rtData.down[items[0].dataIndex] : 0;
+                                return d ? [d + ' failed check' + (d === 1 ? '' : 's') + ' in this interval'] : [];
+                            },
+                        },
+                    },
                     annotationLine: { y: thresholds.slow },
                 },
             },
             plugins: [{
                 id: 'annotationLine',
                 afterDraw: function (chart, args, opts) {
-                    const y = chart.scales.y; if (!y || !opts.y || opts.y > y.max) return;
-                    const ctx = chart.ctx; const py = y.getPixelForValue(opts.y);
-                    ctx.save(); ctx.strokeStyle = c.warning; ctx.setLineDash([3, 4]); ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(chart.chartArea.left, py); ctx.lineTo(chart.chartArea.right, py); ctx.stroke();
-                    ctx.fillStyle = c.warning; ctx.font = '10px ' + Chart.defaults.font.family; ctx.fillText('slow threshold', chart.chartArea.left + 4, py - 4); ctx.restore();
+                    const y = chart.scales.y;
+                    if (!y || !opts.y || opts.y > y.max) return;
+                    const ctx = chart.ctx;
+                    const py = y.getPixelForValue(opts.y);
+                    ctx.save();
+                    ctx.strokeStyle = c.warning;
+                    ctx.setLineDash([3, 4]);
+                    ctx.lineWidth = 1;
+                    ctx.beginPath();
+                    ctx.moveTo(chart.chartArea.left, py);
+                    ctx.lineTo(chart.chartArea.right, py);
+                    ctx.stroke();
+                    ctx.restore();
                 },
             }],
         });

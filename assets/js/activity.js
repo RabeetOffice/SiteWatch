@@ -3,36 +3,79 @@
     'use strict';
 
     const state = { q: '', action: '', page: 1, perPage: 30 };
-    const icons = { 'incident.opened': 'bi-x-octagon', 'incident.resolved': 'bi-check-circle', 'website.added': 'bi-plus-circle', 'website.edited': 'bi-pencil', 'website.deleted': 'bi-trash', 'website.imported': 'bi-upload', 'website.warning': 'bi-exclamation-triangle', 'monitoring.paused': 'bi-pause-circle', 'monitoring.resumed': 'bi-play-circle', 'ssl.warning': 'bi-shield-exclamation', 'ssl.renewed': 'bi-shield-check', 'settings.changed': 'bi-gear', 'profile.updated': 'bi-person', 'password.changed': 'bi-key', 'auth.login': 'bi-box-arrow-in-right', 'auth.logout': 'bi-box-arrow-right', 'notification.test': 'bi-bell', 'check.manual': 'bi-arrow-repeat', 'bulk.action': 'bi-check2-square' };
 
-    async function load() {
+    function eventRow(a) {
+        const site = a.website_id
+            ? '<a href="' + SW.url('admin/website-details.php', { id: a.website_id }) + '">' + SW.escape(a.website_name || a.domain || 'Website') + '</a>'
+            : '<span class="text-faint">—</span>';
+        const meta = [];
+        if (a.ip) meta.push(['IP address', SW.escape(a.ip)]);
+        if (a.context) {
+            Object.keys(a.context).forEach(function (k) {
+                const v = a.context[k];
+                if (v === null || v === undefined || typeof v === 'object') return;
+                meta.push([SW.escape(k.replace(/_/g, ' ')), SW.escape(String(v))]);
+            });
+        }
+        const details = meta.length
+            ? '<details class="detail-toggle"><summary>Technical details</summary><div class="detail-body"><dl class="kv-list fs-12 mb-0">' +
+              meta.map(function (m) { return '<dt>' + m[0] + '</dt><dd>' + m[1] + '</dd>'; }).join('') + '</dl></div></details>'
+            : '';
+
+        return '<div class="event-row">' +
+            '<div class="event-desc"><div class="d">' + SW.escape(a.description) + '</div>' +
+            '<div class="k">' + SW.escape(a.action_label) + '</div>' + details + '</div>' +
+            '<div class="event-site">' + site + '</div>' +
+            '<div class="event-actor">' + (a.user_name ? SW.escape(a.user_name) : '<span class="text-faint">System</span>') + '</div>' +
+            '<div class="event-time" title="' + SW.escape(a.created_label) + '">' + SW.timeAgoEl(a.created_at) + '</div>' +
+            '</div>';
+    }
+
+    async function load(silent) {
         const list = document.getElementById('activityList');
-        list.classList.add('is-refreshing');
+        if (silent && (list.contains(document.activeElement) || list.querySelector('details[open]'))) return;
+        if (!silent) list.classList.add('is-refreshing');
         try {
-            const res = await SW.api('api/activity/list.php', { query: { q: state.q, action: state.action, page: state.page, per_page: state.perPage } });
+            const res = await SW.api('api/activity/list.php', {
+                query: { q: state.q, action: state.action, page: state.page, per_page: state.perPage },
+            });
             const d = res.data;
-            if (!d.rows.length) { list.innerHTML = SW.emptyState('bi-clock-history', state.q || state.action ? 'No activity matches these filters.' : 'No activity recorded yet.'); }
-            else {
-                list.innerHTML = d.rows.map(function (a) {
-                    return '<div class="activity-item"><span class="activity-icon tone-' + SW.escape(a.tone) + '"><i class="bi ' + (icons[a.action] || 'bi-dot') + '"></i></span><div class="b">' +
-                        '<div class="t">' + SW.escape(a.description) + (a.website_id ? ' <a class="fs-12" href="' + SW.url('admin/website-details.php', { id: a.website_id }) + '">open</a>' : '') + '</div>' +
-                        '<div class="m">' + SW.pill(a.action_label, a.tone === 'muted' ? 'neutral' : a.tone) + ' ' + (a.user_name ? SW.escape(a.user_name) + ' · ' : '') + SW.escape(a.created_label) + ' · ' + SW.timeAgoEl(a.created_at) + (a.ip ? ' · ' + SW.escape(a.ip) : '') + '</div></div></div>';
-                }).join('');
+            const summary = document.getElementById('activitySummary');
+            if (summary) summary.textContent = SW.fmt.num(d.total) + (d.total === 1 ? ' event' : ' events');
+            if (!d.rows.length) {
+                list.innerHTML = SW.emptyState('bi-clock-history',
+                    state.q || state.action ? 'No activity matches these filters.' : 'No activity recorded yet.',
+                    state.q || state.action ? 'Try a different search term or event type.' : 'Administrative and monitoring events will appear here.');
+            } else {
+                list.innerHTML = d.rows.map(eventRow).join('');
             }
             SW.pagination(document.getElementById('activityPagination'), d.page, d.per_page, d.total, function (p) { state.page = p; load(); });
-        } catch (e) { list.innerHTML = SW.emptyState('bi-wifi-off', 'Unable to load activity', e.message); }
-        finally { list.classList.remove('is-refreshing'); }
+        } catch (e) {
+            list.innerHTML = SW.emptyState('bi-wifi-off', 'Unable to load activity', e.message);
+        } finally {
+            list.classList.remove('is-refreshing');
+        }
     }
 
     document.addEventListener('sw:ready', function () {
         if (!document.getElementById('activityPage')) return;
         const sel = document.getElementById('activityAction');
-        Object.keys(SW.page.actions || {}).forEach(function (k) { const o = document.createElement('option'); o.value = k; o.textContent = SW.page.actions[k]; sel.appendChild(o); });
+        Object.keys(SW.page.actions || {}).forEach(function (k) {
+            const o = document.createElement('option');
+            o.value = k;
+            o.textContent = SW.page.actions[k];
+            sel.appendChild(o);
+        });
         sel.addEventListener('change', function () { state.action = sel.value; state.page = 1; load(); });
-        document.getElementById('activitySearch').addEventListener('input', SW.debounce(function () { state.q = this.value.trim(); state.page = 1; load(); }, 300));
-        document.getElementById('activityRefresh').addEventListener('click', load);
-        document.getElementById('activityList').innerHTML = '<div class="p-3"><div class="skeleton skeleton-line w-75">&nbsp;</div><div class="skeleton skeleton-line w-50">&nbsp;</div><div class="skeleton skeleton-line w-75">&nbsp;</div></div>';
+        document.getElementById('activitySearch').addEventListener('input', SW.debounce(function () {
+            state.q = this.value.trim();
+            state.page = 1;
+            load();
+        }, 300));
+        document.getElementById('activityRefresh').addEventListener('click', function () { load(); });
+        document.getElementById('activityList').innerHTML =
+            '<div class="p-3"><div class="skeleton skeleton-line w-75">&nbsp;</div><div class="skeleton skeleton-line w-50">&nbsp;</div><div class="skeleton skeleton-line w-75">&nbsp;</div></div>';
         load();
-        SW.poll(function () { if (state.page === 1) return load(); }, Math.max(30000, (SW.config.refresh || 30) * 1000));
+        SW.poll(function () { if (state.page === 1) return load(true); }, Math.max(30000, (SW.config.refresh || 30) * 1000));
     });
 })();
