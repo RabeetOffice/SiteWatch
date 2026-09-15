@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 /**
  * Sidebar navigation. Uses $activeNav, $currentUser, $csrfToken, $initials and
- * $openIncidents, all prepared by header.php.
+ * $openIncidents, all prepared by header.php. Items the user's role cannot open are hidden.
  */
 
 $nav = [
@@ -13,21 +13,32 @@ $nav = [
     ]],
     ['label' => 'Monitoring', 'items' => [
         ['key' => 'websites', 'icon' => 'bi-globe2', 'label' => 'Websites', 'href' => 'admin/websites.php'],
-        ['key' => 'website-add', 'icon' => 'bi-plus-circle', 'label' => 'Add Website', 'href' => 'admin/website-add.php'],
-        ['key' => 'incidents', 'icon' => 'bi-exclamation-octagon', 'label' => 'Incidents', 'href' => 'admin/incidents.php', 'count' => $openIncidents],
-        ['key' => 'response-times', 'icon' => 'bi-speedometer2', 'label' => 'Response Times', 'href' => 'admin/response-times.php'],
+        ['key' => 'website-add', 'icon' => 'bi-plus-circle', 'label' => 'Add Website', 'href' => 'admin/website-add.php', 'permission' => 'websites.manage'],
+        ['key' => 'incidents', 'icon' => 'bi-exclamation-octagon', 'label' => 'Incidents', 'href' => 'admin/incidents.php', 'count' => $openIncidents, 'permission' => 'incidents.view'],
+        ['key' => 'response-times', 'icon' => 'bi-speedometer2', 'label' => 'Response Times', 'href' => 'admin/response-times.php', 'permission' => 'reports.view'],
+        ['key' => 'domains', 'icon' => 'bi-globe-americas', 'label' => 'Domains & Hosting', 'href' => 'admin/domains.php', 'permission' => 'domains.view'],
     ]],
     ['label' => 'Reports', 'items' => [
-        ['key' => 'reports', 'icon' => 'bi-bar-chart-line', 'label' => 'Uptime', 'href' => 'admin/reports.php'],
-        ['key' => 'performance', 'icon' => 'bi-activity', 'label' => 'Performance', 'href' => 'admin/performance.php'],
+        ['key' => 'reports', 'icon' => 'bi-bar-chart-line', 'label' => 'Uptime', 'href' => 'admin/reports.php', 'permission' => 'reports.view'],
+        ['key' => 'performance', 'icon' => 'bi-activity', 'label' => 'Performance', 'href' => 'admin/performance.php', 'permission' => 'reports.view'],
+    ]],
+    ['label' => 'Team', 'items' => [
+        ['key' => 'users', 'icon' => 'bi-people', 'label' => 'Users', 'href' => 'admin/users.php', 'permission' => 'users.manage'],
+        ['key' => 'roles', 'icon' => 'bi-shield-lock', 'label' => 'Roles & Permissions', 'href' => 'admin/roles.php', 'permission' => 'roles.manage'],
     ]],
     ['label' => 'System', 'items' => [
-        ['key' => 'notifications', 'icon' => 'bi-bell', 'label' => 'Notifications', 'href' => 'admin/notifications.php'],
-        ['key' => 'monitoring-settings', 'icon' => 'bi-sliders', 'label' => 'Monitoring Settings', 'href' => 'admin/settings.php?section=monitoring'],
-        ['key' => 'settings', 'icon' => 'bi-gear', 'label' => 'General Settings', 'href' => 'admin/settings.php'],
-        ['key' => 'activity', 'icon' => 'bi-clock-history', 'label' => 'Activity Log', 'href' => 'admin/activity.php'],
+        ['key' => 'notifications', 'icon' => 'bi-bell', 'label' => 'Notifications', 'href' => 'admin/notifications.php', 'permission' => 'notifications.manage'],
+        ['key' => 'monitoring-settings', 'icon' => 'bi-sliders', 'label' => 'Monitoring Settings', 'href' => 'admin/settings.php?section=monitoring', 'permission' => 'settings.manage'],
+        ['key' => 'settings', 'icon' => 'bi-gear', 'label' => 'General Settings', 'href' => 'admin/settings.php', 'permission' => 'settings.manage'],
+        ['key' => 'activity', 'icon' => 'bi-clock-history', 'label' => 'Activity Log', 'href' => 'admin/activity.php', 'permission' => 'activity.view'],
+        ['key' => 'updates', 'icon' => 'bi-cloud-arrow-down', 'label' => 'Updates', 'href' => 'admin/updates.php', 'permission' => '*'],
     ]],
 ];
+
+foreach ($nav as $i => $group) {
+    $nav[$i]['items'] = array_values(array_filter($group['items'], static fn (array $item): bool => !isset($item['permission']) || can($item['permission'])));
+}
+$nav = array_values(array_filter($nav, static fn (array $group): bool => $group['items'] !== []));
 ?>
 <aside class="sw-sidebar" id="sidebar" aria-label="Main navigation">
     <a class="sw-brand" href="<?= e(base_url('admin/dashboard.php')) ?>">
@@ -58,7 +69,7 @@ $nav = [
                 <span class="sw-avatar" aria-hidden="true"><?= e($initials) ?></span>
                 <span class="sw-user-text">
                     <span class="n"><?= e($currentUser['name']) ?></span>
-                    <span class="e"><?= e($currentUser['email']) ?></span>
+                    <span class="e"><?= e(!empty($currentUser['role_name']) ? $currentUser['role_name'] : $currentUser['email']) ?></span>
                 </span>
             </a>
             <form method="post" action="<?= e(base_url('logout.php')) ?>" class="ms-auto">

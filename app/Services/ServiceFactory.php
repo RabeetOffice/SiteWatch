@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Core\App;
+use App\Domains\DomainInspector;
 use App\Monitoring\MonitoringScheduler;
 use App\Monitoring\MonitorManager;
 use App\Monitoring\SsrfGuard;
@@ -12,9 +13,11 @@ use App\Monitoring\UptimeCalculator;
 use App\Repositories\ActivityRepository;
 use App\Repositories\CheckRepository;
 use App\Repositories\DailyStatsRepository;
+use App\Repositories\DomainRepository;
 use App\Repositories\HeartbeatRepository;
 use App\Repositories\IncidentRepository;
 use App\Repositories\NotificationRepository;
+use App\Repositories\RoleRepository;
 use App\Repositories\UserRepository;
 use App\Repositories\WebsiteRepository;
 
@@ -61,6 +64,26 @@ final class ServiceFactory
     public static function users(): UserRepository
     {
         return new UserRepository(App::db());
+    }
+
+    public static function roles(): RoleRepository
+    {
+        return new RoleRepository(App::db());
+    }
+
+    public static function team(): TeamService
+    {
+        return new TeamService(self::users(), self::roles());
+    }
+
+    public static function domains(): DomainRepository
+    {
+        return new DomainRepository(App::db());
+    }
+
+    public static function domainService(): DomainService
+    {
+        return new DomainService(self::domains(), App::settings(), DomainInspector::create());
     }
 
     public static function scheduler(): MonitoringScheduler

@@ -254,19 +254,25 @@
         if (!id) return;
         SW.qsa('#rtRange button').forEach(function (b) { b.classList.toggle('active', b.getAttribute('data-range') === rtRange); b.addEventListener('click', function () { rtRange = b.getAttribute('data-range'); SW.storage.set('sw-rt-range', rtRange); SW.qsa('#rtRange button').forEach(function (x) { x.classList.toggle('active', x === b); }); loadRt().catch(function (e) { SW.toast(e.message, 'danger'); }); }); });
         SW.qsa('#checksFilter button').forEach(function (b) { b.addEventListener('click', function () { checksOnly = b.getAttribute('data-only'); checksPage = 1; SW.qsa('#checksFilter button').forEach(function (x) { x.classList.toggle('active', x === b); }); loadChecks().catch(function (e) { SW.toast(e.message, 'danger'); }); }); });
-        document.getElementById('btnCheckNow').addEventListener('click', checkNow);
-        document.getElementById('btnPause').addEventListener('click', async function () {
+        // Action buttons only exist when the user's role allows them.
+        const checkBtn = document.getElementById('btnCheckNow');
+        if (checkBtn) checkBtn.addEventListener('click', checkNow);
+        const pauseBtn = document.getElementById('btnPause');
+        if (pauseBtn) pauseBtn.addEventListener('click', async function () {
             const btn = this; const enabled = btn.getAttribute('data-enabled') === '1';
             SW.setLoading(btn, true);
             try { const res = await SW.api('api/websites/pause.php', { method: 'POST', body: { id: id, action: enabled ? 'pause' : 'resume' } }); SW.setLoading(btn, false); renderHeader(res.data.website); SW.toast(res.message, 'success'); }
             catch (e) { SW.setLoading(btn, false); SW.toast(e.message, 'danger'); }
         });
-        document.getElementById('btnDelete').addEventListener('click', async function () {
+        const deleteBtn = document.getElementById('btnDelete');
+        if (deleteBtn) deleteBtn.addEventListener('click', async function () {
             const ok = await SW.confirm({ title: 'Delete ' + website.name + '?', message: 'All checks, incidents and statistics for this website will be permanently removed.', confirmText: 'Delete website' });
             if (!ok) return;
             try { await SW.api('api/websites/delete.php', { method: 'POST', body: { id: id } }); SW.toast('Website deleted.', 'success'); setTimeout(function () { window.location.href = SW.url('admin/websites.php'); }, 500); }
             catch (e) { SW.toast(e.message, 'danger'); }
         });
+        const domainSection = document.getElementById('domainSection');
+        if (domainSection && SW.DomainInfo) SW.DomainInfo.mountWebsite(domainSection, id);
 
         Promise.all([loadShow(), loadChecks(), loadTimeline(), loadRt()]).catch(function (e) { SW.toast(e.message, 'danger'); });
         SW.poll(async function () { await loadShow(); if (checksPage === 1) await loadChecks(); await loadTimeline(); }, Math.max(15000, (SW.config.refresh || 30) * 1000));

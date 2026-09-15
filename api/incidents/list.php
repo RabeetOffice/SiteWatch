@@ -11,7 +11,7 @@ use App\Core\Response;
 use App\Services\ReportService;
 use App\Services\ServiceFactory;
 
-Api::boot(['GET']);
+Api::boot(['GET'], permission: 'incidents.view');
 
 $pagination = Api::pagination(20, 100);
 $criteria = [

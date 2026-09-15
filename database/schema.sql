@@ -1,27 +1,48 @@
 -- ============================================================================
--- SiteWatch database schema
+-- SiteWatch database schema (latest version — see App\Core\Migrator::VERSION)
 -- MySQL 5.7+ / MariaDB 10.3+.  All DATETIME values are stored in UTC.
+-- Existing installations are upgraded automatically by App\Core\Migrator.
 -- ============================================================================
 
 SET NAMES utf8mb4;
 SET time_zone = '+00:00';
 
 -- ----------------------------------------------------------------------------
--- Administrators
+-- Roles (permission sets). Default roles are seeded by the migrator.
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `roles` (
+  `id`          INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `name`        VARCHAR(60)  NOT NULL,
+  `slug`        VARCHAR(60)  NOT NULL,
+  `description` VARCHAR(255) NOT NULL DEFAULT '',
+  `permissions` TEXT NULL COMMENT 'JSON array of permission keys, ["*"] = everything',
+  `is_system`   TINYINT(1)   NOT NULL DEFAULT 0 COMMENT 'built-in role that cannot be edited or deleted',
+  `created_at`  DATETIME     NOT NULL,
+  `updated_at`  DATETIME     NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_roles_slug` (`slug`),
+  UNIQUE KEY `uq_roles_name` (`name`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------------------
+-- Users
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `users` (
-  `id`            INT UNSIGNED NOT NULL AUTO_INCREMENT,
-  `name`          VARCHAR(100)  NOT NULL,
-  `email`         VARCHAR(190)  NOT NULL,
-  `password_hash` VARCHAR(255)  NOT NULL,
-  `role`          VARCHAR(20)   NOT NULL DEFAULT 'admin',
-  `is_active`     TINYINT(1)    NOT NULL DEFAULT 1,
-  `last_login_at` DATETIME      NULL,
-  `last_login_ip` VARCHAR(45)   NULL,
-  `created_at`    DATETIME      NOT NULL,
-  `updated_at`    DATETIME      NOT NULL,
+  `id`              INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `name`            VARCHAR(100)  NOT NULL,
+  `email`           VARCHAR(190)  NOT NULL,
+  `password_hash`   VARCHAR(255)  NOT NULL,
+  `role_id`         INT UNSIGNED  NOT NULL,
+  `is_active`       TINYINT(1)    NOT NULL DEFAULT 1,
+  `session_version` INT UNSIGNED  NOT NULL DEFAULT 1 COMMENT 'incremented to sign the user out everywhere',
+  `last_login_at`   DATETIME      NULL,
+  `last_login_ip`   VARCHAR(45)   NULL,
+  `created_at`      DATETIME      NOT NULL,
+  `updated_at`      DATETIME      NOT NULL,
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uq_users_email` (`email`)
+  UNIQUE KEY `uq_users_email` (`email`),
+  KEY `fk_users_role` (`role_id`),
+  CONSTRAINT `fk_users_role` FOREIGN KEY (`role_id`) REFERENCES `roles` (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Login rate limiting
@@ -234,7 +255,7 @@ CREATE TABLE IF NOT EXISTS `activity_logs` (
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `monitor_heartbeats` (
   `id`               INT UNSIGNED NOT NULL AUTO_INCREMENT,
-  `process`          VARCHAR(30) NOT NULL COMMENT 'monitor | cleanup | ssl-check',
+  `process`          VARCHAR(30) NOT NULL COMMENT 'monitor | cleanup | ssl-check | domain-check',
   `started_at`       DATETIME NOT NULL,
   `finished_at`      DATETIME NULL,
   `websites_checked` INT UNSIGNED NOT NULL DEFAULT 0,
@@ -245,4 +266,35 @@ CREATE TABLE IF NOT EXISTS `monitor_heartbeats` (
   `hostname`         VARCHAR(190) NULL,
   PRIMARY KEY (`id`),
   KEY `idx_heartbeats_process_time` (`process`, `started_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------------------
+-- Domain registration (RDAP / WHOIS) and hosting details, one row per website
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `domain_info` (
+  `id`               INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `website_id`       INT UNSIGNED NOT NULL,
+  `host`             VARCHAR(253) NOT NULL COMMENT 'website host that was inspected',
+  `domain`           VARCHAR(253) NOT NULL COMMENT 'registrable domain, e.g. example.co.uk',
+  `registrar`        VARCHAR(190) NULL,
+  `registered_at`    DATETIME     NULL,
+  `expires_at`       DATETIME     NULL,
+  `whois_source`     VARCHAR(10)  NULL COMMENT 'rdap | whois',
+  `whois_error`      VARCHAR(255) NULL,
+  `ip_address`       VARCHAR(45)  NULL COMMENT 'primary address the host resolves to',
+  `asn`              INT UNSIGNED NULL,
+  `hosting_provider` VARCHAR(120) NULL,
+  `cdn`              VARCHAR(60)  NULL,
+  `country_code`     CHAR(2)      NULL,
+  `hosting_error`    VARCHAR(255) NULL,
+  `details`          MEDIUMTEXT   NULL COMMENT 'JSON: full registration and hosting details incl. raw RDAP/WHOIS',
+  `checked_at`       DATETIME     NOT NULL,
+  `created_at`       DATETIME     NOT NULL,
+  `updated_at`       DATETIME     NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_domain_info_website` (`website_id`),
+  KEY `idx_domain_info_domain` (`domain`),
+  KEY `idx_domain_info_expires` (`expires_at`),
+  KEY `idx_domain_info_checked` (`checked_at`),
+  CONSTRAINT `fk_domain_info_website` FOREIGN KEY (`website_id`) REFERENCES `websites` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

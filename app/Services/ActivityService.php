@@ -33,9 +33,20 @@ final class ActivityService
         'notification.test'  => 'Test Notification',
         'check.manual'       => 'Manual Check',
         'bulk.action'        => 'Bulk Action',
+        'user.created'       => 'User Added',
+        'user.updated'       => 'User Updated',
+        'user.deleted'       => 'User Deleted',
+        'role.created'       => 'Role Created',
+        'role.updated'       => 'Role Updated',
+        'role.deleted'       => 'Role Deleted',
+        'system.updated'     => 'Database Updated',
     ];
 
     public const ACTION_TONES = [
+        'user.created'       => 'primary',
+        'user.deleted'       => 'danger',
+        'role.created'       => 'primary',
+        'role.deleted'       => 'danger',
         'incident.opened'    => 'danger',
         'incident.resolved'  => 'success',
         'ssl.warning'        => 'warning',

@@ -6,6 +6,8 @@ require dirname(__DIR__) . '/bootstrap.php';
 
 use App\Services\ActivityService;
 
+require_permission('activity.view');
+
 $pageTitle = 'Activity Log';
 $activeNav = 'activity';
 $pageScripts = ['activity.js'];

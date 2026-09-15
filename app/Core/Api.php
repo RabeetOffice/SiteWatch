@@ -5,20 +5,22 @@ declare(strict_types=1);
 namespace App\Core;
 
 /**
- * Bootstraps a JSON API endpoint: method check, authentication, CSRF for state-changing requests.
+ * Bootstraps a JSON API endpoint: method check, authentication, CSRF for state-changing requests and
+ * (optionally) a role permission.
  *
  *   require __DIR__ . '/../../bootstrap.php';
- *   Api::boot(['POST']);
+ *   Api::boot(['POST'], permission: 'websites.manage');
  *   ... Response::success(...)
  */
 final class Api
 {
     /**
      * @param array<int, string> $methods Allowed HTTP methods.
-     * @param bool $auth Require an authenticated administrator.
+     * @param bool $auth Require a signed-in user.
      * @param bool|null $csrf Require a CSRF token. Defaults to true for every non-GET method.
+     * @param string|null $permission Permission key the user's role must grant (see Permission).
      */
-    public static function boot(array $methods = ['GET'], bool $auth = true, ?bool $csrf = null): void
+    public static function boot(array $methods = ['GET'], bool $auth = true, ?bool $csrf = null, ?string $permission = null): void
     {
         ErrorHandler::setApiMode(true);
 
@@ -42,6 +44,21 @@ final class Api
         if ($csrf && !App::csrf()->validateRequest()) {
             // 403 rather than the non-standard 419: Apache rewrites unknown status codes to 500.
             Response::error('Your session has expired or the security token is invalid. Please reload the page and try again.', [], 403);
+        }
+
+        if ($permission !== null) {
+            self::authorize($permission);
+        }
+    }
+
+    /**
+     * Stop with 403 unless the signed-in user's role grants $permission. For endpoints whose required
+     * permission depends on the request (bulk actions, settings sections).
+     */
+    public static function authorize(string $permission): void
+    {
+        if (!App::auth()->can($permission)) {
+            Response::error('You do not have permission to do this. Ask an administrator if you need access.', ['permission' => $permission], 403);
         }
     }
 

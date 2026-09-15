@@ -101,6 +101,17 @@ final class Session
         }
     }
 
+    /**
+     * Save and unlock the session so a slow request (e.g. a domain lookup) does not block the same
+     * user's other requests. Values set afterwards are not stored.
+     */
+    public function release(): void
+    {
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_write_close();
+        }
+    }
+
     public function destroy(): void
     {
         if (session_status() === PHP_SESSION_ACTIVE) {

@@ -7,6 +7,8 @@ require dirname(__DIR__) . '/bootstrap.php';
 use App\Core\App;
 use App\Repositories\WebsiteRepository;
 
+require_permission('settings.manage');
+
 $section = ($_GET['section'] ?? 'general') === 'monitoring' ? 'monitoring' : 'general';
 $s = App::settings()->allForDisplay();
 
@@ -23,7 +25,7 @@ $timezones = DateTimeZone::listIdentifiers();
 <nav class="sw-subnav mb-4" aria-label="Settings sections">
     <a href="<?= e(base_url('admin/settings.php')) ?>"<?= $section === 'general' ? ' class="active" aria-current="page"' : '' ?>>General</a>
     <a href="<?= e(base_url('admin/settings.php?section=monitoring')) ?>"<?= $section === 'monitoring' ? ' class="active" aria-current="page"' : '' ?>>Monitoring</a>
-    <a href="<?= e(base_url('admin/notifications.php')) ?>">Notifications</a>
+    <?php if (can('notifications.manage')): ?><a href="<?= e(base_url('admin/notifications.php')) ?>">Notifications</a><?php endif; ?>
 </nav>
 
 <div class="sw-form-col">
@@ -94,7 +96,9 @@ $timezones = DateTimeZone::listIdentifiers();
                 <dt>Storage</dt><dd><?= is_writable((string) config('app.paths.logs')) ? '<span class="text-success">logs writable</span>' : '<span class="text-danger">logs directory not writable</span>' ?> · <?= is_writable((string) config('app.paths.locks')) ? '<span class="text-success">locks writable</span>' : '<span class="text-danger">locks directory not writable</span>' ?></dd>
             </dl>
             <div class="form-label">Monitoring cron command</div>
-            <pre class="copy-box mb-0">* * * * * php <?= e(str_replace('\\', '/', (string) config('app.paths.root'))) ?>/cron/monitor.php</pre>
+            <pre class="copy-box mb-3">* * * * * php <?= e(str_replace('\\', '/', (string) config('app.paths.root'))) ?>/cron/monitor.php</pre>
+            <div class="form-label">Domain &amp; hosting cron command (daily)</div>
+            <pre class="copy-box mb-0">45 4 * * * php <?= e(str_replace('\\', '/', (string) config('app.paths.root'))) ?>/cron/domain-check.php</pre>
         </div>
     </details>
 
@@ -223,6 +227,33 @@ $timezones = DateTimeZone::listIdentifiers();
                             <span class="input-group-text">hours</span>
                         </div>
                         <div class="form-text">Certificates are re-inspected no more often than this.</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="sw-card mb-4">
+            <div class="sw-card-header"><div><h3>Domains &amp; hosting</h3><p class="sub">Registration (RDAP / WHOIS) lookups and server location</p></div></div>
+            <div class="sw-card-body">
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <label class="form-label" for="domain_check_interval_hours">Domain re-check interval</label>
+                        <div class="input-group">
+                            <input type="number" class="form-control" id="domain_check_interval_hours" name="domain_check_interval_hours" min="1" max="720" value="<?= (int) $s['domain_check_interval_hours'] ?>">
+                            <span class="input-group-text">hours</span>
+                        </div>
+                        <div class="form-text">Details older than this are refreshed by <span class="code-inline">cron/domain-check.php</span>, or when someone opens them.</div>
+                    </div>
+                    <div class="col-md-8">
+                        <label class="form-label" for="ipinfo_token">ipinfo.io token <span class="text-muted fw-normal">(optional)</span></label>
+                        <input type="password" class="form-control" id="ipinfo_token" name="ipinfo_token" maxlength="64" autocomplete="off"
+                               placeholder="<?= $s['ipinfo_token_set'] ? '•••••••••• (saved — leave blank to keep)' : 'Not set — the free anonymous limit is used' ?>">
+                        <div class="form-text">Server cities come from ipinfo.io. A free ipinfo.io token raises the lookup limit and is stored encrypted.</div>
+                        <div class="form-check form-switch mt-2">
+                            <input class="form-check-input" type="checkbox" role="switch" id="domain_geo_lookup" name="domain_geo_lookup" value="1"<?= $s['domain_geo_lookup'] ? ' checked' : '' ?>>
+                            <label class="form-check-label" for="domain_geo_lookup">Look up server city and region</label>
+                        </div>
+                        <div class="form-text">When off, only the country of the hosting network is shown and no server addresses are sent to ipinfo.io.</div>
                     </div>
                 </div>
             </div>

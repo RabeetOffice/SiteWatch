@@ -11,7 +11,7 @@ use App\Core\Request;
 use App\Core\Response;
 use App\Services\ServiceFactory;
 
-Api::boot(['POST']);
+Api::boot(['POST'], permission: 'websites.manage');
 
 $service = ServiceFactory::websiteService();
 $validated = $service->validate(Request::all());

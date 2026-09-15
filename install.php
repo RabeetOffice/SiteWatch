@@ -15,9 +15,11 @@ require __DIR__ . '/bootstrap.php';
 use App\Core\App;
 use App\Core\Crypto;
 use App\Core\Database;
+use App\Core\Migrator;
 use App\Core\Request;
 use App\Core\Response;
 use App\Core\Validator;
+use App\Repositories\RoleRepository;
 use App\Repositories\SettingsRepository;
 use App\Repositories\UserRepository;
 
@@ -177,6 +179,8 @@ if (Request::isPost() && !$installed) {
                     throw new RuntimeException('database/schema.sql is missing.');
                 }
                 $pdo->exec($sql);
+                // Seeds the default roles and brings tables kept from an older installation up to date.
+                Migrator::create(new Database($config))->migrate();
                 $tables = $pdo->query('SHOW TABLES')->fetchAll(PDO::FETCH_COLUMN);
                 $state['tables'] = count($tables);
                 $state['step'] = 4;
@@ -219,13 +223,17 @@ if (Request::isPost() && !$installed) {
                     $appKey = Crypto::generateKey();
                     $writeEnv($state, $appKey);
 
+                    $roles = new RoleRepository($db);
+                    $roles->seedDefaults();
+                    $adminRoleId = (int) ($roles->findBySlug(RoleRepository::ADMINISTRATOR)['id'] ?? 0);
+
                     $users = new UserRepository($db);
                     $existing = $users->findByEmail($state['admin']['email']);
                     if ($existing === null) {
-                        $users->create($state['admin']['name'], $state['admin']['email'], $state['admin']['password']);
+                        $users->create($state['admin']['name'], $state['admin']['email'], $state['admin']['password'], $adminRoleId);
                     } else {
                         $users->updatePassword((int) $existing['id'], $state['admin']['password']);
-                        $users->updateProfile((int) $existing['id'], $state['admin']['name'], $state['admin']['email']);
+                        $users->updateAccount((int) $existing['id'], $state['admin']['name'], $state['admin']['email'], $adminRoleId, true);
                     }
 
                     $settings = new SettingsRepository($db);

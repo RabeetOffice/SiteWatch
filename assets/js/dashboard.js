@@ -41,7 +41,7 @@
         const total = h.healthy + h.warning + h.down + h.paused;
         if (total === 0) {
             el.innerHTML = SW.emptyState('bi-globe2', 'No websites are being monitored yet.', 'Add your first client website to start collecting health data.',
-                '<a class="btn btn-sm btn-primary" href="' + SW.url('admin/website-add.php') + '"><i class="bi bi-plus-lg"></i> Add your first website</a>');
+                SW.can('websites.manage') ? '<a class="btn btn-sm btn-primary" href="' + SW.url('admin/website-add.php') + '"><i class="bi bi-plus-lg"></i> Add your first website</a>' : '');
             return;
         }
         const pct = function (n) { return (n / total * 100).toFixed(1) + '%'; };

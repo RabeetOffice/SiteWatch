@@ -22,7 +22,8 @@ $presented = $service->present($website);
 
 $pageTitle = $website['name'];
 $activeNav = 'websites';
-$pageScripts = ['website-details.js'];
+$canViewDomains = can('domains.view');
+$pageScripts = $canViewDomains ? ['domain-info.js', 'website-details.js'] : ['website-details.js'];
 $needsCharts = true;
 $hidePageHead = true;
 $pageData = ['id' => $id, 'website' => $presented];
@@ -62,19 +63,26 @@ require dirname(__DIR__) . '/includes/header.php';
                 <div class="site-identity-issue" id="siteError"><?= $presented['last_error_message'] && $presented['severity'] !== 'ok' ? '<i class="bi bi-exclamation-triangle" aria-hidden="true"></i> ' . e($presented['last_error_message']) : '' ?></div>
             </div>
             <div class="site-identity-actions">
-                <button type="button" class="btn btn-primary" id="btnCheckNow"><i class="bi bi-arrow-repeat" aria-hidden="true"></i> Check now</button>
-                <a href="<?= e(base_url('admin/website-edit.php?id=' . $id)) ?>" class="btn btn-light"><i class="bi bi-pencil" aria-hidden="true"></i> Edit</a>
-                <button type="button" class="btn btn-light" id="btnPause" data-enabled="<?= $presented['monitoring_enabled'] ? '1' : '0' ?>">
-                    <i class="bi <?= $presented['monitoring_enabled'] ? 'bi-pause-circle' : 'bi-play-circle' ?>" aria-hidden="true"></i> <?= $presented['monitoring_enabled'] ? 'Pause' : 'Resume' ?>
-                </button>
+                <?php if (can('websites.check')): ?>
+                    <button type="button" class="btn btn-primary" id="btnCheckNow"><i class="bi bi-arrow-repeat" aria-hidden="true"></i> Check now</button>
+                <?php endif; ?>
+                <?php if (can('websites.manage')): ?>
+                    <a href="<?= e(base_url('admin/website-edit.php?id=' . $id)) ?>" class="btn btn-light"><i class="bi bi-pencil" aria-hidden="true"></i> Edit</a>
+                    <button type="button" class="btn btn-light" id="btnPause" data-enabled="<?= $presented['monitoring_enabled'] ? '1' : '0' ?>">
+                        <i class="bi <?= $presented['monitoring_enabled'] ? 'bi-pause-circle' : 'bi-play-circle' ?>" aria-hidden="true"></i> <?= $presented['monitoring_enabled'] ? 'Pause' : 'Resume' ?>
+                    </button>
+                <?php endif; ?>
                 <div class="dropdown">
                     <button type="button" class="btn btn-light" data-bs-toggle="dropdown" aria-expanded="false" aria-label="More actions"><i class="bi bi-three-dots" aria-hidden="true"></i></button>
                     <ul class="dropdown-menu dropdown-menu-end">
                         <li><a class="dropdown-item" href="<?= e($website['url']) ?>" target="_blank" rel="noopener noreferrer"><i class="bi bi-box-arrow-up-right"></i> Open website</a></li>
-                        <li><a class="dropdown-item" href="<?= e(base_url('admin/incidents.php?website_id=' . $id)) ?>"><i class="bi bi-exclamation-octagon"></i> Incident history</a></li>
-                        <li><a class="dropdown-item" href="<?= e(base_url('admin/reports.php?website_id=' . $id)) ?>"><i class="bi bi-bar-chart-line"></i> Uptime report</a></li>
-                        <li><hr class="dropdown-divider"></li>
-                        <li><button type="button" class="dropdown-item text-danger" id="btnDelete"><i class="bi bi-trash"></i> Delete website</button></li>
+                        <?php if (can('incidents.view')): ?><li><a class="dropdown-item" href="<?= e(base_url('admin/incidents.php?website_id=' . $id)) ?>"><i class="bi bi-exclamation-octagon"></i> Incident history</a></li><?php endif; ?>
+                        <?php if (can('reports.view')): ?><li><a class="dropdown-item" href="<?= e(base_url('admin/reports.php?website_id=' . $id)) ?>"><i class="bi bi-bar-chart-line"></i> Uptime report</a></li><?php endif; ?>
+                        <?php if ($canViewDomains): ?><li><a class="dropdown-item" href="#domainSection"><i class="bi bi-globe-americas"></i> Domain &amp; hosting</a></li><?php endif; ?>
+                        <?php if (can('websites.delete')): ?>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><button type="button" class="dropdown-item text-danger" id="btnDelete"><i class="bi bi-trash"></i> Delete website</button></li>
+                        <?php endif; ?>
                     </ul>
                 </div>
             </div>
@@ -119,6 +127,17 @@ require dirname(__DIR__) . '/includes/header.php';
         </div>
         <p class="stat-note" data-stat="ssl_sub"><?= e($presented['ssl']['applicable'] && $presented['ssl']['expires_at'] ? 'Expires ' . $presented['ssl']['expires_label'] : ($presented['ssl']['error'] ?: '')) ?>&nbsp;</p>
     </div>
+    <?php if ($canViewDomains): ?>
+    <div class="stat-group">
+        <h3>Domain</h3>
+        <div class="stat-rows">
+            <div class="stat-row"><span class="l">Age</span><span class="v lead" data-domain-stat="age"><span class="skeleton skeleton-line" style="width:72px;display:inline-block">&nbsp;</span></span></div>
+            <div class="stat-row"><span class="l">Expiry</span><span class="v fs-13" data-domain-stat="expiry">—</span></div>
+            <div class="stat-row"><span class="l">Hosting</span><span class="v fs-13" data-domain-stat="host">—</span></div>
+        </div>
+        <p class="stat-note"><a href="#domainSection">Registration and hosting details</a></p>
+    </div>
+    <?php endif; ?>
 </div>
 
 <div class="row g-3 mb-4">
@@ -180,6 +199,7 @@ require dirname(__DIR__) . '/includes/header.php';
         </div>
     </div>
     <div class="col-xl-4">
+        <?php if (can('incidents.view')): ?>
         <div class="sw-card mb-3">
             <div class="sw-card-header">
                 <div><h3>Incidents</h3><p class="sub">Latest for this website</p></div>
@@ -187,10 +207,11 @@ require dirname(__DIR__) . '/includes/header.php';
             </div>
             <div id="siteIncidents"></div>
         </div>
+        <?php endif; ?>
         <div class="sw-card">
             <div class="sw-card-header">
                 <div><h3>Configuration</h3></div>
-                <a class="btn btn-sm btn-light" href="<?= e(base_url('admin/website-edit.php?id=' . $id)) ?>"><i class="bi bi-pencil"></i> Edit</a>
+                <?php if (can('websites.manage')): ?><a class="btn btn-sm btn-light" href="<?= e(base_url('admin/website-edit.php?id=' . $id)) ?>"><i class="bi bi-pencil"></i> Edit</a><?php endif; ?>
             </div>
             <div class="sw-card-body">
                 <dl class="kv-list mb-0" id="siteConfig">
@@ -205,5 +226,30 @@ require dirname(__DIR__) . '/includes/header.php';
         </div>
     </div>
 </div>
+
+<?php if ($canViewDomains): ?>
+<section class="row g-3 mb-4" id="domainSection" aria-label="Domain and hosting" style="scroll-margin-top:72px">
+    <div class="col-xl-6">
+        <div class="sw-card h-100">
+            <div class="sw-card-header">
+                <div><h3>Domain registration</h3><p class="sub">WHOIS / RDAP record for <?= e(\App\Domains\DomainName::registrable((string) $website['domain'])) ?></p></div>
+                <div class="d-flex gap-2">
+                    <button type="button" class="btn btn-sm btn-light" data-domain-raw hidden><i class="bi bi-file-earmark-code" aria-hidden="true"></i> Raw record</button>
+                    <?php if (can('domains.lookup')): ?><button type="button" class="btn btn-sm btn-light" data-domain-refresh><i class="bi bi-arrow-repeat" aria-hidden="true"></i> Refresh</button><?php endif; ?>
+                </div>
+            </div>
+            <div class="sw-card-body" data-domain-registration><div class="skeleton skeleton-block"></div></div>
+        </div>
+    </div>
+    <div class="col-xl-6">
+        <div class="sw-card h-100">
+            <div class="sw-card-header">
+                <div><h3>Hosting</h3><p class="sub" data-domain-checked>Where this website is served from</p></div>
+            </div>
+            <div class="sw-card-body" data-domain-hosting><div class="skeleton skeleton-block"></div></div>
+        </div>
+    </div>
+</section>
+<?php endif; ?>
 
 <?php require dirname(__DIR__) . '/includes/footer.php'; ?>

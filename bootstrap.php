@@ -7,11 +7,14 @@ declare(strict_types=1);
  *
  *   define('SW_API', true);        // before including: JSON error output
  *   define('SW_INSTALLER', true);  // before including: skip the "is installed" guard
+ *   define('SW_SKIP_MIGRATIONS', true); // before including: do not apply schema upgrades automatically
+ *   define('SW_ALLOW_PENDING_SCHEMA', true); // before including: page still works while a database update is waiting
  */
 
 use App\Core\App;
 use App\Core\Config;
 use App\Core\ErrorHandler;
+use App\Core\Migrator;
 use App\Core\Response;
 use Dotenv\Dotenv;
 
@@ -56,6 +59,23 @@ if (!defined('SW_INSTALLER') && !App::isInstalled()) {
         exit(1);
     }
     Response::redirect(App::detectBaseUrl() . '/install.php');
+}
+
+// Database updates --------------------------------------------------------------
+// After new code is deployed, an administrator applies pending database updates under System → Updates
+// (or with `php database/migrate.php`). DB_AUTO_MIGRATE=true applies them on the first request or cron run.
+if (!defined('SW_INSTALLER') && !defined('SW_SKIP_MIGRATIONS') && App::schemaPending()) {
+    if ((bool) $config->get('app.auto_migrate', false)) {
+        Migrator::create()->migrate();
+        App::settings()->reload();
+    } elseif (!App::isCli() && !defined('SW_ALLOW_PENDING_SCHEMA')) {
+        // Until the update has run only the Updates page, sign-in and the status poll respond.
+        // Scheduled monitoring (cron) keeps running on the existing tables.
+        if (defined('SW_API')) {
+            Response::error('SiteWatch needs a database update. An administrator can run it under System → Updates.', ['update' => 'required'], 503);
+        }
+        Response::redirect(base_url('admin/updates.php'));
+    }
 }
 
 // Web request setup ------------------------------------------------------------

@@ -7,8 +7,9 @@ declare(strict_types=1);
  *   $pageTitle     string   Page title (page header + <title>)
  *   $pageSubtitle  string   Short context line under the page title (optional; keep it factual)
  *   $pageContext   string   HTML rendered in the page header context row (overrides $pageSubtitle)
- *   $activeNav     string   Sidebar key (dashboard, websites, website-add, incidents, response-times,
- *                            reports, performance, notifications, monitoring-settings, settings, activity, profile)
+ *   $activeNav     string   Sidebar key (dashboard, websites, website-add, incidents, response-times, domains,
+ *                            reports, performance, notifications, monitoring-settings, settings, activity,
+ *                            users, roles, profile)
  *   $pageScripts   array    JS files from assets/js to load after app.js
  *   $needsCharts   bool     Load Chart.js
  *   $headerActions string   HTML rendered in the page header action area
@@ -17,6 +18,7 @@ declare(strict_types=1);
  */
 
 use App\Core\App;
+use App\Core\Permission;
 use App\Monitoring\MonitoringScheduler;
 use App\Repositories\HeartbeatRepository;
 use App\Repositories\IncidentRepository;
@@ -58,6 +60,8 @@ $engineDetail = $engine['message'] ?? ('Last monitoring run: ' . $engine['last_r
 $bannerTitle = $engine['state'] === 'never'
     ? 'Monitoring has never run'
     : ($engine['state'] === 'problem' ? 'The last monitoring run failed' : 'Monitoring is not running');
+$monitoringSettingsUrl = can('settings.manage') ? base_url('admin/settings.php?section=monitoring') : null;
+$engineTag = $monitoringSettingsUrl !== null ? 'a' : 'span';
 
 $swConfig = [
     'baseUrl'  => base_url(),
@@ -65,7 +69,9 @@ $swConfig = [
     'refresh'  => max(15, (int) setting('dashboard_refresh_seconds', 30)),
     'timezone' => app_timezone()->getName(),
     'page'     => $activeNav,
-    'user'     => ['name' => (string) $currentUser['name'], 'email' => (string) $currentUser['email']],
+    'user'     => ['name' => (string) $currentUser['name'], 'email' => (string) $currentUser['email'], 'role' => (string) ($currentUser['role_name'] ?? '')],
+    // Only used to hide controls the user cannot use; the server enforces every permission.
+    'permissions' => Permission::expand($auth->permissions()),
     'thresholds' => [
         'moderate' => (int) setting('moderate_threshold', 2000),
         'slow'     => (int) setting('slow_threshold', 5000),
@@ -113,8 +119,8 @@ if (count($parts) > 1) {
             <a class="sw-topbar-brand" href="<?= e(base_url('admin/dashboard.php')) ?>"><?= sw_brand_logo(130) ?></a>
             <div class="sw-topbar-spacer"></div>
             <div class="sw-topbar-actions">
-                <a class="sw-engine state-<?= e($engine['state']) ?> d-none d-md-inline-flex" id="engineStatus"
-                   href="<?= e(base_url('admin/settings.php?section=monitoring')) ?>"
+                <<?= $engineTag ?> class="sw-engine state-<?= e($engine['state']) ?> d-none d-md-inline-flex" id="engineStatus"
+                   <?= $monitoringSettingsUrl !== null ? 'href="' . e($monitoringSettingsUrl) . '"' : 'tabindex="0"' ?>
                    data-bs-toggle="tooltip" title="<?= e($engineDetail) ?>">
                     <span class="sw-engine-dot" aria-hidden="true"></span>
                     <span class="sw-engine-text">
@@ -122,15 +128,16 @@ if (count($parts) > 1) {
                         <span class="s" data-engine-label><?= e($engine['label']) ?></span>
                         <span class="m d-none d-xl-inline" data-engine-meta>Last run <?= e($engine['last_run_ago']) ?></span>
                     </span>
-                </a>
+                </<?= $engineTag ?>>
                 <span class="refresh-indicator d-none d-lg-inline-flex" id="refreshIndicator" data-bs-toggle="tooltip" title="This page refreshes itself. It is separate from the monitoring engine."><span class="dot" aria-hidden="true"></span><span class="txt">Auto-refresh</span></span>
                 <button type="button" class="btn-icon" id="themeToggle" aria-label="Toggle dark mode" data-bs-toggle="tooltip" title="Toggle theme"><i class="bi bi-moon-stars" aria-hidden="true"></i></button>
                 <div class="dropdown">
                     <button type="button" class="btn-icon" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Account menu"><span class="sw-avatar"><?= e($initials) ?></span></button>
                     <ul class="dropdown-menu dropdown-menu-end">
-                        <li><h6 class="dropdown-header"><?= e($currentUser['name']) ?></h6></li>
+                        <li><h6 class="dropdown-header"><?= e($currentUser['name']) ?><?php if (!empty($currentUser['role_name'])): ?><span class="d-block text-muted fw-normal" style="text-transform:none;letter-spacing:0"><?= e($currentUser['role_name']) ?></span><?php endif; ?></h6></li>
                         <li><a class="dropdown-item" href="<?= e(base_url('admin/profile.php')) ?>"><i class="bi bi-person" aria-hidden="true"></i> Profile</a></li>
-                        <li><a class="dropdown-item" href="<?= e(base_url('admin/settings.php')) ?>"><i class="bi bi-gear" aria-hidden="true"></i> Settings</a></li>
+                        <?php if (can('users.manage')): ?><li><a class="dropdown-item" href="<?= e(base_url('admin/users.php')) ?>"><i class="bi bi-people" aria-hidden="true"></i> Users</a></li><?php endif; ?>
+                        <?php if (can('settings.manage')): ?><li><a class="dropdown-item" href="<?= e(base_url('admin/settings.php')) ?>"><i class="bi bi-gear" aria-hidden="true"></i> Settings</a></li><?php endif; ?>
                         <li><hr class="dropdown-divider"></li>
                         <li>
                             <form method="post" action="<?= e(base_url('logout.php')) ?>">
@@ -149,7 +156,7 @@ if (count($parts) > 1) {
                 <strong data-monitor-title><?= e($bannerTitle) ?></strong>
                 <span data-monitor-detail><?= e($engineDetail) ?> Website statuses on this page may be out of date.</span>
             </div>
-            <a href="<?= e(base_url('admin/settings.php?section=monitoring')) ?>">Monitoring settings <i class="bi bi-arrow-right" aria-hidden="true"></i></a>
+            <?php if ($monitoringSettingsUrl !== null): ?><a href="<?= e($monitoringSettingsUrl) ?>">Monitoring settings <i class="bi bi-arrow-right" aria-hidden="true"></i></a><?php endif; ?>
         </div>
 <?php if (!$hidePageHead): ?>
         <div class="sw-page-head">

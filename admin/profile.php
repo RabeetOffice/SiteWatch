@@ -21,7 +21,7 @@ require dirname(__DIR__) . '/includes/header.php';
         <span class="sw-avatar lg" aria-hidden="true"><?= e($initials) ?></span>
         <div class="min-w-0">
             <div class="fw-600" style="font-size:16px"><?= e($user['name']) ?></div>
-            <div class="text-muted fs-13"><?= e($user['email']) ?> · Administrator</div>
+            <div class="text-muted fs-13"><?= e($user['email']) ?> · <?= e($user['role_name'] ?? '') ?></div>
         </div>
     </div>
 
@@ -78,7 +78,7 @@ require dirname(__DIR__) . '/includes/header.php';
         <summary>Session details <span class="hint">last sign-in</span></summary>
         <div class="sw-disclosure-body">
             <dl class="kv-list mb-0">
-                <dt>Role</dt><dd>Administrator</dd>
+                <dt>Role</dt><dd><?= e($user['role_name'] ?? '') ?><?= can('roles.manage') ? ' · <a href="' . e(base_url('admin/roles.php')) . '">roles &amp; permissions</a>' : '' ?></dd>
                 <dt>Last sign-in</dt><dd><?= e($user['last_login_at'] ? format_datetime($user['last_login_at']) . ' (' . time_ago($user['last_login_at']) . ')' : 'Unknown') ?></dd>
                 <?php if (!empty($user['last_login_ip'])): ?><dt>From IP address</dt><dd class="mono"><?= e($user['last_login_ip']) ?></dd><?php endif; ?>
             </dl>

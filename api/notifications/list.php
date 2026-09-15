@@ -10,7 +10,7 @@ use App\Core\Request;
 use App\Core\Response;
 use App\Services\ServiceFactory;
 
-Api::boot(['GET']);
+Api::boot(['GET'], permission: 'notifications.manage');
 
 $pagination = Api::pagination(10, 100);
 $websiteId = Request::int('website_id');

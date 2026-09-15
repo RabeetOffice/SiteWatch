@@ -13,7 +13,7 @@ use App\Notifications\TelegramNotifier;
 use App\Services\ActivityService;
 use App\Services\ServiceFactory;
 
-Api::boot(['POST']);
+Api::boot(['POST'], permission: 'notifications.manage');
 
 set_time_limit(45);
 $settings = App::settings();

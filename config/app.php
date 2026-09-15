@@ -31,12 +31,14 @@ $env = static function (string $key, mixed $default = null): mixed {
 
 return [
     'name'     => 'SiteWatch',
-    'version'  => '1.1.0',
+    'version'  => '1.2.0',
     'env'      => (string) $env('APP_ENV', 'production'),
     'debug'    => (bool) $env('APP_DEBUG', false),
     'url'      => (string) $env('APP_URL', ''),
     'timezone' => (string) $env('APP_TIMEZONE', 'Asia/Karachi'),
     'key'      => (string) $env('APP_KEY', ''),
+    // Apply database updates automatically after a deploy instead of from System → Updates.
+    'auto_migrate' => (bool) $env('DB_AUTO_MIGRATE', false),
 
     'session' => [
         'name'          => 'sitewatch_session',

@@ -24,7 +24,7 @@ $website['uptime_30d'] = $stats['uptime_30d'];
 $open = ServiceFactory::incidents()->openFor($id);
 $website['open_incidents'] = $open !== null ? 1 : 0;
 
-$incidents = ServiceFactory::incidents()->search(['website_id' => $id], 8, 0);
+$incidents = can('incidents.view') ? ServiceFactory::incidents()->search(['website_id' => $id], 8, 0) : ['rows' => []];
 
 Response::success('', [
     'website'   => ServiceFactory::websiteService()->present($website),

@@ -19,6 +19,7 @@ Api::boot(['POST']);
 
 $input = Request::all();
 $section = Request::string('section');
+Api::authorize(in_array($section, ['general', 'monitoring'], true) ? 'settings.manage' : 'notifications.manage');
 $settings = App::settings();
 $v = new Validator($input);
 $values = [];
@@ -63,6 +64,10 @@ switch ($section) {
         $v->integer('notification_retention_days', 7, 3650, 'Notification retention');
         $v->integer('heartbeat_threshold_minutes', 1, 60, 'Engine health threshold');
         $v->integer('ssl_check_interval_hours', 1, 168, 'SSL re-check interval');
+        $v->integer('domain_check_interval_hours', 1, 720, 'Domain re-check interval');
+        if ($str('ipinfo_token') !== '' && !preg_match('/^[A-Za-z0-9]{6,64}$/', $str('ipinfo_token'))) {
+            $v->addError('ipinfo_token', 'An ipinfo.io token contains only letters and numbers.');
+        }
         if ($int('critical_performance_threshold', 10000) <= $int('slow_threshold', 5000)) {
             $v->addError('critical_performance_threshold', 'Must be greater than the slow threshold.');
         }
@@ -73,8 +78,12 @@ switch ($section) {
             $v->addError('connect_timeout', 'Connect timeout cannot exceed the request timeout.');
         }
         if ($v->passes()) {
-            foreach (['default_check_interval', 'failure_threshold', 'recovery_threshold', 'request_timeout', 'connect_timeout', 'max_redirects', 'moderate_threshold', 'slow_threshold', 'critical_performance_threshold', 'concurrency', 'check_retention_days', 'activity_retention_days', 'notification_retention_days', 'heartbeat_threshold_minutes', 'ssl_check_interval_hours'] as $key) {
+            foreach (['default_check_interval', 'failure_threshold', 'recovery_threshold', 'request_timeout', 'connect_timeout', 'max_redirects', 'moderate_threshold', 'slow_threshold', 'critical_performance_threshold', 'concurrency', 'check_retention_days', 'activity_retention_days', 'notification_retention_days', 'heartbeat_threshold_minutes', 'ssl_check_interval_hours', 'domain_check_interval_hours'] as $key) {
                 $values[$key] = $int($key, (int) SettingsRepository::DEFAULTS[$key]);
+            }
+            $values['domain_geo_lookup'] = $bool('domain_geo_lookup');
+            if ($str('ipinfo_token') !== '') {
+                $values['ipinfo_token'] = $str('ipinfo_token');
             }
         }
         break;
@@ -156,7 +165,7 @@ $settings->reload();
 App::resetTimezone();
 
 $logged = $values;
-unset($logged['smtp_password'], $logged['telegram_bot_token']);
+unset($logged['smtp_password'], $logged['telegram_bot_token'], $logged['ipinfo_token']);
 ActivityService::log('settings.changed', ucfirst($section) . ' settings updated', null, ['section' => $section, 'keys' => array_keys($logged)]);
 
 Response::success(ucfirst($section) . ' settings saved.', ['section' => $section, 'reload' => $reload, 'settings' => $settings->allForDisplay()]);

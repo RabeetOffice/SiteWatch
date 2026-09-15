@@ -3,7 +3,8 @@
 **Professional WordPress website monitoring for agencies.** SiteWatch watches every client website you manage, detects
 outages and WordPress-specific failures (critical errors, database errors, maintenance mode, exposed PHP fatals, SSL
 problems, slow responses, redirect loops) *before the client reports them*, and alerts your team by email and Telegram —
-once per incident, and once on recovery.
+once per incident, and once on recovery. It also shows each domain's age, registration and expiry (like who.is) and where
+every website is hosted, and lets you give each team member a role with exactly the access they need.
 
 Built with core PHP 8.2, MySQL/MariaDB, Guzzle, PHPMailer, Monolog, Bootstrap 5.3 and Chart.js. No framework, no Node,
 no Redis, no Docker: it runs on XAMPP, plain Apache/Linux and cPanel shared or VPS hosting with a single cron line.
@@ -27,7 +28,9 @@ no Redis, no Docker: it runs on XAMPP, plain Apache/Linux and cPanel shared or V
 13. [Uptime calculation methodology](#13-uptime-calculation-methodology)
 14. [Testing](#14-testing)
 15. [Troubleshooting](#15-troubleshooting)
-16. [Project structure](#16-project-structure)
+16. [Users, roles & permissions](#16-users-roles--permissions)
+17. [Domain & hosting details](#17-domain--hosting-details)
+18. [Project structure](#18-project-structure)
 
 ---
 
@@ -106,8 +109,26 @@ mysql -u sitewatch -p sitewatch < database/schema.sql
 
 All timestamps are stored in **UTC** and rendered in the configured application timezone (default `Asia/Karachi`).
 
-Tables: `users`, `login_attempts`, `remember_tokens`, `websites`, `website_checks`, `incidents`, `daily_stats`,
-`settings`, `notifications`, `activity_logs`, `monitor_heartbeats`.
+Tables: `roles`, `users`, `login_attempts`, `remember_tokens`, `websites`, `website_checks`, `incidents`, `daily_stats`,
+`settings`, `notifications`, `activity_logs`, `monitor_heartbeats`, `domain_info`.
+
+**Updating after a deploy (e.g. GitHub auto-deployment).** `database/schema.sql` always describes the latest schema; each
+installation keeps its own data and records its schema version in `settings.schema_version`. When newly deployed code needs
+database changes, SiteWatch sends administrators to **System → Updates**, which lists what will change and applies it with
+one click and keeps an update history. Other users see a note to ask an administrator, and the monitoring cron keeps running
+meanwhile. Updates only add or alter tables and columns in *that server's* database — websites, history, users and settings
+are kept, and nothing is copied from another installation such as a local copy. Each step checks what already exists, so an
+interrupted update can be run again. Back up the database first.
+
+Alternatives: run the update over SSH, or set `DB_AUTO_MIGRATE=true` in `.env` to apply updates automatically on the first
+request or cron run after each deploy.
+
+```bash
+php database/migrate.php
+```
+
+The database user needs `ALTER` and `CREATE` privileges (cPanel's "ALL PRIVILEGES" includes them). Updating to schema
+version 2 creates the `roles` and `domain_info` tables and gives every existing account the **Administrator** role.
 
 ---
 
@@ -126,6 +147,7 @@ Tables: `users`, `login_attempts`, `remember_tokens`, `websites`, `website_check
 | `LOGIN_MAX_ATTEMPTS` / `LOGIN_LOCKOUT_MINUTES` | Login rate limiting per IP / email. |
 | `MONITOR_ALLOW_PRIVATE` | **Keep `false`.** Allows monitoring of private/internal addresses (see [Security](#11-security-recommendations)). |
 | `MONITOR_MAX_PER_RUN` | Maximum due websites processed by one cron run (default 300). |
+| `DB_AUTO_MIGRATE` | `false` (default): database updates for newly deployed code wait for an administrator under *System → Updates*. `true`: they are applied automatically by the first request or cron run. |
 
 Runtime settings (thresholds, SMTP, Telegram, retention, alert rules) live in the database and are edited in the UI.
 
@@ -173,6 +195,13 @@ Optional additional jobs (both are also performed automatically by `monitor.php`
 ```
 15 3 * * * /usr/local/bin/php /home/USERNAME/monitor.agency.com/cron/cleanup.php   >/dev/null 2>&1
 30 4 * * * /usr/local/bin/php /home/USERNAME/monitor.agency.com/cron/ssl-check.php >/dev/null 2>&1
+```
+
+Recommended daily job for [domain & hosting details](#17-domain--hosting-details). Without it, details are still looked
+up when someone opens a website or the Domains page, but expiry dates are not kept current in the background:
+
+```
+45 4 * * * /usr/local/bin/php /home/USERNAME/monitor.agency.com/cron/domain-check.php >/dev/null 2>&1
 ```
 
 **Finding the correct PHP binary.** Do not assume `/usr/local/bin/php` exists or is PHP 8.2. Determine the path with one of:
@@ -251,7 +280,10 @@ On cPanel (suPHP/LSAPI) PHP runs as your account user, so the default upload per
   sites.
 * **Authentication.** Passwords are hashed with `password_hash()` (bcrypt/argon2 as configured by PHP). Login is rate limited
   (5 failures per 15 minutes per IP/email). Sessions use strict mode, HttpOnly + SameSite=Lax cookies, idle timeout and are
-  regenerated on login. "Remember me" uses rotating selector/validator tokens with hashed validators.
+  regenerated on login. "Remember me" uses rotating selector/validator tokens with hashed validators. A password reset or
+  deactivation signs the account out of every browser immediately.
+* **Authorisation.** Every page and API endpoint checks the signed-in user's role on the server; hiding buttons in the
+  interface is only a convenience. See [Users, roles & permissions](#16-users-roles--permissions).
 * **CSRF.** Every state-changing request (forms and JSON API) requires a session-bound token (`_token` field or
   `X-CSRF-Token` header). Logout is POST-only.
 * **Output escaping.** All dynamic HTML is escaped (`e()` on the server, `SW.escape()` in the browser). A Content Security
@@ -324,7 +356,8 @@ uptime % = up_checks / total_checks × 100
 
 ```bash
 composer install            # includes PHPUnit
-vendor/bin/phpunit          # unit tests: URL normalisation, SSRF guard, error detector, classifier
+vendor/bin/phpunit          # unit tests: URL normalisation, SSRF guard, error detector, classifier, permissions,
+                            # registrable domains, WHOIS / RDAP parsing, hosting / CDN detection
 php tests/scenarios.php     # engine scenarios against a local fixture server (HTTP 200/404/5xx, WP critical error on
                             # 200 and 500, DB error, maintenance, PHP fatal, slow, timeout, redirect chain/loop/limit,
                             # 403, connection refused, DNS failure, SSRF blocking, concurrency)
@@ -356,25 +389,86 @@ first run, send test email/Telegram, import a CSV, export CSVs, and view the das
 | Blank page / 500 error | Set `APP_DEBUG=true` temporarily, or read `storage/logs/error.log`. Check PHP version ≥ 8.2 and file permissions. |
 | Times are off by several hours | Set the correct timezone under *General Settings*. Storage is UTC. |
 | Login blocked: *Too many failed sign-in attempts* | Wait `LOGIN_LOCKOUT_MINUTES` or delete rows from `login_attempts`. |
-| Forgot admin password | Run `php -r 'echo password_hash("NewPassword123", PASSWORD_DEFAULT);'` and update `users.password_hash` in the database. |
+| Forgot admin password | Another administrator can set a new one under *Team → Users*. Otherwise run `php -r 'echo password_hash("NewPassword123", PASSWORD_DEFAULT);'` and update `users.password_hash` in the database. |
+| *You don't have access to this page* | The user's role lacks the permission named on the page. An administrator can change the role under *Team → Roles & Permissions*. |
+| Domain registration shows *could not be reached … outbound port 43* | The host blocks classic WHOIS. Domains whose registry offers RDAP (.com, .net, .org, .uk, .au, …) still work over HTTPS; others (.ie, .io, .de, .eu, …) need outbound TCP port 43. |
+| Server location shows *Unknown* for many sites | ipinfo.io's anonymous limit was reached. Add a free ipinfo.io token under *Monitoring Settings → Domains & hosting*. |
+| Every page redirects to *Updates* after a deploy | The new code needs a database update. An administrator clicks **Update database** there (or runs `php database/migrate.php`). |
+| *The database update stopped* | The database user lacks `ALTER`/`CREATE` privileges, or the update was interrupted. Grant the privileges and run it again under *System → Updates* — every step is safe to repeat. |
 
 ---
 
-## 16. Project structure
+## 16. Users, roles & permissions
+
+*Team → Users* lists everyone who can sign in. Add a user with a name, email address, role and an initial password (use
+**Generate** and share it securely — they can change it from their profile). **Deactivate** blocks sign-in and ends their
+sessions straight away while keeping their activity history attributed; **Delete** removes the account. Setting a new
+password for someone signs them out everywhere.
+
+*Team → Roles & Permissions* lists the roles, the number of users in each, and a permission matrix. Every signed-in user can
+open the dashboard, the website list and website details, and edit their own profile. A role grants the rest:
+
+| Area | Permissions |
+|------|-------------|
+| Websites | Add & edit websites (incl. import, pause/resume, intervals) · Run manual checks · Delete websites |
+| Monitoring data | View incidents · View reports (uptime, performance, response times, exports) |
+| Domains & hosting | View domain & hosting info · Run domain lookups (refresh stored data, look up any domain) |
+| System | Manage notifications · Manage settings · View activity log |
+| Team | Manage users · Manage roles |
+
+Built-in roles: **Administrator** (every permission, including ones added in future versions; locked), **Manager** (websites,
+checks, incidents, reports, domains and activity — no users, roles, settings or notifications) and **Viewer** (read-only
+incidents, reports and domain information). Manager and Viewer can be edited, duplicated or deleted like any custom role.
+
+Guard rails: nobody can grant a permission they do not hold, assign a role with more access than their own, or edit, reset or
+delete an account that has more access than they do. You cannot deactivate, delete or change the role of your own account;
+the last active Administrator cannot be removed; and a role that is still assigned cannot be deleted. User and role changes
+are recorded in the activity log.
+
+---
+
+## 17. Domain & hosting details
+
+Every website details page has **Domain** key figures (age, expiry, hosting company) and *Domain registration* / *Hosting*
+panels. *Monitoring → Domains & Hosting* shows all websites in one table (filter by expiring soon, expired or lookup
+problems; sort by expiry or age), a breakdown of hosting companies and server countries, and a **Domain lookup** for any
+domain — like who.is — without saving anything.
+
+* **Registration** – registrar, registration date and domain age, expiry, last change, registrant (when not privacy-protected),
+  name servers, status codes, DNSSEC and the raw record. SiteWatch asks the domain's registry over **RDAP** (JSON over HTTPS;
+  servers come from IANA's bootstrap list, cached for a week) and falls back to classic **WHOIS** on TCP port 43 for registries
+  without RDAP (e.g. .ie, .io, .de, .eu). The registrable domain is derived from the website host (`www.shop.example.co.uk` →
+  `example.co.uk`).
+* **Hosting** – IP addresses, reverse DNS, the network (ASN) that owns the address via Team Cymru's DNS service, the hosting
+  company, CDN, web server, server city/region/country via ipinfo.io (can be switched off), and which companies host the
+  domain's DNS and email. Platform headers (Hostinger, Kinsta, WP Engine, SiteGround, …) are read from a single `HEAD` request
+  to the website, SSRF-validated like monitoring requests. When a CDN such as Cloudflare sits in front of a website, its
+  location is the CDN edge and the real host usually cannot be identified from outside — SiteWatch says so rather than guessing.
+* **Freshness** – details are stored per website and refreshed when older than the *Domain re-check interval* (default 24 hours)
+  by `cron/domain-check.php`, automatically when someone opens a website with missing or outdated details, or on demand with
+  **Refresh**. Domains expiring within 30 days are flagged. Lookups are rate limited to 30 per user per 10 minutes.
+
+Settings live under *Monitoring Settings → Domains & hosting* (re-check interval, city-level location on/off, optional
+ipinfo.io token stored encrypted).
+
+---
+
+## 18. Project structure
 
 ```
-admin/            Dashboard, websites, incidents, response times, reports, notifications, settings, activity, profile
-api/              JSON endpoints (Fetch API) grouped by area: dashboard, websites, incidents, reports, settings, activity, monitoring, notifications, profile
-app/Core/         App container, Config, Database (PDO), Session, Auth, CSRF, Crypto, Lock, Validator, Request/Response, UrlNormalizer, ErrorHandler
+admin/            Dashboard, websites, incidents, response times, domains & hosting, reports, notifications, settings, activity, users, roles, updates, profile
+api/              JSON endpoints (Fetch API) grouped by area: dashboard, websites, incidents, reports, domains, settings, activity, monitoring, notifications, profile, users, roles, system
+app/Core/         App container, Config, Database (PDO), Session, Auth, Permission, Migrator, CSRF, Crypto, Lock, Validator, Request/Response, UrlNormalizer, ErrorHandler
+app/Domains/      DomainInspector, RdapClient/RdapParser, WhoisClient/WhoisParser, HostingInspector, HostingDetector, DomainName, HttpClient
 app/Monitoring/   WebsiteMonitor (Guzzle), SsrfGuard, ErrorDetector, StatusClassifier, SSLChecker, IncidentManager, MonitoringScheduler, UptimeCalculator, MonitorManager, Status
 app/Notifications NotificationManager, EmailNotifier (PHPMailer), TelegramNotifier, AlertMessage, NotifierInterface
-app/Repositories/ Website, Check, Incident, DailyStats, Settings, User, Activity, Notification, Heartbeat repositories (PDO prepared statements)
-app/Services/     DashboardService, WebsiteService (CRUD/import/export), ReportService, ActivityService, MaintenanceService, ServiceFactory
+app/Repositories/ Website, Check, Incident, DailyStats, Settings, User, Role, Domain, Activity, Notification, Heartbeat repositories (PDO prepared statements)
+app/Services/     DashboardService, WebsiteService (CRUD/import/export), ReportService, DomainService, TeamService (users & roles), ActivityService, MaintenanceService, ServiceFactory
 assets/           app.css (light/dark design system), vanilla JS per page
 config/           app.php, database.php (read from .env)
-cron/             monitor.php (every minute), cleanup.php (daily), ssl-check.php (daily, optional)
-database/         schema.sql
-includes/         header.php, sidebar.php, footer.php, website-form.php, report-layout.php
+cron/             monitor.php (every minute), cleanup.php (daily), ssl-check.php (daily, optional), domain-check.php (daily, recommended)
+database/         schema.sql, migrate.php (explicit schema upgrade)
+includes/         header.php, sidebar.php, footer.php, forbidden.php, website-form.php, report-layout.php
 storage/          logs/, cache/, locks/, install.lock (protected)
 tests/            PHPUnit unit tests, fixture server, scenario and lifecycle scripts
 install.php       Installation wizard   ·   login.php / logout.php / index.php

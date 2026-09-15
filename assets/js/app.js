@@ -60,6 +60,14 @@
         set: function (key, value) { try { localStorage.setItem(key, JSON.stringify(value)); } catch (e) { /* ignore */ } },
     };
 
+    /**
+     * Whether the signed-in user's role grants a permission. Only used to hide controls:
+     * the server checks every request.
+     */
+    SW.can = function (permission) {
+        return (config.permissions || []).indexOf(permission) !== -1;
+    };
+
     // ------------------------------------------------------------------
     // Fetch wrapper
     // ------------------------------------------------------------------
@@ -543,6 +551,17 @@
             });
         });
         SW.tooltips(document.querySelector('.sw-topbar'));
+
+        // Sticky table action cells each form their own stacking context, so an open row menu would
+        // otherwise be painted underneath the action cells of the rows below it.
+        document.addEventListener('show.bs.dropdown', function (ev) {
+            const cell = ev.target && ev.target.closest ? ev.target.closest('td, th') : null;
+            if (cell) cell.classList.add('menu-open');
+        });
+        document.addEventListener('hidden.bs.dropdown', function (ev) {
+            const cell = ev.target && ev.target.closest ? ev.target.closest('td, th') : null;
+            if (cell) cell.classList.remove('menu-open');
+        });
 
         // Favicon fallback (CSP forbids inline onerror handlers)
         document.addEventListener('error', function (ev) {

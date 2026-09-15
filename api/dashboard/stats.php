@@ -15,6 +15,6 @@ $dashboard = ServiceFactory::dashboard();
 
 Response::success('', [
     'stats'     => $dashboard->stats(),
-    'incidents' => $dashboard->recentIncidents(6),
-    'activity'  => $dashboard->recentActivity(8),
+    'incidents' => can('incidents.view') ? $dashboard->recentIncidents(6) : [],
+    'activity'  => can('activity.view') ? $dashboard->recentActivity(8) : [],
 ]);

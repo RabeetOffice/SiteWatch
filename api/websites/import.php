@@ -14,14 +14,14 @@ use App\Services\ServiceFactory;
 
 // CSV template download (GET) does not change state.
 if (Request::method() === 'GET' && Request::bool('template')) {
-    Api::boot(['GET']);
+    Api::boot(['GET'], permission: 'websites.manage');
     Response::csv('sitewatch-import-template.csv', ['Website Name', 'Client Name', 'URL', 'Type', 'Check Interval'], [
         ['Northern Star Press', 'Northern Star Press Ltd', 'https://northernstarpress.co.uk', 'wordpress', 5],
         ['Example Shop', 'Example Retail', 'example-shop.com', 'woocommerce', 2],
     ]);
 }
 
-Api::boot(['POST']);
+Api::boot(['POST'], permission: 'websites.manage');
 
 $service = ServiceFactory::websiteService();
 $mode = Request::string('mode', 'paste');

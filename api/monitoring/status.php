@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 define('SW_API', true);
+define('SW_ALLOW_PENDING_SCHEMA', true);
 require dirname(__DIR__, 2) . '/bootstrap.php';
 
 use App\Core\Api;

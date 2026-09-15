@@ -36,6 +36,9 @@
             perPage: 25, bulk: true, search: true, filters: true, pagination: true, storageKey: 'sw-websites-table',
             title: 'Websites', subtitle: '', compact: false, footerLink: null, showClientFilter: true,
         }, options || {});
+        // Row and bulk actions follow the user's role (the server enforces the same rules).
+        this.can = { check: SW.can('websites.check'), manage: SW.can('websites.manage'), remove: SW.can('websites.delete') };
+        this.opts.bulk = this.opts.bulk && (this.can.check || this.can.manage || this.can.remove);
         const saved = SW.storage.get(this.opts.storageKey, {});
         this.state = {
             q: saved.q || '', filter: saved.filter || 'all', sort: saved.sort || 'status',
@@ -89,14 +92,16 @@
         if (o.bulk) {
             html += '<div class="bulk-bar" data-bulk role="region" aria-label="Bulk actions">' +
                 '<span class="count" data-bulk-count>0 selected</span>' +
-                '<button type="button" class="btn btn-sm btn-light" data-bulk-action="check"><i class="bi bi-arrow-repeat"></i> Check now</button>' +
-                '<button type="button" class="btn btn-sm btn-light" data-bulk-action="pause"><i class="bi bi-pause"></i> Pause</button>' +
-                '<button type="button" class="btn btn-sm btn-light" data-bulk-action="resume"><i class="bi bi-play"></i> Resume</button>' +
-                '<select class="form-select form-select-sm" data-bulk-interval aria-label="Change monitoring interval for selected websites" style="width:auto">' +
-                '<option value="">Change interval…</option><option value="1">1 minute</option><option value="2">2 minutes</option><option value="5">5 minutes</option>' +
-                '<option value="10">10 minutes</option><option value="15">15 minutes</option><option value="30">30 minutes</option></select>' +
-                '<button type="button" class="btn btn-sm btn-outline-danger ms-auto" data-bulk-action="delete"><i class="bi bi-trash"></i> Delete</button>' +
-                '<button type="button" class="btn btn-sm btn-ghost" data-bulk-action="clear">Clear selection</button></div>';
+                (this.can.check ? '<button type="button" class="btn btn-sm btn-light" data-bulk-action="check"><i class="bi bi-arrow-repeat"></i> Check now</button>' : '') +
+                (this.can.manage
+                    ? '<button type="button" class="btn btn-sm btn-light" data-bulk-action="pause"><i class="bi bi-pause"></i> Pause</button>' +
+                      '<button type="button" class="btn btn-sm btn-light" data-bulk-action="resume"><i class="bi bi-play"></i> Resume</button>' +
+                      '<select class="form-select form-select-sm" data-bulk-interval aria-label="Change monitoring interval for selected websites" style="width:auto">' +
+                      '<option value="">Change interval…</option><option value="1">1 minute</option><option value="2">2 minutes</option><option value="5">5 minutes</option>' +
+                      '<option value="10">10 minutes</option><option value="15">15 minutes</option><option value="30">30 minutes</option></select>'
+                    : '') +
+                (this.can.remove ? '<button type="button" class="btn btn-sm btn-outline-danger ms-auto" data-bulk-action="delete"><i class="bi bi-trash"></i> Delete</button>' : '') +
+                '<button type="button" class="btn btn-sm btn-ghost' + (this.can.remove ? '' : ' ms-auto') + '" data-bulk-action="clear">Clear selection</button></div>';
         }
 
         html += '<div class="sw-table-wrap"><table class="sw-table' + (o.compact ? ' compact' : '') + '"><thead><tr>' +
@@ -391,13 +396,17 @@
             '<button type="button" class="btn-icon btn-sm" data-bs-toggle="dropdown" aria-expanded="false" aria-label="More actions for ' + SW.escape(w.name) + '"><i class="bi bi-three-dots" aria-hidden="true"></i></button>' +
             '<ul class="dropdown-menu dropdown-menu-end">' +
             '<li><a class="dropdown-item" href="' + SW.escape(w.urls.details) + '"><i class="bi bi-eye"></i> View details</a></li>' +
-            '<li><a class="dropdown-item" href="' + SW.escape(w.urls.edit) + '"><i class="bi bi-pencil"></i> Edit</a></li>' +
-            (w.monitoring_enabled
-                ? '<li><a class="dropdown-item" href="#" data-row-action="pause" data-id="' + w.id + '"><i class="bi bi-pause-circle"></i> Pause monitoring</a></li>'
-                : '<li><a class="dropdown-item" href="#" data-row-action="resume" data-id="' + w.id + '"><i class="bi bi-play-circle"></i> Resume monitoring</a></li>') +
+            (this.can.manage
+                ? '<li><a class="dropdown-item" href="' + SW.escape(w.urls.edit) + '"><i class="bi bi-pencil"></i> Edit</a></li>' +
+                  (w.monitoring_enabled
+                      ? '<li><a class="dropdown-item" href="#" data-row-action="pause" data-id="' + w.id + '"><i class="bi bi-pause-circle"></i> Pause monitoring</a></li>'
+                      : '<li><a class="dropdown-item" href="#" data-row-action="resume" data-id="' + w.id + '"><i class="bi bi-play-circle"></i> Resume monitoring</a></li>')
+                : '') +
             '<li><a class="dropdown-item" href="' + SW.escape(w.url) + '" target="_blank" rel="noopener noreferrer"><i class="bi bi-box-arrow-up-right"></i> Open website</a></li>' +
-            '<li><hr class="dropdown-divider"></li>' +
-            '<li><a class="dropdown-item text-danger" href="#" data-row-action="delete" data-id="' + w.id + '"><i class="bi bi-trash"></i> Delete</a></li></ul></div>';
+            (this.can.remove
+                ? '<li><hr class="dropdown-divider"></li><li><a class="dropdown-item text-danger" href="#" data-row-action="delete" data-id="' + w.id + '"><i class="bi bi-trash"></i> Delete</a></li>'
+                : '') +
+            '</ul></div>';
 
         return '<tr data-row="' + w.id + '"' + (selected ? ' class="selected"' : '') + '>' +
             (o.bulk ? '<td class="w-min"><input type="checkbox" class="form-check-input" data-select="' + w.id + '"' + (selected ? ' checked' : '') + ' aria-label="Select ' + SW.escape(w.name) + '"></td>' : '') +
@@ -415,10 +424,12 @@
             '<td class="nowrap fs-13">' + (w.last_checked_at ? SW.timeAgoEl(w.last_checked_at) : '<span class="text-faint">Pending</span>') +
             (w.monitoring_enabled ? '<div class="fs-12 text-muted">every ' + w.check_interval + ' min</div>' : '<div class="fs-12 text-muted">paused</div>') + '</td>' +
             '<td class="actions"><div class="row-actions">' +
-            '<button type="button" class="btn-icon btn-sm bordered" data-row-action="check" data-id="' + w.id + '"' + (busy ? ' disabled' : '') +
-            ' data-bs-toggle="tooltip" title="Check now" aria-label="Check ' + SW.escape(w.name) + ' now">' +
-            (busy ? '<span class="spinner-border spinner-border-sm" aria-hidden="true"></span>' : '<i class="bi bi-arrow-repeat" aria-hidden="true"></i>') +
-            '</button>' + menu + '</div></td></tr>';
+            (this.can.check
+                ? '<button type="button" class="btn-icon btn-sm bordered" data-row-action="check" data-id="' + w.id + '"' + (busy ? ' disabled' : '') +
+                  ' data-bs-toggle="tooltip" title="Check now" aria-label="Check ' + SW.escape(w.name) + ' now">' +
+                  (busy ? '<span class="spinner-border spinner-border-sm" aria-hidden="true"></span>' : '<i class="bi bi-arrow-repeat" aria-hidden="true"></i>') +
+                  '</button>'
+                : '') + menu + '</div></td></tr>';
     };
 
     WebsiteTable.prototype.renderRows = function () {
@@ -430,7 +441,7 @@
                 ? SW.emptyState('bi-funnel', 'No websites match these filters.', 'Try a different search term or clear the filters.',
                     '<button type="button" class="btn btn-sm btn-light" data-remove-filter="all">Clear filters</button>')
                 : SW.emptyState('bi-globe2', 'No websites are being monitored yet.', 'Add your first client website to start monitoring uptime and health.',
-                    '<a class="btn btn-sm btn-primary" href="' + SW.url('admin/website-add.php') + '"><i class="bi bi-plus-lg"></i> Add your first website</a>')) + '</td></tr>';
+                    this.can.manage ? '<a class="btn btn-sm btn-primary" href="' + SW.url('admin/website-add.php') + '"><i class="bi bi-plus-lg"></i> Add your first website</a>' : '')) + '</td></tr>';
             this.syncSelection();
             return;
         }

@@ -14,7 +14,7 @@ use App\Core\Database;
 final class SettingsRepository
 {
     /** Settings stored encrypted. Never returned to the browser. */
-    public const SECRET_KEYS = ['smtp_password', 'telegram_bot_token'];
+    public const SECRET_KEYS = ['smtp_password', 'telegram_bot_token', 'ipinfo_token'];
 
     public const DEFAULTS = [
         // General
@@ -67,6 +67,11 @@ final class SettingsRepository
         'telegram_enabled'   => 0,
         'telegram_bot_token' => '',
         'telegram_chat_id'   => '',
+
+        // Domains & hosting
+        'domain_check_interval_hours' => 24,   // WHOIS/RDAP and hosting details are refreshed no more often than this
+        'domain_geo_lookup'           => 1,    // city-level hosting location via ipinfo.io
+        'ipinfo_token'                => '',   // optional, raises ipinfo.io rate limits
     ];
 
     /** @var array<string, string|null>|null */

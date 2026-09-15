@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 require dirname(__DIR__) . '/bootstrap.php';
 
+require_permission('reports.view');
+
 use App\Services\ServiceFactory;
 
 $pageTitle = 'Uptime Reports';

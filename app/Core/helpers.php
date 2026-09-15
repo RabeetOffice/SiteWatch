@@ -236,3 +236,34 @@ if (!function_exists('json_out')) {
         return json_encode($value, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_SLASHES) ?: 'null';
     }
 }
+
+if (!function_exists('can')) {
+    /**
+     * Whether the signed-in user's role grants a permission (see App\Core\Permission).
+     */
+    function can(string $permission): bool
+    {
+        return App::auth()->can($permission);
+    }
+}
+
+if (!function_exists('require_permission')) {
+    /**
+     * Page guard: the visitor must be signed in and hold $permission; otherwise an "access denied" page is shown.
+     */
+    function require_permission(string $permission): void
+    {
+        $auth = App::auth();
+        $auth->requireLogin();
+        if ($auth->can($permission)) {
+            return;
+        }
+        if (\App\Core\Request::isAjax()) {
+            \App\Core\Response::error('You do not have permission to open this page.', [], 403);
+        }
+        http_response_code(403);
+        $deniedPermission = $permission;
+        require dirname(__DIR__, 2) . '/includes/forbidden.php';
+        exit;
+    }
+}

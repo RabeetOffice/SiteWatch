@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 require dirname(__DIR__) . '/bootstrap.php';
 
+require_permission('reports.view');
+
 $pageTitle = 'Response Times';
 $activeNav = 'response-times';
 $pageScripts = ['response-times.js'];

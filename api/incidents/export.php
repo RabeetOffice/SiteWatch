@@ -11,7 +11,7 @@ use App\Core\Response;
 use App\Services\ReportService;
 use App\Services\ServiceFactory;
 
-Api::boot(['GET']);
+Api::boot(['GET'], permission: 'incidents.view');
 
 $criteria = [
     'q'          => mb_substr(Request::string('q'), 0, 100),

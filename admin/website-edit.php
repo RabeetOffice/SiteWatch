@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 require dirname(__DIR__) . '/bootstrap.php';
 
+require_permission('websites.manage');
+
 use App\Core\App;
 use App\Core\Response;
 use App\Services\ServiceFactory;

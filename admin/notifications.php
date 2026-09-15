@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 require dirname(__DIR__) . '/bootstrap.php';
 
+require_permission('notifications.manage');
+
 use App\Core\App;
 
 $s = App::settings()->allForDisplay();

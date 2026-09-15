@@ -40,6 +40,8 @@ if ($action === 'password') {
     }
     $users->updatePassword((int) $user['id'], (string) $input['new_password']);
     App::session()->regenerate();
+    // The new password ends every other session; keep this one.
+    $auth->syncSessionVersion();
     ActivityService::log('password.changed', sprintf('%s changed their password', $user['name']));
     Response::success('Password updated.');
 }

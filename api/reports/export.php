@@ -11,7 +11,7 @@ use App\Core\Response;
 use App\Services\ReportService;
 use App\Services\ServiceFactory;
 
-Api::boot(['GET']);
+Api::boot(['GET'], permission: 'reports.view');
 
 $report = ServiceFactory::reports()->uptimeReport([
     'website_id' => Request::int('website_id'),

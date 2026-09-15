@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+define('SW_ALLOW_PENDING_SCHEMA', true);
 require __DIR__ . '/bootstrap.php';
 
 use App\Core\App;

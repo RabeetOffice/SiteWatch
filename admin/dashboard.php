@@ -10,15 +10,17 @@ $pageTitle = 'Dashboard';
 $activeNav = 'dashboard';
 $pageScripts = ['websites.js', 'dashboard.js'];
 $needsCharts = true;
-$headerActions = '<a href="' . e(base_url('admin/reports.php')) . '" class="btn btn-light"><i class="bi bi-bar-chart-line"></i>Reports</a>'
-    . '<a href="' . e(base_url('admin/website-add.php')) . '" class="btn btn-primary"><i class="bi bi-plus-lg"></i>Add Website</a>';
+$canIncidents = can('incidents.view');
+$canActivity = can('activity.view');
+$headerActions = (can('reports.view') ? '<a href="' . e(base_url('admin/reports.php')) . '" class="btn btn-light"><i class="bi bi-bar-chart-line"></i>Reports</a>' : '')
+    . (can('websites.manage') ? '<a href="' . e(base_url('admin/website-add.php')) . '" class="btn btn-primary"><i class="bi bi-plus-lg"></i>Add Website</a>' : '');
 
 $dashboard = ServiceFactory::dashboard();
 
 $initial = [
     'stats'     => $dashboard->stats(),
-    'incidents' => $dashboard->recentIncidents(6),
-    'activity'  => $dashboard->recentActivity(8),
+    'incidents' => $canIncidents ? $dashboard->recentIncidents(6) : [],
+    'activity'  => $canActivity ? $dashboard->recentActivity(8) : [],
 ];
 
 $pageData = ['initial' => $initial, 'websiteCount' => ServiceFactory::websites()->count()];
@@ -50,11 +52,11 @@ require dirname(__DIR__) . '/includes/header.php';
         <span class="metric-value" data-kpi="warnings"><?= (int) $kpi['warnings'] ?></span>
         <span class="metric-sub">slow, SSL or suspected</span>
     </button>
-    <a class="metric-item<?= (int) $kpi['open_incidents'] > 0 ? ' tone-danger' : '' ?>" data-kpi-item="open_incidents" href="<?= e(base_url('admin/incidents.php?status=OPEN')) ?>">
+    <<?= $canIncidents ? 'a' : 'div' ?> class="metric-item<?= (int) $kpi['open_incidents'] > 0 ? ' tone-danger' : '' ?>" data-kpi-item="open_incidents"<?= $canIncidents ? ' href="' . e(base_url('admin/incidents.php?status=OPEN')) . '"' : '' ?>>
         <span class="metric-label">Open incidents</span>
         <span class="metric-value" data-kpi="open_incidents"><?= (int) $kpi['open_incidents'] ?></span>
         <span class="metric-sub">unresolved</span>
-    </a>
+    </<?= $canIncidents ? 'a' : 'div' ?>>
     <div class="metric-item" data-kpi-item="avg_response">
         <span class="metric-label">Avg response</span>
         <span class="metric-value" data-kpi="avg_response"><?= e($kpi['avg_response_label']) ?></span>
@@ -62,6 +64,7 @@ require dirname(__DIR__) . '/includes/header.php';
     </div>
 </div>
 
+<?php if ($canIncidents): ?>
 <section class="sw-card mb-4" aria-labelledby="attentionHeading">
     <div class="sw-card-header">
         <div>
@@ -72,6 +75,7 @@ require dirname(__DIR__) . '/includes/header.php';
     </div>
     <div id="recentIncidents"></div>
 </section>
+<?php endif; ?>
 
 <section class="sw-card mb-4" id="websiteTable" aria-label="Website inventory"></section>
 
@@ -117,6 +121,7 @@ require dirname(__DIR__) . '/includes/header.php';
     </div>
 </div>
 
+<?php if ($canActivity): ?>
 <section class="sw-card">
     <div class="sw-card-header">
         <div><h3>Recent activity</h3><p class="sub">Monitoring and workspace events</p></div>
@@ -124,5 +129,6 @@ require dirname(__DIR__) . '/includes/header.php';
     </div>
     <div id="recentActivity"></div>
 </section>
+<?php endif; ?>
 
 <?php require dirname(__DIR__) . '/includes/footer.php'; ?>

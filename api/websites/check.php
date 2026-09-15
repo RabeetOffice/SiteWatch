@@ -12,7 +12,7 @@ use App\Core\Response;
 use App\Services\ActivityService;
 use App\Services\ServiceFactory;
 
-Api::boot(['POST']);
+Api::boot(['POST'], permission: 'websites.check');
 
 $id = Request::int('id');
 $websites = ServiceFactory::websites();

@@ -26,6 +26,11 @@ if (count($ids) > 500) {
 if (!in_array($action, ['check', 'pause', 'resume', 'interval', 'delete'], true)) {
     Response::error('Invalid bulk action.', ['action' => 'Unknown action.'], 422);
 }
+Api::authorize(match ($action) {
+    'check'  => 'websites.check',
+    'delete' => 'websites.delete',
+    default  => 'websites.manage',
+});
 
 $websites = ServiceFactory::websites();
 $service = ServiceFactory::websiteService();

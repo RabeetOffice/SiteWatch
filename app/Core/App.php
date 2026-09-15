@@ -135,6 +135,22 @@ final class App
             && is_file(self::config()->get('app.paths.root') . DIRECTORY_SEPARATOR . '.env');
     }
 
+    /**
+     * Schema version recorded in the database (0 when unknown).
+     */
+    public static function schemaVersion(): int
+    {
+        return self::settings()->getInt(Migrator::SETTING, 0);
+    }
+
+    /**
+     * True when the deployed code needs database updates that have not been applied yet.
+     */
+    public static function schemaPending(): bool
+    {
+        return self::schemaVersion() < Migrator::VERSION;
+    }
+
     public static function isCli(): bool
     {
         return PHP_SAPI === 'cli';

@@ -11,7 +11,7 @@ use App\Core\Response;
 use App\Services\ActivityService;
 use App\Services\ServiceFactory;
 
-Api::boot(['GET']);
+Api::boot(['GET'], permission: 'activity.view');
 
 $pagination = Api::pagination(30, 100);
 $result = ServiceFactory::activity()->search([

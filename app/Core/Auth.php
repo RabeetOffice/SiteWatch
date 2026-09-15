@@ -5,12 +5,13 @@ declare(strict_types=1);
 namespace App\Core;
 
 /**
- * Administrator authentication: login with rate limiting, session regeneration,
- * "remember me" cookies (selector/validator pattern) and logout.
+ * Authentication and authorisation: login with rate limiting, session regeneration, "remember me" cookies
+ * (selector/validator pattern), logout, and permission checks against the signed-in user's role.
  */
 final class Auth
 {
     private const SESSION_KEY = '_auth_user_id';
+    private const VERSION_KEY = '_auth_session_version';
     private const REMEMBER_COOKIE = 'sitewatch_remember';
 
     /** @var array<string, mixed>|null */
@@ -79,6 +80,7 @@ final class Auth
 
         $this->session->regenerate();
         $this->session->set(self::SESSION_KEY, (int) $user['id']);
+        $this->session->set(self::VERSION_KEY, (int) ($user['session_version'] ?? 1));
         $this->session->set('_auth_time', time());
         App::csrf()->rotate();
 
@@ -92,7 +94,7 @@ final class Auth
             $this->issueRememberToken((int) $user['id']);
         }
 
-        $this->user = $user;
+        $this->user = $this->fetchActiveUser((int) $user['id']);
         $this->resolved = true;
 
         return ['success' => true, 'message' => 'Signed in successfully.'];
@@ -103,7 +105,11 @@ final class Auth
         return $this->user() !== null;
     }
 
-    /** @return array<string, mixed>|null */
+    /**
+     * The signed-in user, including role_name, role_slug and the decoded `permissions` list.
+     *
+     * @return array<string, mixed>|null
+     */
     public function user(): ?array
     {
         if ($this->resolved) {
@@ -113,11 +119,22 @@ final class Auth
 
         $id = $this->session->get(self::SESSION_KEY);
         if (is_int($id) && $id > 0) {
-            $this->user = $this->db->fetch('SELECT * FROM users WHERE id = :id AND is_active = 1 LIMIT 1', ['id' => $id]);
-            if ($this->user === null) {
-                $this->session->remove(self::SESSION_KEY);
+            $user = $this->fetchActiveUser($id);
+            $version = $this->session->get(self::VERSION_KEY);
+            if ($user !== null && is_int($version) && $version !== (int) $user['session_version']) {
+                // The password was reset or the account deactivated elsewhere: this session has ended.
+                $user = null;
             }
-            return $this->user;
+            if ($user === null) {
+                $this->session->remove(self::SESSION_KEY);
+                $this->session->remove(self::VERSION_KEY);
+                return $this->user = null;
+            }
+            if (!is_int($version)) {
+                // Sessions created before session versions existed adopt the current one.
+                $this->session->set(self::VERSION_KEY, (int) $user['session_version']);
+            }
+            return $this->user = $user;
         }
 
         if ($this->loginFromRememberCookie()) {
@@ -132,10 +149,45 @@ final class Auth
         return $user ? (int) $user['id'] : null;
     }
 
+    /**
+     * Permission keys granted by the user's role ("*" for administrators).
+     *
+     * @return array<int, string>
+     */
+    public function permissions(): array
+    {
+        return $this->user()['permissions'] ?? [];
+    }
+
+    public function can(string $permission): bool
+    {
+        return Permission::allows($this->permissions(), $permission);
+    }
+
+    public function isAdministrator(): bool
+    {
+        return in_array(Permission::ALL, $this->permissions(), true);
+    }
+
     public function refreshUser(): void
     {
         $this->resolved = false;
         $this->user = null;
+    }
+
+    /**
+     * Keep the current browser signed in after the user's session version changed on purpose
+     * (for example when they changed their own password).
+     */
+    public function syncSessionVersion(): void
+    {
+        $id = $this->session->get(self::SESSION_KEY);
+        $user = is_int($id) ? $this->fetchActiveUser($id) : null;
+        if ($user !== null) {
+            $this->session->set(self::VERSION_KEY, (int) $user['session_version']);
+        }
+        $this->user = $user;
+        $this->resolved = true;
     }
 
     public function logout(): void
@@ -160,6 +212,35 @@ final class Auth
         $next = $_SERVER['REQUEST_URI'] ?? '';
         $query = ($next !== '' && !str_contains($next, 'login.php')) ? '?next=' . rawurlencode($next) : '';
         Response::redirect(base_url('login.php') . $query);
+    }
+
+    /** @return array<string, mixed>|null */
+    private function fetchActiveUser(int $id): ?array
+    {
+        if (App::schemaVersion() < 2) {
+            // The database has not been updated to roles yet (schema 1), when every account was an administrator.
+            // This lets an administrator sign in and apply the update under System → Updates.
+            $user = $this->db->fetch('SELECT * FROM users WHERE id = :id AND is_active = 1 LIMIT 1', ['id' => $id]);
+            if ($user !== null) {
+                $user += ['role_name' => 'Administrator', 'role_slug' => 'administrator', 'role_permissions' => '["*"]'];
+                $user['session_version'] = (int) ($user['session_version'] ?? 1);
+                $user['permissions'] = [Permission::ALL];
+            }
+            return $user;
+        }
+
+        $user = $this->db->fetch(
+            'SELECT u.*, r.name AS role_name, r.slug AS role_slug, r.permissions AS role_permissions
+             FROM users u
+             LEFT JOIN roles r ON r.id = u.role_id
+             WHERE u.id = :id AND u.is_active = 1
+             LIMIT 1',
+            ['id' => $id]
+        );
+        if ($user !== null) {
+            $user['permissions'] = Permission::decode($user['role_permissions'] ?? null);
+        }
+        return $user;
     }
 
     // ------------------------------------------------------------------
@@ -213,7 +294,7 @@ final class Auth
             return false;
         }
 
-        $user = $this->db->fetch('SELECT * FROM users WHERE id = :id AND is_active = 1 LIMIT 1', ['id' => $token['user_id']]);
+        $user = $this->fetchActiveUser((int) $token['user_id']);
         if ($user === null) {
             return false;
         }
@@ -222,6 +303,7 @@ final class Auth
         $this->db->delete('remember_tokens', 'id = :id', ['id' => $token['id']]);
         $this->session->regenerate();
         $this->session->set(self::SESSION_KEY, (int) $user['id']);
+        $this->session->set(self::VERSION_KEY, (int) $user['session_version']);
         $this->session->set('_auth_time', time());
         $this->issueRememberToken((int) $user['id']);
         $this->user = $user;

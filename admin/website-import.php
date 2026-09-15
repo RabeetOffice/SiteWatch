@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 require dirname(__DIR__) . '/bootstrap.php';
 
+require_permission('websites.manage');
+
 $pageTitle = 'Import Websites';
 $pageSubtitle = 'Add many client websites at once.';
 $activeNav = 'website-add';

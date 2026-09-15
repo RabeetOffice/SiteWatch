@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 require dirname(__DIR__) . '/bootstrap.php';
 
+require_permission('websites.manage');
+
 $pageTitle = 'Add Website';
 $activeNav = 'website-add';
 $pageScripts = ['website-form.js'];

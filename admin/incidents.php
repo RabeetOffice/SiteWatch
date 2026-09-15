@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 require dirname(__DIR__) . '/bootstrap.php';
 
+require_permission('incidents.view');
+
 use App\Monitoring\Status;
 use App\Repositories\IncidentRepository;
 use App\Services\ServiceFactory;

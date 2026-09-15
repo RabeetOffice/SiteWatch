@@ -12,7 +12,7 @@ use App\Core\Response;
 use App\Monitoring\Status;
 use App\Services\ServiceFactory;
 
-Api::boot(['GET']);
+Api::boot(['GET'], permission: 'reports.view');
 
 $window = Request::string('window', '24h') === '7d' ? '7d' : '24h';
 $from = utc_now()->modify($window === '7d' ? '-7 days' : '-24 hours')->format('Y-m-d H:i:s');
