@@ -22,6 +22,8 @@ use RuntimeException;
 final class Migrator
 {
     public const VERSION = 2;
+    /** Version of databases created before schema versions were recorded. */
+    public const BASELINE = 1;
     public const SETTING = 'schema_version';
     public const HISTORY = 'schema_history';
 
@@ -57,7 +59,7 @@ final class Migrator
 
     public function currentVersion(): int
     {
-        return (int) ($this->db->fetchColumn('SELECT `value` FROM settings WHERE `key` = :k', ['k' => self::SETTING]) ?? 0);
+        return (int) ($this->db->fetchColumn('SELECT `value` FROM settings WHERE `key` = :k', ['k' => self::SETTING]) ?? self::BASELINE);
     }
 
     /**

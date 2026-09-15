@@ -136,11 +136,11 @@ final class App
     }
 
     /**
-     * Schema version recorded in the database (0 when unknown).
+     * Schema version recorded in the database (the baseline for installations older than versioning).
      */
     public static function schemaVersion(): int
     {
-        return self::settings()->getInt(Migrator::SETTING, 0);
+        return self::settings()->getInt(Migrator::SETTING, Migrator::BASELINE);
     }
 
     /**
