@@ -1004,8 +1004,10 @@ textarea.form-control { min-height: 72px; line-height: 1.55; }
     border-bottom: 1px solid var(--sw-border);
     background: var(--sw-card);
 }
-.sw-toolbar .search { position: relative; flex: 1 1 220px; max-width: 320px; min-width: 180px; }
-.sw-toolbar .search i {
+/* Search field with a leading icon. The component styles itself wherever it is used — a toolbar, a card
+   header or the domain lookup form — and each container only sets how wide it should be. */
+.search { position: relative; }
+.search i {
     position: absolute;
     left: 10px;
     top: 50%;
@@ -1014,7 +1016,10 @@ textarea.form-control { min-height: 72px; line-height: 1.55; }
     pointer-events: none;
     font-size: 14px;
 }
-.sw-toolbar .search input { padding-left: 30px; width: 100%; }
+.search input { padding-left: 30px; width: 100%; }
+
+.sw-toolbar .search { flex: 1 1 220px; max-width: 320px; min-width: 180px; }
+.sw-card-header .search { flex: 0 1 260px; min-width: 170px; }
 .sw-toolbar .spacer { flex: 1 1 auto; }
 .sw-toolbar .toolbar-group { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .sw-toolbar .toolbar-sep { width: 1px; align-self: stretch; background: var(--sw-border); margin: 0 2px; }
@@ -1688,6 +1693,7 @@ button.metric-item[aria-pressed="true"] { background: var(--sw-primary-soft); bo
     .sw-card-header { padding: 12px 14px; }
     .sw-toolbar { padding: 12px 14px; }
     .sw-toolbar .search { max-width: none; flex-basis: 100%; }
+    .sw-card-header .search { flex-basis: 100%; }
     .sw-toolbar .form-select { flex: 1 1 140px; max-width: none; }
     .sw-toolbar .date-range { flex: 1 1 100%; }
     .sw-toolbar .date-range .form-control { flex: 1 1 0; min-width: 0; }
@@ -1917,8 +1923,9 @@ a.metric-item .metric-sub { color: var(--sw-muted); }
 
 /* Ad-hoc domain lookup */
 .lookup-form { display: flex; gap: 8px; flex-wrap: wrap; }
-.lookup-form .search { position: relative; flex: 1 1 260px; min-width: 0; }
-.lookup-form .search i { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: var(--sw-decor); pointer-events: none; }
+/* A full-size input rather than form-control-sm, so the icon sits a little further in. */
+.lookup-form .search { flex: 1 1 260px; min-width: 0; }
+.lookup-form .search i { left: 11px; }
 .lookup-form .search input { padding-left: 32px; }
 .lookup-result { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--sw-border); }
 .lookup-result:empty { display: none; }

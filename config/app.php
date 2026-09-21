@@ -31,7 +31,7 @@ $env = static function (string $key, mixed $default = null): mixed {
 
 return [
     'name'     => 'SiteWatch',
-    'version'  => '1.2.0',
+    'version'  => '1.3.0',
     'env'      => (string) $env('APP_ENV', 'production'),
     'debug'    => (bool) $env('APP_DEBUG', false),
     'url'      => (string) $env('APP_URL', ''),
