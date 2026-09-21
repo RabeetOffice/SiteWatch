@@ -13,8 +13,20 @@ use App\Core\Database;
  */
 final class SettingsRepository
 {
-    /** Settings stored encrypted. Never returned to the browser. */
-    public const SECRET_KEYS = ['smtp_password', 'telegram_bot_token', 'ipinfo_token'];
+    /**
+     * Settings stored encrypted. Never returned to the browser.
+     *
+     * A Discord webhook URL is listed here because the token inside it is the whole credential: anyone
+     * holding the URL can post to the channel.
+     */
+    public const SECRET_KEYS = [
+        'smtp_password',
+        'telegram_bot_token',
+        'ipinfo_token',
+        'whatsapp_callmebot_apikey',
+        'whatsapp_cloud_token',
+        'discord_webhook_url',
+    ];
 
     public const DEFAULTS = [
         // General
@@ -67,6 +79,22 @@ final class SettingsRepository
         'telegram_enabled'   => 0,
         'telegram_bot_token' => '',
         'telegram_chat_id'   => '',
+
+        // WhatsApp (callmebot: free, personal, own number only — cloud_api: Meta's official platform)
+        'whatsapp_enabled'          => 0,
+        'whatsapp_provider'         => 'callmebot', // callmebot | cloud_api
+        'whatsapp_phone'            => '',          // destination number in international format
+        'whatsapp_callmebot_apikey' => '',
+        'whatsapp_cloud_phone_id'   => '',
+        'whatsapp_cloud_token'      => '',
+        'whatsapp_cloud_template'   => '',          // approved template name; empty sends plain text
+        'whatsapp_cloud_language'   => 'en_US',
+
+        // Discord (incoming channel webhook)
+        'discord_enabled'     => 0,
+        'discord_webhook_url' => '',
+        'discord_username'    => '', // overrides the webhook's own name
+        'discord_mention'     => '', // @here, @everyone or <@&ROLE_ID>
 
         // Domains & hosting
         'domain_check_interval_hours' => 24,   // WHOIS/RDAP and hosting details are refreshed no more often than this

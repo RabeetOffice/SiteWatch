@@ -15,15 +15,17 @@ Detailed setup, configuration, monitoring behavior, and administration for the c
 7. [Cron configuration](#7-cron-configuration)
 8. [SMTP setup](#8-smtp-setup)
 9. [Telegram setup](#9-telegram-setup)
-10. [File permissions](#10-file-permissions)
-11. [Security recommendations](#11-security-recommendations)
-12. [How monitoring works](#12-how-monitoring-works)
-13. [Uptime calculation methodology](#13-uptime-calculation-methodology)
-14. [Testing](#14-testing)
-15. [Troubleshooting](#15-troubleshooting)
-16. [Users, roles & permissions](#16-users-roles--permissions)
-17. [Domain & hosting details](#17-domain--hosting-details)
-18. [Project structure](#18-project-structure)
+10. [WhatsApp setup](#10-whatsapp-setup)
+11. [Discord setup](#11-discord-setup)
+12. [File permissions](#12-file-permissions)
+13. [Security recommendations](#13-security-recommendations)
+14. [How monitoring works](#14-how-monitoring-works)
+15. [Uptime calculation methodology](#15-uptime-calculation-methodology)
+16. [Testing](#16-testing)
+17. [Troubleshooting](#17-troubleshooting)
+18. [Users, roles & permissions](#18-users-roles--permissions)
+19. [Domain & hosting details](#19-domain--hosting-details)
+20. [Project structure](#20-project-structure)
 
 ---
 
@@ -36,7 +38,7 @@ Detailed setup, configuration, monitoring behavior, and administration for the c
 | Web server | Apache with `mod_rewrite` (recommended) — `.htaccess` files protect internal directories. nginx works with equivalent `location` deny rules. |
 | Composer | Only needed to install dependencies (locally or on the server) |
 | Cron | Ability to run `php cron/monitor.php` every minute (cPanel Cron Jobs, crontab, etc.) |
-| Outbound network | HTTP/HTTPS access from the server to the monitored websites (and to SMTP / `api.telegram.org` for alerts) |
+| Outbound network | HTTP/HTTPS access from the server to the monitored websites, and to the alert channels you enable: SMTP, `api.telegram.org`, `api.callmebot.com` or `graph.facebook.com`, `discord.com` |
 
 Front-end libraries (Bootstrap, Bootstrap Icons, Chart.js) are loaded from the jsDelivr CDN, so the administrator's browser
 needs internet access.
@@ -138,7 +140,7 @@ version 2 creates the `roles` and `domain_info` tables and gives every existing 
 | `DB_*` | Database connection. |
 | `SESSION_LIFETIME` | Minutes of inactivity before an admin is signed out (default 480). |
 | `LOGIN_MAX_ATTEMPTS` / `LOGIN_LOCKOUT_MINUTES` | Login rate limiting per IP / email. |
-| `MONITOR_ALLOW_PRIVATE` | **Keep `false`.** Allows monitoring of private/internal addresses (see [Security](#11-security-recommendations)). |
+| `MONITOR_ALLOW_PRIVATE` | **Keep `false`.** Allows monitoring of private/internal addresses (see [Security](#13-security-recommendations)). |
 | `MONITOR_MAX_PER_RUN` | Maximum due websites processed by one cron run (default 300). |
 | `DB_AUTO_MIGRATE` | `false` (default): database updates for newly deployed code wait for an administrator under *System → Updates*. `true`: they are applied automatically by the first request or cron run. |
 
@@ -162,7 +164,7 @@ Runtime settings (thresholds, SMTP, Telegram, retention, alert rules) live in th
 4. **Run the installer** – open `https://monitor.agency.com/install.php`, enter the database credentials (host is usually
    `localhost`), create the admin account and set the application URL/timezone. The wizard writes `.env`, creates the
    tables and `storage/install.lock`.
-5. **Permissions** – see [File permissions](#10-file-permissions). `storage/` must be writable by PHP.
+5. **Permissions** – see [File permissions](#12-file-permissions). `storage/` must be writable by PHP.
 6. **Cron** – see [Cron configuration](#7-cron-configuration).
 7. **SMTP / Telegram** – configure under *System → Notifications* and send the test messages.
 8. **HTTPS** – enable AutoSSL / Let's Encrypt for the subdomain and force HTTPS (cPanel → Domains → *Force HTTPS
@@ -190,7 +192,7 @@ Optional additional jobs (both are also performed automatically by `monitor.php`
 30 4 * * * /usr/local/bin/php /home/USERNAME/monitor.agency.com/cron/ssl-check.php >/dev/null 2>&1
 ```
 
-Recommended daily job for [domain & hosting details](#17-domain--hosting-details). Without it, details are still looked
+Recommended daily job for [domain & hosting details](#19-domain--hosting-details). Without it, details are still looked
 up when someone opens a website or the Domains page, but expiry dates are not kept current in the background:
 
 ```
@@ -243,7 +245,63 @@ Telegram failures never interrupt monitoring; they are logged in the delivery lo
 
 ---
 
-## 10. File permissions
+## 10. WhatsApp setup
+
+WhatsApp alerts go out through one of two providers, selected under *Notifications → WhatsApp*. Enter the destination
+number in international format (`+923001234567`) for either one.
+
+### CallMeBot — free, recommended
+
+[CallMeBot](https://www.callmebot.com/blog/free-api-whatsapp-messages/) is a free relay that needs no account, no Meta
+business profile and no payment method. It will only ever deliver to the one number that authorised it, which suits a
+single on-call phone; it is free for personal use.
+
+1. Save the WhatsApp number `+34 623 78 95 80` to your contacts as **CallMeBot**. Check the
+   [CallMeBot page](https://www.callmebot.com/blog/free-api-whatsapp-messages/) in case that number has changed.
+2. From the phone you want alerts on, send it: `I allow callmebot to send me messages`.
+3. It replies with an API key within a couple of minutes. If nothing arrives, try again after 24 hours.
+4. *Notifications → WhatsApp*: choose **CallMeBot**, enter the number and the key, enable, save, then **Send test message**.
+
+The key is stored encrypted with `APP_KEY` and is never returned to the browser. Alerts are trimmed to 900 characters
+because CallMeBot receives them in a URL.
+
+### WhatsApp Cloud API — Meta's official platform
+
+Use this when alerts must reach a team number or go through your own business profile. The API is free to call, but
+Meta meters the messages once a number passes its free allowance, and **alerts are business-initiated**, so they fall
+outside the free 24-hour service window.
+
+1. Create a Meta app with the WhatsApp product, and note the **phone number ID** (a numeric ID, not the phone number).
+2. Generate a **permanent** system-user access token — the temporary token in the dashboard expires after 24 hours.
+3. Submit a **utility template** with one body parameter, e.g. `SiteWatch alert: {{1}}`, and wait for approval.
+4. Enter the phone number ID, token, template name and language code (`en_US`), enable, save, then send a test message.
+
+The alert is folded onto one line before it is passed as `{{1}}`, because Meta rejects newlines, tabs and long runs of
+spaces in template parameters. Leaving the template name empty sends plain text instead, which only arrives if the
+recipient messaged your business number within the last 24 hours — that is a testing convenience, not a setup for alerts.
+
+---
+
+## 11. Discord setup
+
+Discord webhooks are free, need no bot application and no OAuth.
+
+1. In Discord, open the channel you want alerts in → **Edit Channel** → **Integrations** → **Webhooks**.
+2. Create a webhook and click **Copy Webhook URL**.
+3. *Notifications → Discord*: paste the URL, enable, save, and click **Send test message**.
+
+Optionally set a **bot name** to override the one configured on the webhook, and a **mention** (`@here`, `@everyone`
+or a role such as `<@&123456789012345678>`) that is prefixed to every alert. Only that mention is allowed to ping:
+an `@` inside a website name or an error message is never resolved.
+
+Alerts arrive as a rich embed coloured by severity — red for an outage, green for a recovery, amber for a certificate
+warning — with the same fields as the email. The webhook URL is stored encrypted, because anyone holding it can post to
+the channel; for that reason it is never shown again after saving. Discord allows about 30 messages per minute per
+webhook and answers `429` when that is exceeded; SiteWatch retries once and then records the failure.
+
+---
+
+## 12. File permissions
 
 ```
 storage/            775 (writable by the PHP user)  — logs, cache, locks, install.lock
@@ -259,7 +317,7 @@ On cPanel (suPHP/LSAPI) PHP runs as your account user, so the default upload per
 
 ---
 
-## 11. Security recommendations
+## 13. Security recommendations
 
 * **HTTPS only.** Run SiteWatch on an HTTPS subdomain; cookies become `Secure` automatically.
 * **Keep `APP_DEBUG=false` in production.** Errors are logged to `storage/logs/error.log`; visitors never see stack traces.
@@ -276,7 +334,7 @@ On cPanel (suPHP/LSAPI) PHP runs as your account user, so the default upload per
   regenerated on login. "Remember me" uses rotating selector/validator tokens with hashed validators. A password reset or
   deactivation signs the account out of every browser immediately.
 * **Authorisation.** Every page and API endpoint checks the signed-in user's role on the server; hiding buttons in the
-  interface is only a convenience. See [Users, roles & permissions](#16-users-roles--permissions).
+  interface is only a convenience. See [Users, roles & permissions](#18-users-roles--permissions).
 * **CSRF.** Every state-changing request (forms and JSON API) requires a session-bound token (`_token` field or
   `X-CSRF-Token` header). Logout is POST-only.
 * **Output escaping.** All dynamic HTML is escaped (`e()` on the server, `SW.escape()` in the browser). A Content Security
@@ -290,7 +348,7 @@ On cPanel (suPHP/LSAPI) PHP runs as your account user, so the default upload per
 
 ---
 
-## 12. How monitoring works
+## 14. How monitoring works
 
 1. **Scheduling** – every minute `cron/monitor.php` selects websites whose `next_check_at` has passed (respecting each
    website's own interval), up to `MONITOR_MAX_PER_RUN`.
@@ -326,7 +384,7 @@ for it to be sent.
 
 ---
 
-## 13. Uptime calculation methodology
+## 15. Uptime calculation methodology
 
 ```
 uptime % = up_checks / total_checks × 100
@@ -345,7 +403,7 @@ uptime % = up_checks / total_checks × 100
 
 ---
 
-## 14. Testing
+## 16. Testing
 
 ```bash
 composer install            # includes PHPUnit
@@ -365,7 +423,7 @@ first run, send test email/Telegram, import a CSV, export CSVs, and view the das
 
 ---
 
-## 15. Troubleshooting
+## 17. Troubleshooting
 
 | Symptom | Cause / fix |
 |---------|-------------|
@@ -378,6 +436,11 @@ first run, send test email/Telegram, import a CSV, export CSVs, and view the das
 | Website shows *Suspected Down* but is fine in the browser | A transient failure; it clears on the next successful check. Persistent suspected-down means intermittent failures — see the check history. |
 | Test email fails with "SMTP connect() failed" | Wrong host/port/encryption, or the hosting provider blocks outbound SMTP (common on shared hosting: use port 587 STARTTLS or the provider's relay). |
 | Telegram: `chat not found` | Start a conversation with the bot first (personal) or add the bot to the group/channel; check the sign of the chat ID. |
+| WhatsApp: CallMeBot rejects the message | The key is tied to one number: confirm the destination number is the phone that sent the activation message, and that the key was copied in full. |
+| WhatsApp: `Recipient phone number not in allowed list` | A Cloud API test number only delivers to numbers you added in the Meta dashboard. For any other recipient the number must be fully registered. |
+| WhatsApp: nothing arrives through the Cloud API | Business-initiated messages need an approved template. Set the template name, or expect delivery only inside a 24-hour service window. |
+| Discord: `HTTP 404` on a webhook that used to work | The webhook was deleted or the channel was removed in Discord. Create a new webhook and paste the new URL. |
+| Discord: `HTTP 429` | More than about 30 messages a minute went to one webhook. SiteWatch retries once; use a separate webhook per channel if this recurs. |
 | `Composer dependencies are missing` | Run `composer install --no-dev` or upload `vendor/`. |
 | Blank page / 500 error | Set `APP_DEBUG=true` temporarily, or read `storage/logs/error.log`. Check PHP version ≥ 8.2 and file permissions. |
 | Times are off by several hours | Set the correct timezone under *General Settings*. Storage is UTC. |
@@ -391,7 +454,7 @@ first run, send test email/Telegram, import a CSV, export CSVs, and view the das
 
 ---
 
-## 16. Users, roles & permissions
+## 18. Users, roles & permissions
 
 *Team → Users* lists everyone who can sign in. Add a user with a name, email address, role and an initial password (use
 **Generate** and share it securely — they can change it from their profile). **Deactivate** blocks sign-in and ends their
@@ -420,7 +483,7 @@ are recorded in the activity log.
 
 ---
 
-## 17. Domain & hosting details
+## 19. Domain & hosting details
 
 Every website details page has **Domain** key figures (age, expiry, hosting company) and *Domain registration* / *Hosting*
 panels. *Monitoring → Domains & Hosting* shows all websites in one table (filter by expiring soon, expired or lookup
@@ -446,7 +509,7 @@ ipinfo.io token stored encrypted).
 
 ---
 
-## 18. Project structure
+## 20. Project structure
 
 ```
 admin/            Dashboard, websites, incidents, response times, domains & hosting, reports, notifications, settings, activity, users, roles, updates, profile
@@ -454,7 +517,7 @@ api/              JSON endpoints (Fetch API) grouped by area: dashboard, website
 app/Core/         App container, Config, Database (PDO), Session, Auth, Permission, Migrator, CSRF, Crypto, Lock, Validator, Request/Response, UrlNormalizer, ErrorHandler
 app/Domains/      DomainInspector, RdapClient/RdapParser, WhoisClient/WhoisParser, HostingInspector, HostingDetector, DomainName, HttpClient
 app/Monitoring/   WebsiteMonitor (Guzzle), SsrfGuard, ErrorDetector, StatusClassifier, SSLChecker, IncidentManager, MonitoringScheduler, UptimeCalculator, MonitorManager, Status
-app/Notifications NotificationManager, EmailNotifier (PHPMailer), TelegramNotifier, AlertMessage, NotifierInterface
+app/Notifications NotificationManager, EmailNotifier (PHPMailer), TelegramNotifier, WhatsAppNotifier, DiscordNotifier, AlertMessage, NotifierInterface
 app/Repositories/ Website, Check, Incident, DailyStats, Settings, User, Role, Domain, Activity, Notification, Heartbeat repositories (PDO prepared statements)
 app/Services/     DashboardService, WebsiteService (CRUD/import/export), ReportService, DomainService, TeamService (users & roles), ActivityService, MaintenanceService, ServiceFactory
 assets/           app.css (light/dark design system), vanilla JS per page

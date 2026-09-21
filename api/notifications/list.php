@@ -8,6 +8,7 @@ require dirname(__DIR__, 2) . '/bootstrap.php';
 use App\Core\Api;
 use App\Core\Request;
 use App\Core\Response;
+use App\Notifications\NotificationManager;
 use App\Services\ServiceFactory;
 
 Api::boot(['GET'], permission: 'notifications.manage');
@@ -17,7 +18,7 @@ $websiteId = Request::int('website_id');
 $result = ServiceFactory::notifications()->recent($pagination['per_page'], $pagination['offset'], $websiteId > 0 ? $websiteId : null);
 
 $eventLabels = ['down' => 'Website Down', 'recovery' => 'Website Recovered', 'ssl_expiry' => 'SSL Expiry', 'test' => 'Test Notification'];
-$channelLabels = ['email' => 'Email', 'telegram' => 'Telegram', 'none' => 'No channel'];
+$channelLabels = NotificationManager::CHANNEL_LABELS;
 
 Response::success('', [
     'rows' => array_map(static fn (array $n): array => [

@@ -31,7 +31,7 @@ final class Permission
             'domains.lookup' => ['Run domain lookups', 'Refresh stored domain data and look up any domain name'],
         ],
         'System' => [
-            'notifications.manage' => ['Manage notifications', 'Email and Telegram channels, alert rules, test messages and the delivery log'],
+            'notifications.manage' => ['Manage notifications', 'Every alert channel, alert rules, test messages and the delivery log'],
             'settings.manage'      => ['Manage settings', 'General and monitoring settings'],
             'activity.view'        => ['View activity log', 'Every administrative and monitoring event, including sign-ins and IP addresses'],
         ],

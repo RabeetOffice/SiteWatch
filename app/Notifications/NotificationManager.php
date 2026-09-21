@@ -19,6 +19,23 @@ use Throwable;
  */
 final class NotificationManager
 {
+    /** Display name per channel key, used in test alerts and in the delivery history. */
+    public const CHANNEL_LABELS = [
+        'email'    => 'Email',
+        'telegram' => 'Telegram',
+        'whatsapp' => 'WhatsApp',
+        'discord'  => 'Discord',
+        'none'     => 'No channel',
+    ];
+
+    /** Embed accent per severity, matching the colours used in the HTML email layout. */
+    private const DISCORD_COLORS = [
+        'danger'  => 0xDC2626,
+        'success' => 0x16A34A,
+        'warning' => 0xD97706,
+        'info'    => 0x2563EB,
+    ];
+
     /** @var array<int, NotifierInterface>|null */
     private ?array $notifiers = null;
 
@@ -41,6 +58,8 @@ final class NotificationManager
             $this->notifiers = [
                 new EmailNotifier($this->settings),
                 new TelegramNotifier($this->settings),
+                new WhatsAppNotifier($this->settings),
+                new DiscordNotifier($this->settings),
             ];
         }
         return $this->notifiers;
@@ -239,12 +258,18 @@ final class NotificationManager
 
         $text = "{$subject}\n\n" . $this->textRows($rows) . "\n\nOpen website details: " . $this->detailsUrl((int) $website['id']);
         $html = $this->htmlLayout($subject, $issue, 'danger', $rows, $this->detailsUrl((int) $website['id']), 'Open Website Details');
+        $detectedAt = format_datetime($incident['started_at'] ?? $result->checkedAt, 'g:i A');
         $telegram = "🚨 <b>Website Down</b>\n\n<b>" . self::tg($name) . "</b>\n" . self::tg($issue)
-            . "\n\nHTTP: " . self::tg($http) . "\nResponse: " . self::tg($response) . "\nDetected: " . self::tg(format_datetime($incident['started_at'] ?? $result->checkedAt, 'g:i A'))
+            . "\n\nHTTP: " . self::tg($http) . "\nResponse: " . self::tg($response) . "\nDetected: " . self::tg($detectedAt)
             . ($diag !== '' ? "\n\n<i>" . self::tg(str_limit($diag, 300)) . "</i>" : '')
             . "\n\n" . self::tg((string) $website['url']);
+        $whatsapp = "🚨 *Website Down*\n\n*" . self::wa($name) . "*\n" . self::wa($issue)
+            . "\n\nHTTP: " . self::wa($http) . "\nResponse: " . self::wa($response) . "\nDetected: " . self::wa($detectedAt)
+            . ($diag !== '' ? "\n\n_" . self::wa(str_limit($diag, 300)) . "_" : '')
+            . "\n\n" . self::wa((string) $website['url']);
+        $discord = $this->discordPayload($subject, '🚨 ' . $issue, 'danger', $rows, (string) $website['url'], (int) $website['id']);
 
-        return new AlertMessage(AlertMessage::EVENT_DOWN, $subject, $text, $html, $telegram, (int) $website['id'], (int) $incident['id']);
+        return new AlertMessage(AlertMessage::EVENT_DOWN, $subject, $text, $html, $telegram, (int) $website['id'], (int) $incident['id'], $whatsapp, $discord);
     }
 
     /**
@@ -268,12 +293,18 @@ final class NotificationManager
         ];
         $text = "{$subject}\n\n" . $this->textRows($rows) . "\n\nOpen website details: " . $this->detailsUrl((int) $website['id']);
         $html = $this->htmlLayout($subject, 'Back online', 'success', $rows, $this->detailsUrl((int) $website['id']), 'Open Website Details');
+        $http = $result->httpStatus !== null ? (string) $result->httpStatus : 'n/a';
+        $response = $result->responseTime !== null ? format_ms($result->responseTime) : 'n/a';
         $telegram = "✅ <b>Website Recovered</b>\n\n<b>" . self::tg($name) . "</b>\nDowntime: " . self::tg($duration)
-            . "\n\nHTTP: " . self::tg($result->httpStatus !== null ? (string) $result->httpStatus : 'n/a')
-            . "\nResponse: " . self::tg($result->responseTime !== null ? format_ms($result->responseTime) : 'n/a')
+            . "\n\nHTTP: " . self::tg($http)
+            . "\nResponse: " . self::tg($response)
             . "\n\n" . self::tg((string) $website['url']);
+        $whatsapp = "✅ *Website Recovered*\n\n*" . self::wa($name) . "*\nDowntime: " . self::wa($duration)
+            . "\n\nHTTP: " . self::wa($http) . "\nResponse: " . self::wa($response)
+            . "\n\n" . self::wa((string) $website['url']);
+        $discord = $this->discordPayload($subject, '✅ Back online after ' . $duration, 'success', $rows, (string) $website['url'], (int) $website['id']);
 
-        return new AlertMessage(AlertMessage::EVENT_RECOVERY, $subject, $text, $html, $telegram, (int) $website['id'], (int) $incident['id']);
+        return new AlertMessage(AlertMessage::EVENT_RECOVERY, $subject, $text, $html, $telegram, (int) $website['id'], (int) $incident['id'], $whatsapp, $discord);
     }
 
     /**
@@ -298,24 +329,34 @@ final class NotificationManager
         ];
         $text = "{$subject}\n\n" . $this->textRows($rows) . "\n\nOpen website details: " . $this->detailsUrl((int) $website['id']);
         $html = $this->htmlLayout($subject, $headline, $expired ? 'danger' : 'warning', $rows, $this->detailsUrl((int) $website['id']), 'Open Website Details');
-        $telegram = ($expired ? '🔴' : '⚠️') . " <b>" . self::tg($headline) . "</b>\n\n<b>" . self::tg($name) . "</b>\n" . self::tg($remaining)
-            . "\nExpires: " . self::tg(format_datetime($sslInfo['expires_at'] ?? null)) . "\n\n" . self::tg((string) $website['url']);
+        $icon = $expired ? '🔴' : '⚠️';
+        $expiresAt = format_datetime($sslInfo['expires_at'] ?? null);
+        $telegram = $icon . " <b>" . self::tg($headline) . "</b>\n\n<b>" . self::tg($name) . "</b>\n" . self::tg($remaining)
+            . "\nExpires: " . self::tg($expiresAt) . "\n\n" . self::tg((string) $website['url']);
+        $whatsapp = $icon . " *" . self::wa($headline) . "*\n\n*" . self::wa($name) . "*\n" . self::wa($remaining)
+            . "\nExpires: " . self::wa($expiresAt) . "\n\n" . self::wa((string) $website['url']);
+        $discord = $this->discordPayload($subject, $icon . ' ' . $headline . ' — ' . $remaining, $expired ? 'danger' : 'warning', $rows, (string) $website['url'], (int) $website['id']);
 
-        return new AlertMessage(AlertMessage::EVENT_SSL, $subject, $text, $html, $telegram, (int) $website['id'], null);
+        return new AlertMessage(AlertMessage::EVENT_SSL, $subject, $text, $html, $telegram, (int) $website['id'], null, $whatsapp, $discord);
     }
 
     public function buildTestMessage(string $channel): AlertMessage
     {
         $subject = $this->appName() . ' test notification';
+        $label = self::CHANNEL_LABELS[$channel] ?? ucfirst($channel);
+        $sentAt = format_datetime(utc_now()->format('Y-m-d H:i:s'));
         $rows = [
-            ['Channel', ucfirst($channel)],
-            ['Sent At', format_datetime(utc_now()->format('Y-m-d H:i:s'))],
+            ['Channel', $label],
+            ['Sent At', $sentAt],
             ['Application', $this->appName()],
         ];
-        $text = "{$subject}\n\nThis is a test notification. If you can read this, {$channel} alerts are configured correctly.\n\n" . $this->textRows($rows);
-        $html = $this->htmlLayout($subject, 'Test notification', 'info', $rows, $this->appUrl(), 'Open ' . $this->appName(), 'This is a test notification. If you can read this, ' . e($channel) . ' alerts are configured correctly.');
-        $telegram = "🔔 <b>" . self::tg($subject) . "</b>\n\nIf you can read this, Telegram alerts are configured correctly.\n" . self::tg(format_datetime(utc_now()->format('Y-m-d H:i:s')));
-        return new AlertMessage(AlertMessage::EVENT_TEST, $subject, $text, $html, $telegram);
+        $confirmation = 'If you can read this, ' . $label . ' alerts are configured correctly.';
+        $text = "{$subject}\n\nThis is a test notification. {$confirmation}\n\n" . $this->textRows($rows);
+        $html = $this->htmlLayout($subject, 'Test notification', 'info', $rows, $this->appUrl(), 'Open ' . $this->appName(), 'This is a test notification. ' . e($confirmation));
+        $telegram = "🔔 <b>" . self::tg($subject) . "</b>\n\n" . self::tg($confirmation) . "\n" . self::tg($sentAt);
+        $whatsapp = "🔔 *" . self::wa($subject) . "*\n\n" . self::wa($confirmation) . "\n" . self::wa($sentAt);
+        $discord = $this->discordPayload($subject, '🔔 ' . $confirmation, 'info', $rows, $this->appUrl());
+        return new AlertMessage(AlertMessage::EVENT_TEST, $subject, $text, $html, $telegram, null, null, $whatsapp, $discord);
     }
 
     // ------------------------------------------------------------------
@@ -370,5 +411,50 @@ final class NotificationManager
     private static function tg(string $text): string
     {
         return htmlspecialchars($text, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+    }
+
+    /**
+     * WhatsApp has no escape syntax for its *bold* / _italic_ markup, so only control characters — which
+     * come from error bodies and would otherwise be sent verbatim — are removed.
+     */
+    private static function wa(string $text): string
+    {
+        return trim(preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/u', '', $text) ?? $text);
+    }
+
+    /**
+     * Structured embed for the Discord channel. The rows shown in the email become embed fields, so every
+     * channel reports the same facts; DiscordNotifier applies Discord's own length limits.
+     *
+     * @param array<int, array{0: string, 1: string}> $rows
+     *
+     * @return array<string, mixed>
+     */
+    private function discordPayload(string $title, string $headline, string $tone, array $rows, string $url, ?int $websiteId = null): array
+    {
+        $details = $websiteId !== null ? $this->detailsUrl($websiteId) : $this->appUrl();
+        $description = DiscordNotifier::escapeMarkdown($headline);
+        if ($details !== '') {
+            $description .= "\n[Open in " . DiscordNotifier::escapeMarkdown($this->appName()) . '](' . $details . ')';
+        }
+
+        $fields = [];
+        foreach ($rows as [$label, $value]) {
+            $value = trim($value);
+            $fields[] = [
+                'name'   => $label,
+                'value'  => $value === '' ? '—' : DiscordNotifier::escapeMarkdown($value),
+                'inline' => mb_strlen($value) <= 32,
+            ];
+        }
+
+        return [
+            'title'       => $title,
+            'description' => $description,
+            'color'       => self::DISCORD_COLORS[$tone] ?? self::DISCORD_COLORS['info'],
+            'url'         => $url,
+            'fields'      => $fields,
+            'footer'      => 'Sent by ' . $this->appName() . ' website monitoring',
+        ];
     }
 }

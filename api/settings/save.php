@@ -10,7 +10,10 @@ use App\Core\App;
 use App\Core\Request;
 use App\Core\Response;
 use App\Core\Validator;
+use App\Notifications\DiscordNotifier;
 use App\Notifications\EmailNotifier;
+use App\Notifications\NotificationManager;
+use App\Notifications\WhatsAppNotifier;
 use App\Repositories\SettingsRepository;
 use App\Repositories\WebsiteRepository;
 use App\Services\ActivityService;
@@ -146,6 +149,70 @@ switch ($section) {
         }
         break;
 
+    case 'whatsapp':
+        $provider = in_array($str('whatsapp_provider'), WhatsAppNotifier::PROVIDERS, true) ? $str('whatsapp_provider') : WhatsAppNotifier::DEFAULT_PROVIDER;
+        $phone = WhatsAppNotifier::normalizePhone($str('whatsapp_phone'));
+        if ($str('whatsapp_phone') !== '' && $phone === '') {
+            $v->addError('whatsapp_phone', 'Enter the number in international format, for example +923001234567.');
+        }
+        $v->max('whatsapp_cloud_phone_id', 32, 'Phone number ID')->regex('whatsapp_cloud_phone_id', '/^\d{5,32}$/', 'The phone number ID is the numeric ID from Meta, not the phone number itself.');
+        $v->regex('whatsapp_cloud_template', '/^[a-z0-9_]{1,512}$/', 'A template name uses lowercase letters, numbers and underscores only.');
+        $v->regex('whatsapp_cloud_language', '/^[a-z]{2,3}(_[A-Za-z]{2,4})?$/', 'Use a language code such as en_US, en or es.');
+        if ($bool('whatsapp_enabled')) {
+            if ($phone === '') {
+                $v->addError('whatsapp_phone', 'A destination number is required when WhatsApp alerts are enabled.');
+            }
+            if ($provider === 'callmebot' && $str('whatsapp_callmebot_apikey') === '' && $settings->getString('whatsapp_callmebot_apikey') === '') {
+                $v->addError('whatsapp_callmebot_apikey', 'A CallMeBot API key is required when WhatsApp alerts are enabled.');
+            }
+            if ($provider === 'cloud_api') {
+                if ($str('whatsapp_cloud_phone_id') === '') {
+                    $v->addError('whatsapp_cloud_phone_id', 'A phone number ID is required for the Cloud API provider.');
+                }
+                if ($str('whatsapp_cloud_token') === '' && $settings->getString('whatsapp_cloud_token') === '') {
+                    $v->addError('whatsapp_cloud_token', 'An access token is required for the Cloud API provider.');
+                }
+            }
+        }
+        if ($v->passes()) {
+            $values = [
+                'whatsapp_enabled'        => $bool('whatsapp_enabled'),
+                'whatsapp_provider'       => $provider,
+                'whatsapp_phone'          => $phone,
+                'whatsapp_cloud_phone_id' => $str('whatsapp_cloud_phone_id'),
+                'whatsapp_cloud_template' => $str('whatsapp_cloud_template'),
+                'whatsapp_cloud_language' => $str('whatsapp_cloud_language') ?: 'en_US',
+            ];
+            foreach (['whatsapp_callmebot_apikey', 'whatsapp_cloud_token'] as $secret) {
+                if ($str($secret) !== '') {
+                    $values[$secret] = $str($secret);
+                }
+            }
+        }
+        break;
+
+    case 'discord':
+        $webhook = $str('discord_webhook_url');
+        if ($webhook !== '' && !DiscordNotifier::isValidWebhook($webhook)) {
+            $v->addError('discord_webhook_url', 'Paste the full webhook URL copied from Discord (https://discord.com/api/webhooks/…).');
+        }
+        $v->max('discord_username', 80, 'Bot name');
+        $v->regex('discord_mention', '/^(@here|@everyone|<@&\d{5,25}>)$/', 'Use @here, @everyone or a role mention such as <@&123456789012345678>.');
+        if ($bool('discord_enabled') && $webhook === '' && $settings->getString('discord_webhook_url') === '') {
+            $v->addError('discord_webhook_url', 'A webhook URL is required when Discord alerts are enabled.');
+        }
+        if ($v->passes()) {
+            $values = [
+                'discord_enabled'  => $bool('discord_enabled'),
+                'discord_username' => $str('discord_username'),
+                'discord_mention'  => $str('discord_mention'),
+            ];
+            if ($webhook !== '') {
+                $values['discord_webhook_url'] = $webhook;
+            }
+        }
+        break;
+
     case 'alerts':
         foreach (['alert_down', 'alert_critical', 'alert_database', 'alert_http', 'alert_timeout', 'alert_ssl', 'alert_slow', 'alert_recovery'] as $key) {
             $values[$key] = $bool($key);
@@ -164,8 +231,9 @@ $settings->setMany($values);
 $settings->reload();
 App::resetTimezone();
 
-$logged = $values;
-unset($logged['smtp_password'], $logged['telegram_bot_token'], $logged['ipinfo_token']);
-ActivityService::log('settings.changed', ucfirst($section) . ' settings updated', null, ['section' => $section, 'keys' => array_keys($logged)]);
+// Only the names of the changed settings are recorded, and never the encrypted ones.
+$logged = array_diff_key($values, array_flip(SettingsRepository::SECRET_KEYS));
+$label = NotificationManager::CHANNEL_LABELS[$section] ?? ucfirst($section);
+ActivityService::log('settings.changed', $label . ' settings updated', null, ['section' => $section, 'keys' => array_keys($logged)]);
 
-Response::success(ucfirst($section) . ' settings saved.', ['section' => $section, 'reload' => $reload, 'settings' => $settings->allForDisplay()]);
+Response::success($label . ' settings saved.', ['section' => $section, 'reload' => $reload, 'settings' => $settings->allForDisplay()]);

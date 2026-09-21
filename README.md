@@ -7,7 +7,7 @@
     <img src="https://img.shields.io/badge/PHP-8.2%2B-777BB4?style=flat-square" alt="PHP 8.2 or newer" />
     <img src="https://img.shields.io/badge/Database-MySQL%20%2F%20MariaDB-4479A1?style=flat-square" alt="MySQL or MariaDB" />
     <img src="https://img.shields.io/badge/Deployment-Self--hosted-E87524?style=flat-square" alt="Self-hosted" />
-    <img src="https://img.shields.io/badge/Alerts-Email%20%2B%20Telegram-26A5E4?style=flat-square" alt="Email and Telegram alerts" />
+    <img src="https://img.shields.io/badge/Alerts-Email%20%C2%B7%20Telegram%20%C2%B7%20WhatsApp%20%C2%B7%20Discord-26A5E4?style=flat-square" alt="Email, Telegram, WhatsApp and Discord alerts" />
   </p>
   <p>
     <a href="#screenshots">Screenshots</a> ·
@@ -56,7 +56,7 @@ Manage Administrator, Manager, Viewer, and custom roles with server-side permiss
 | **Availability** | Scheduled HTTP/HTTPS checks; DNS, connection, timeout, redirect, HTTP, and SSL failure classification. |
 | **WordPress diagnostics** | Detect critical errors, database connection failures, maintenance pages, and exposed PHP fatal errors. |
 | **Incident tracking** | Configurable consecutive-failure confirmation, recovery thresholds, incident history, and supporting diagnostics. |
-| **Alerts** | Email through SMTP and Telegram; global and per-website alert controls, recovery notifications, and delivery logs. |
+| **Alerts** | Email through SMTP, Telegram, WhatsApp (free through CallMeBot, or Meta’s Cloud API) and Discord webhooks; global and per-website alert controls, recovery notifications, and delivery logs. |
 | **SSL monitoring** | Certificate checks, expiry information, and threshold-based expiry notifications. |
 | **Domains and hosting** | RDAP/WHOIS registration details, domain expiry, nameservers, and hosting/CDN/network information where available. |
 | **Reporting** | Observed uptime, response-time trends, performance reports, date/client/site filters, CSV exports, and print layouts. |
@@ -122,9 +122,9 @@ The main monitor handles due checks, heartbeat recording, SSL refresh work, and 
 
 ### 4. Add websites and alerts
 
-Add a website or import a CSV, set its check interval, and configure SMTP or Telegram under **Notifications**. After the scheduler executes successfully, verify the engine indicator and last-check times.
+Add a website or import a CSV, set its check interval, and configure any of the alert channels — SMTP, Telegram, WhatsApp or Discord — under **Notifications**. After the scheduler executes successfully, verify the engine indicator and last-check times.
 
-See the [complete installation and operations guide](docs/installation.md) for cPanel deployment, environment variables, SMTP, Telegram, permissions, migrations, and troubleshooting.
+See the [complete installation and operations guide](docs/installation.md) for cPanel deployment, environment variables, each alert channel, permissions, migrations, and troubleshooting.
 
 ## How monitoring works
 
@@ -136,7 +136,7 @@ flowchart LR
     D --> E[Apply failure and recovery thresholds]
     E --> F[Store checks and update incidents]
     F --> G[Dashboard and reports]
-    F --> H[Email and Telegram alerts]
+    F --> H[Email, Telegram, WhatsApp and Discord alerts]
 ```
 
 Failures must meet the configured confirmation threshold before opening an incident. Recovery also requires consecutive successful checks. This reduces alerts caused by isolated failures. A monitoring heartbeat makes stopped or unhealthy scheduling visible in the interface.
@@ -176,7 +176,7 @@ api/                 Authenticated JSON endpoints
 app/Core/            Authentication, permissions, configuration, database
 app/Monitoring/      Checks, classification, incidents, scheduling, uptime
 app/Domains/         RDAP, WHOIS, and hosting inspection
-app/Notifications/   Email and Telegram delivery
+app/Notifications/   Email, Telegram, WhatsApp and Discord delivery
 app/Repositories/    Database access
 app/Services/        Application services
 assets/              Styles, JavaScript, and branding

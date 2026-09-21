@@ -5,12 +5,12 @@ declare(strict_types=1);
 namespace App\Notifications;
 
 /**
- * A notification channel. Additional channels (Slack, Discord, WhatsApp...) implement this
- * interface and are registered in NotificationManager::notifiers().
+ * A notification channel. Further channels (Slack, Microsoft Teams, SMS...) implement this interface,
+ * are registered in NotificationManager::notifiers() and render their body in its message builders.
  */
 interface NotifierInterface
 {
-    /** Channel key used in logs and settings, e.g. "email", "telegram". */
+    /** Channel key used in logs and settings, e.g. "email", "whatsapp". */
     public function name(): string;
 
     /** Whether the administrator has enabled and configured this channel. */

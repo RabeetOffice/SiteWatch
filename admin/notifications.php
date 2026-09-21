@@ -126,6 +126,123 @@ $alertRules = [
                 </div>
             </section>
         </form>
+
+        <form id="whatsappForm" data-section="whatsapp" novalidate>
+            <section class="sw-card mb-4">
+                <div class="sw-card-header">
+                    <div><h3>WhatsApp</h3><p class="sub">Alerts on your phone, free of charge through CallMeBot</p></div>
+                    <div class="form-check form-switch m-0">
+                        <input class="form-check-input" type="checkbox" role="switch" id="whatsapp_enabled" name="whatsapp_enabled" value="1"<?= $s['whatsapp_enabled'] ? ' checked' : '' ?>>
+                        <label class="form-check-label fw-600" for="whatsapp_enabled">Enabled</label>
+                    </div>
+                </div>
+                <div class="sw-card-body">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label" for="whatsapp_provider">Delivery method</label>
+                            <select class="form-select" id="whatsapp_provider" name="whatsapp_provider">
+                                <option value="callmebot"<?= $s['whatsapp_provider'] === 'callmebot' ? ' selected' : '' ?>>CallMeBot — free, no account</option>
+                                <option value="cloud_api"<?= $s['whatsapp_provider'] === 'cloud_api' ? ' selected' : '' ?>>WhatsApp Cloud API — Meta business account</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label" for="whatsapp_phone">Destination number</label>
+                            <input type="tel" class="form-control" id="whatsapp_phone" name="whatsapp_phone" value="<?= e($s['whatsapp_phone']) ?>" placeholder="+923001234567" autocomplete="off">
+                            <div class="form-text">International format, including the country code.</div>
+                        </div>
+                    </div>
+
+                    <div class="mt-3" data-whatsapp-provider="callmebot">
+                        <ol class="text-muted fs-13 ps-3 mb-3">
+                            <li>Save the WhatsApp number <span class="code-inline">+34 623 78 95 80</span> to your phone contacts as <b>CallMeBot</b>. Check the <a href="https://www.callmebot.com/blog/free-api-whatsapp-messages/" target="_blank" rel="noopener">CallMeBot page</a> if that number has changed.</li>
+                            <li>From the phone you entered above, send it the message <span class="code-inline">I allow callmebot to send me messages</span>.</li>
+                            <li>It replies with an API key within a couple of minutes. Paste that key below, save, then send a test message.</li>
+                        </ol>
+                        <label class="form-label" for="whatsapp_callmebot_apikey">CallMeBot API key</label>
+                        <input type="password" class="form-control" id="whatsapp_callmebot_apikey" name="whatsapp_callmebot_apikey" value="" placeholder="<?= $s['whatsapp_callmebot_apikey_set'] ? '•••••••••• (saved — leave blank to keep)' : '123456' ?>" autocomplete="new-password">
+                        <div class="form-text">
+                            Stored encrypted and never sent back to the browser. CallMeBot is free for personal use and
+                            only delivers to the one number that authorised it, so it suits a single on-call phone rather
+                            than a whole team.
+                        </div>
+                    </div>
+
+                    <div class="mt-3" data-whatsapp-provider="cloud_api">
+                        <p class="text-muted fs-13 mb-3">
+                            Meta's official platform. The API itself costs nothing, but alerts are business-initiated, so
+                            they need an <b>approved template</b> and Meta meters them once the number passes its free
+                            allowance. Leave the template empty only if the recipient messages your business number first —
+                            plain text is delivered inside that 24-hour window only.
+                        </p>
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label" for="whatsapp_cloud_phone_id">Phone number ID</label>
+                                <input type="text" class="form-control" id="whatsapp_cloud_phone_id" name="whatsapp_cloud_phone_id" value="<?= e($s['whatsapp_cloud_phone_id']) ?>" placeholder="123456789012345" autocomplete="off">
+                                <div class="form-text">From the WhatsApp section of your Meta app — a numeric ID, not the phone number.</div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label" for="whatsapp_cloud_token">Access token</label>
+                                <input type="password" class="form-control" id="whatsapp_cloud_token" name="whatsapp_cloud_token" value="" placeholder="<?= $s['whatsapp_cloud_token_set'] ? '•••••••••• (saved — leave blank to keep)' : 'EAAG…' ?>" autocomplete="new-password">
+                                <div class="form-text">Use a permanent system-user token; temporary tokens expire after 24 hours.</div>
+                            </div>
+                            <div class="col-md-7">
+                                <label class="form-label" for="whatsapp_cloud_template">Template name <span class="text-muted fw-normal">(recommended)</span></label>
+                                <input type="text" class="form-control" id="whatsapp_cloud_template" name="whatsapp_cloud_template" value="<?= e($s['whatsapp_cloud_template']) ?>" placeholder="sitewatch_alert" autocomplete="off">
+                                <div class="form-text">The alert is passed to the template as <span class="code-inline">{{1}}</span>, on a single line.</div>
+                            </div>
+                            <div class="col-md-5">
+                                <label class="form-label" for="whatsapp_cloud_language">Template language</label>
+                                <input type="text" class="form-control" id="whatsapp_cloud_language" name="whatsapp_cloud_language" value="<?= e($s['whatsapp_cloud_language']) ?>" placeholder="en_US" autocomplete="off">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="sw-card-footer justify-content-between">
+                    <button type="button" class="btn btn-light" id="testWhatsapp"><i class="bi bi-send" aria-hidden="true"></i> Send test message</button>
+                    <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg" aria-hidden="true"></i> Save WhatsApp settings</button>
+                </div>
+            </section>
+        </form>
+
+        <form id="discordForm" data-section="discord" novalidate>
+            <section class="sw-card mb-4">
+                <div class="sw-card-header">
+                    <div><h3>Discord</h3><p class="sub">Alerts posted to a channel through an incoming webhook</p></div>
+                    <div class="form-check form-switch m-0">
+                        <input class="form-check-input" type="checkbox" role="switch" id="discord_enabled" name="discord_enabled" value="1"<?= $s['discord_enabled'] ? ' checked' : '' ?>>
+                        <label class="form-check-label fw-600" for="discord_enabled">Enabled</label>
+                    </div>
+                </div>
+                <div class="sw-card-body">
+                    <ol class="text-muted fs-13 ps-3 mb-3">
+                        <li>In Discord, open the channel you want alerts in → <b>Edit Channel</b> → <b>Integrations</b> → <b>Webhooks</b>.</li>
+                        <li>Create a webhook, then click <b>Copy Webhook URL</b>.</li>
+                        <li>Paste it below, save, and send a test message. Webhooks are free and need no bot application.</li>
+                    </ol>
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <label class="form-label" for="discord_webhook_url">Webhook URL</label>
+                            <input type="password" class="form-control" id="discord_webhook_url" name="discord_webhook_url" value="" placeholder="<?= $s['discord_webhook_url_set'] ? '•••••••••• (saved — leave blank to keep)' : 'https://discord.com/api/webhooks/…' ?>" autocomplete="new-password">
+                            <div class="form-text">Stored encrypted and never sent back to the browser — anyone holding this URL can post to the channel.</div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label" for="discord_username">Bot name <span class="text-muted fw-normal">(optional)</span></label>
+                            <input type="text" class="form-control" id="discord_username" name="discord_username" maxlength="80" value="<?= e($s['discord_username']) ?>" placeholder="<?= e($s['app_name']) ?>">
+                            <div class="form-text">Overrides the name set on the webhook in Discord.</div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label" for="discord_mention">Mention <span class="text-muted fw-normal">(optional)</span></label>
+                            <input type="text" class="form-control" id="discord_mention" name="discord_mention" value="<?= e($s['discord_mention']) ?>" placeholder="@here" autocomplete="off">
+                            <div class="form-text">Added in front of every alert. Use <span class="code-inline">@here</span>, <span class="code-inline">@everyone</span> or a role such as <span class="code-inline">&lt;@&amp;123456789012345678&gt;</span>.</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="sw-card-footer justify-content-between">
+                    <button type="button" class="btn btn-light" id="testDiscord"><i class="bi bi-send" aria-hidden="true"></i> Send test message</button>
+                    <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg" aria-hidden="true"></i> Save Discord settings</button>
+                </div>
+            </section>
+        </form>
     </div>
 
     <div class="col-xxl-5">

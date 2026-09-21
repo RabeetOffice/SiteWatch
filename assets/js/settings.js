@@ -39,6 +39,22 @@
         finally { SW.setLoading(btn, false); }
     }
 
+    const CHANNEL_ICONS = {
+        email: 'bi-envelope',
+        telegram: 'bi-telegram',
+        whatsapp: 'bi-whatsapp',
+        discord: 'bi-discord'
+    };
+
+    // The WhatsApp card carries the credentials for both providers; only the selected one is shown.
+    function syncWhatsappProvider() {
+        const select = document.getElementById('whatsapp_provider');
+        if (!select) return;
+        SW.qsa('[data-whatsapp-provider]').forEach(function (block) {
+            block.hidden = block.getAttribute('data-whatsapp-provider') !== select.value;
+        });
+    }
+
     let logPage = 1;
     async function loadLog() {
         const el = document.getElementById('notifLog');
@@ -51,7 +67,7 @@
             } else {
                 el.innerHTML = d.rows.map(function (n) {
                     const tone = n.status === 'sent' ? 'success' : (n.status === 'failed' ? 'danger' : 'neutral');
-                    const icon = n.channel === 'email' ? 'bi-envelope' : (n.channel === 'telegram' ? 'bi-telegram' : 'bi-bell-slash');
+                    const icon = CHANNEL_ICONS[n.channel] || 'bi-bell-slash';
                     return '<div class="activity-item"><span class="activity-icon tone-' + (tone === 'neutral' ? 'muted' : tone) + '" aria-hidden="true"><i class="bi ' + icon + '"></i></span>' +
                         '<div class="b">' +
                         '<div class="t d-flex align-items-center gap-2 flex-wrap"><b>' + SW.escape(n.event_label) + '</b>' +
@@ -72,10 +88,12 @@
 
     document.addEventListener('sw:ready', function () {
         SW.qsa('form[data-section]').forEach(function (form) { form.addEventListener('submit', function (ev) { ev.preventDefault(); saveForm(form); }); });
-        const te = document.getElementById('testEmail');
-        if (te) te.addEventListener('click', function () { test('email', te); });
-        const tt = document.getElementById('testTelegram');
-        if (tt) tt.addEventListener('click', function () { test('telegram', tt); });
+        [['testEmail', 'email'], ['testTelegram', 'telegram'], ['testWhatsapp', 'whatsapp'], ['testDiscord', 'discord']].forEach(function (pair) {
+            const btn = document.getElementById(pair[0]);
+            if (btn) btn.addEventListener('click', function () { test(pair[1], btn); });
+        });
+        const wp = document.getElementById('whatsapp_provider');
+        if (wp) { wp.addEventListener('change', syncWhatsappProvider); syncWhatsappProvider(); }
         const nr = document.getElementById('notifRefresh');
         if (nr) nr.addEventListener('click', loadLog);
         if (document.getElementById('notifLog')) { document.getElementById('notifLog').innerHTML = '<div class="p-3">' + '<div class="skeleton skeleton-line w-75">&nbsp;</div><div class="skeleton skeleton-line w-50">&nbsp;</div><div class="skeleton skeleton-line w-75">&nbsp;</div></div>'; loadLog(); }

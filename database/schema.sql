@@ -202,7 +202,7 @@ CREATE TABLE IF NOT EXISTS `daily_stats` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------------------------------------------------------
--- Key/value application settings (thresholds, SMTP, Telegram, ...)
+-- Key/value application settings (thresholds, SMTP, Telegram, WhatsApp, Discord, ...)
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `settings` (
   `key`        VARCHAR(100) NOT NULL,
@@ -218,7 +218,7 @@ CREATE TABLE IF NOT EXISTS `notifications` (
   `id`            BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   `website_id`    INT UNSIGNED NULL,
   `incident_id`   INT UNSIGNED NULL,
-  `channel`       VARCHAR(20)  NOT NULL COMMENT 'email | telegram',
+  `channel`       VARCHAR(20)  NOT NULL COMMENT 'email | telegram | whatsapp | discord',
   `event`         VARCHAR(40)  NOT NULL COMMENT 'down | recovery | ssl_expiry | slow | test',
   `recipient`     VARCHAR(255) NULL,
   `subject`       VARCHAR(255) NULL,
