@@ -98,7 +98,9 @@ $timezones = DateTimeZone::listIdentifiers();
             <div class="form-label">Monitoring cron command</div>
             <pre class="copy-box mb-3">* * * * * php <?= e(str_replace('\\', '/', (string) config('app.paths.root'))) ?>/cron/monitor.php</pre>
             <div class="form-label">Domain &amp; hosting cron command (daily)</div>
-            <pre class="copy-box mb-0">45 4 * * * php <?= e(str_replace('\\', '/', (string) config('app.paths.root'))) ?>/cron/domain-check.php</pre>
+            <pre class="copy-box mb-3">45 4 * * * php <?= e(str_replace('\\', '/', (string) config('app.paths.root'))) ?>/cron/domain-check.php</pre>
+            <div class="form-label">Core Web Vitals &amp; screenshots cron command (hourly)</div>
+            <pre class="copy-box mb-0">20 * * * * php <?= e(str_replace('\\', '/', (string) config('app.paths.root'))) ?>/cron/vitals-check.php</pre>
         </div>
     </details>
 
@@ -288,6 +290,134 @@ $timezones = DateTimeZone::listIdentifiers();
             </div>
             <div class="sw-card-footer justify-content-end">
                 <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg" aria-hidden="true"></i> Save monitoring settings</button>
+            </div>
+        </section>
+    </form>
+
+    <form id="performanceForm" data-section="performance" novalidate>
+        <section class="sw-card mb-4">
+            <div class="sw-card-header">
+                <div><h3>Core Web Vitals</h3><p class="sub">LCP, CLS, INP and TTFB through Google PageSpeed Insights</p></div>
+                <div class="form-check form-switch m-0">
+                    <input class="form-check-input" type="checkbox" role="switch" id="vitals_enabled" name="vitals_enabled" value="1"<?= $s['vitals_enabled'] ? ' checked' : '' ?>>
+                    <label class="form-check-label fw-600" for="vitals_enabled">Enabled</label>
+                </div>
+            </div>
+            <div class="sw-card-body">
+                <p class="text-muted fs-13 mb-3">
+                    LCP, CLS and INP describe what a browser does while rendering a page, so they cannot be measured
+                    from PHP. SiteWatch asks Google to run them instead. Each run returns <b>lab</b> results from a
+                    Lighthouse render, and <b>field</b> results from real Chrome users over the last 28 days — the
+                    field set is where INP comes from, and it only appears once a site has enough traffic.
+                    <b>Time to first byte is measured separately on every single check</b> and does not depend on this.
+                </p>
+                <div class="row g-3">
+                    <div class="col-md-8">
+                        <label class="form-label" for="pagespeed_api_key">Google API key</label>
+                        <input type="password" class="form-control" id="pagespeed_api_key" name="pagespeed_api_key" maxlength="60" autocomplete="off"
+                               placeholder="<?= $s['pagespeed_api_key_set'] ? '•••••••••• (saved — leave blank to keep)' : 'AIza…' ?>">
+                        <div class="form-text">
+                            Required in practice. PageSpeed can be called without a key, but that quota is a pool shared
+                            by every anonymous caller and is nearly always exhausted. A key is free and needs no billing:
+                            create a project in the <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener">Google Cloud console</a>,
+                            enable the <span class="code-inline">PageSpeed Insights API</span> and create an API key.
+                            Stored encrypted.
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label" for="vitals_strategies">Measure</label>
+                        <select class="form-select" id="vitals_strategies" name="vitals_strategies">
+                            <option value="both"<?= $s['vitals_strategies'] === 'both' ? ' selected' : '' ?>>Mobile and desktop</option>
+                            <option value="mobile"<?= $s['vitals_strategies'] === 'mobile' ? ' selected' : '' ?>>Mobile only</option>
+                            <option value="desktop"<?= $s['vitals_strategies'] === 'desktop' ? ' selected' : '' ?>>Desktop only</option>
+                        </select>
+                        <div class="form-text">Each one is a separate request.</div>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label" for="vitals_interval_hours">Re-check interval</label>
+                        <div class="input-group">
+                            <input type="number" class="form-control" id="vitals_interval_hours" name="vitals_interval_hours" min="1" max="720" value="<?= (int) $s['vitals_interval_hours'] ?>">
+                            <span class="input-group-text">hours</span>
+                        </div>
+                        <div class="form-text">A Lighthouse run takes 10–40 seconds per page. Daily is plenty for spotting regressions.</div>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label" for="vitals_retention_days">Keep vitals history</label>
+                        <div class="input-group">
+                            <input type="number" class="form-control" id="vitals_retention_days" name="vitals_retention_days" min="7" max="3650" value="<?= (int) $s['vitals_retention_days'] ?>">
+                            <span class="input-group-text">days</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="sw-card mb-4">
+            <div class="sw-card-header">
+                <div><h3>Screenshots</h3><p class="sub">A picture of each website, refreshed on a schedule</p></div>
+                <div class="form-check form-switch m-0">
+                    <input class="form-check-input" type="checkbox" role="switch" id="screenshot_enabled" name="screenshot_enabled" value="1"<?= $s['screenshot_enabled'] ? ' checked' : '' ?>>
+                    <label class="form-check-label fw-600" for="screenshot_enabled">Enabled</label>
+                </div>
+            </div>
+            <div class="sw-card-body">
+                <p class="text-muted fs-13 mb-3">
+                    Rendering a page needs a real browser, which this server does not have, so screenshots are produced
+                    by an external service. That service is sent the address of each monitored website. Images are kept
+                    in <span class="code-inline">storage/screenshots</span>, outside the web root, and are only served to
+                    signed-in users.
+                </p>
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label" for="screenshot_provider">Provider</label>
+                        <select class="form-select" id="screenshot_provider" name="screenshot_provider">
+                            <option value="mshots"<?= $s['screenshot_provider'] === 'mshots' ? ' selected' : '' ?>>WordPress mShots — free, no key</option>
+                            <option value="thumio"<?= $s['screenshot_provider'] === 'thumio' ? ' selected' : '' ?>>thum.io — free, no key</option>
+                            <option value="pagespeed"<?= $s['screenshot_provider'] === 'pagespeed' ? ' selected' : '' ?>>PageSpeed render — no extra request</option>
+                        </select>
+                        <div class="form-text">
+                            mShots renders in the background, so a brand new website may need two attempts.
+                            The PageSpeed option reuses the image from a Core Web Vitals run, so it needs vitals
+                            enabled and is only ever as fresh as that schedule.
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" for="screenshot_interval_minutes">Capture every</label>
+                        <select class="form-select" id="screenshot_interval_minutes" name="screenshot_interval_minutes">
+                            <?php
+                            $intervals = [0 => 'Every check (see the warning below)', 15 => '15 minutes', 30 => '30 minutes', 60 => '1 hour', 180 => '3 hours', 360 => '6 hours', 720 => '12 hours', 1440 => '24 hours'];
+                            $current = (int) $s['screenshot_interval_minutes'];
+                            foreach ($intervals as $minutes => $label): ?>
+                                <option value="<?= $minutes ?>"<?= $current === $minutes ? ' selected' : '' ?>><?= e($label) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                        <div class="form-text">
+                            <b>Every check</b> means one request to the screenshot service per website per interval —
+                            with 30 websites on 5-minute checks that is roughly 8,600 requests a day, which free
+                            services rate limit. Prefer an hour or more, and use <b>Capture now</b> on a website when
+                            you want to see it this second.
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" for="screenshot_retention_days">Keep screenshots</label>
+                        <div class="input-group">
+                            <input type="number" class="form-control" id="screenshot_retention_days" name="screenshot_retention_days" min="1" max="3650" value="<?= (int) $s['screenshot_retention_days'] ?>">
+                            <span class="input-group-text">days</span>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" for="screenshot_keep_per_website">Keep at most</label>
+                        <div class="input-group">
+                            <input type="number" class="form-control" id="screenshot_keep_per_website" name="screenshot_keep_per_website" min="1" max="500" value="<?= (int) $s['screenshot_keep_per_website'] ?>">
+                            <span class="input-group-text">per website</span>
+                        </div>
+                        <div class="form-text">Whichever limit is reached first. Older images are deleted from disk by the cleanup job.</div>
+                    </div>
+                </div>
+            </div>
+            <div class="sw-card-footer justify-content-between">
+                <span class="text-muted fs-13">Both jobs run from <span class="code-inline">cron/vitals-check.php</span>.</span>
+                <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg" aria-hidden="true"></i> Save performance settings</button>
             </div>
         </section>
     </form>

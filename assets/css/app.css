@@ -1963,3 +1963,21 @@ a.metric-item .metric-sub { color: var(--sw-muted); }
 .change-list { margin: 0; padding-left: 18px; font-size: 13.5px; color: var(--sw-text-secondary); }
 .change-list li + li { margin-top: 4px; }
 .divider-top { border-top: 1px solid var(--sw-border); margin-top: 16px; padding-top: 16px; }
+
+/* Core Web Vitals & screenshots */
+.kv-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(92px, 1fr)); gap: 8px; }
+.kv-tile { border: 1px solid var(--sw-border); border-radius: var(--sw-radius-sm); padding: 8px 10px; background: var(--sw-sunken); }
+.kv-tile-label { font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--sw-muted); }
+.kv-tile-value { font-size: 15px; font-weight: 600; margin-top: 2px; font-variant-numeric: tabular-nums; }
+.cwv-score { width: 56px; height: 56px; flex: 0 0 56px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
+    font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; border: 2px solid currentColor; }
+.cwv-score.tone-success { color: var(--sw-success); background: var(--sw-success-soft); }
+.cwv-score.tone-warning { color: var(--sw-warning-text); background: var(--sw-warning-soft); }
+.cwv-score.tone-danger { color: var(--sw-danger); background: var(--sw-danger-soft); }
+.cwv-score.tone-neutral { color: var(--sw-muted); background: var(--sw-sunken); }
+.cwv-metric { font-variant-numeric: tabular-nums; font-weight: 600; }
+.shot-frame { display: block; border: 1px solid var(--sw-border); border-radius: var(--sw-radius-sm); overflow: hidden;
+    background: var(--sw-sunken); line-height: 0; }
+/* The image sizes the frame. Its own 16:10 keeps the card stable, so no aspect-ratio is imposed here. */
+.shot-frame img { display: block; width: 100%; height: auto; }
+.shot-frame:hover { border-color: var(--sw-border-strong); }

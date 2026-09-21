@@ -95,6 +95,7 @@ CREATE TABLE IF NOT EXISTS `websites` (
   `alerts_json`         TEXT NULL COMMENT 'enabled alert types (per-site overrides)',
   `last_http_status`    SMALLINT UNSIGNED NULL,
   `last_response_time`  INT UNSIGNED NULL COMMENT 'milliseconds',
+  `last_ttfb`           INT UNSIGNED NULL COMMENT 'milliseconds to the first response byte, measured every check',
   `last_error_type`     VARCHAR(40)  NULL,
   `last_error_message`  VARCHAR(500) NULL,
   `last_final_url`      VARCHAR(2048) NULL,
@@ -110,6 +111,8 @@ CREATE TABLE IF NOT EXISTS `websites` (
   `ssl_error`           VARCHAR(255) NULL,
   `ssl_checked_at`      DATETIME     NULL,
   `ssl_alert_level`     SMALLINT     NULL COMMENT 'last SSL expiry alert threshold sent (30/14/7/0)',
+  `vitals_checked_at`     DATETIME NULL COMMENT 'last PageSpeed Insights run (both strategies)',
+  `screenshot_captured_at` DATETIME NULL COMMENT 'last successful screenshot capture',
   `favicon_url`         VARCHAR(500) NULL,
   `notes`               TEXT NULL,
   `created_at`          DATETIME NOT NULL,
@@ -135,6 +138,7 @@ CREATE TABLE IF NOT EXISTS `website_checks` (
   `is_up`              TINYINT(1)   NOT NULL DEFAULT 1 COMMENT 'counts as up for uptime (only confirmed downtime is 0)',
   `http_status`        SMALLINT UNSIGNED NULL,
   `response_time`      INT UNSIGNED NULL COMMENT 'milliseconds',
+  `ttfb`               INT UNSIGNED NULL COMMENT 'milliseconds to the first response byte of the final hop',
   `error_type`         VARCHAR(40)  NULL,
   `error_message`      VARCHAR(500) NULL,
   `redirect_count`     TINYINT UNSIGNED NOT NULL DEFAULT 0,
@@ -146,6 +150,61 @@ CREATE TABLE IF NOT EXISTS `website_checks` (
   KEY `idx_checks_website_time` (`website_id`, `checked_at`),
   KEY `idx_checks_time` (`checked_at`),
   CONSTRAINT `fk_checks_website` FOREIGN KEY (`website_id`) REFERENCES `websites` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------------------
+-- Core Web Vitals, one row per website per strategy per PageSpeed Insights run.
+--
+-- Lab values come from the Lighthouse run PageSpeed performs on demand and are always present.
+-- Field values are the 75th percentile of real Chrome user data (CrUX) and only exist once a URL or
+-- its origin has enough traffic — INP is only ever available as a field metric.
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `website_vitals` (
+  `id`                BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `website_id`        INT UNSIGNED NOT NULL,
+  `strategy`          VARCHAR(10) NOT NULL COMMENT 'mobile | desktop',
+  `status`            VARCHAR(10) NOT NULL DEFAULT 'ok' COMMENT 'ok | failed',
+  `performance_score` TINYINT UNSIGNED NULL COMMENT 'Lighthouse performance score, 0-100',
+  `lab_ttfb`          INT UNSIGNED NULL COMMENT 'ms, server response time',
+  `lab_fcp`           INT UNSIGNED NULL COMMENT 'ms, first contentful paint',
+  `lab_lcp`           INT UNSIGNED NULL COMMENT 'ms, largest contentful paint',
+  `lab_cls`           DECIMAL(7,4) NULL COMMENT 'cumulative layout shift',
+  `lab_tbt`           INT UNSIGNED NULL COMMENT 'ms, total blocking time (lab stand-in for INP)',
+  `lab_speed_index`   INT UNSIGNED NULL COMMENT 'ms',
+  `lab_tti`           INT UNSIGNED NULL COMMENT 'ms, time to interactive',
+  `field_source`      VARCHAR(10)  NULL COMMENT 'url | origin — which CrUX dataset the field values came from',
+  `field_ttfb`        INT UNSIGNED NULL COMMENT 'ms, p75',
+  `field_fcp`         INT UNSIGNED NULL COMMENT 'ms, p75',
+  `field_lcp`         INT UNSIGNED NULL COMMENT 'ms, p75',
+  `field_cls`         DECIMAL(7,4) NULL COMMENT 'p75',
+  `field_inp`         INT UNSIGNED NULL COMMENT 'ms, p75 interaction to next paint',
+  `field_verdict`     VARCHAR(10)  NULL COMMENT 'FAST | AVERAGE | SLOW, as reported by CrUX',
+  `error_message`     VARCHAR(500) NULL,
+  `fetched_at`        DATETIME NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_vitals_website_time` (`website_id`, `strategy`, `fetched_at`),
+  KEY `idx_vitals_time` (`fetched_at`),
+  CONSTRAINT `fk_vitals_website` FOREIGN KEY (`website_id`) REFERENCES `websites` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------------------
+-- Website screenshots. The image itself lives in storage/screenshots (outside the web root);
+-- only its relative path is stored here.
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `website_screenshots` (
+  `id`            BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `website_id`    INT UNSIGNED NOT NULL,
+  `provider`      VARCHAR(20)  NOT NULL COMMENT 'pagespeed | mshots | thumio',
+  `status`        VARCHAR(10)  NOT NULL DEFAULT 'ok' COMMENT 'ok | failed',
+  `path`          VARCHAR(255) NULL COMMENT 'relative to storage/screenshots',
+  `mime`          VARCHAR(40)  NULL,
+  `bytes`         INT UNSIGNED NULL,
+  `error_message` VARCHAR(500) NULL,
+  `captured_at`   DATETIME NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_shots_website_time` (`website_id`, `captured_at`),
+  KEY `idx_shots_time` (`captured_at`),
+  CONSTRAINT `fk_shots_website` FOREIGN KEY (`website_id`) REFERENCES `websites` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------------------------------------------------------

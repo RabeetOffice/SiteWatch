@@ -117,6 +117,7 @@ final class WebsiteMonitor
             'visited'  => [],
             'ip'       => null,
             'transfer' => 0.0, // seconds actually spent transferring (sum of curl total_time per hop)
+            'ttfb'     => null, // ms to the first byte of the hop that served the page
         ];
         return $this->hop($url, 0, $state);
     }
@@ -126,7 +127,7 @@ final class WebsiteMonitor
      * whole batch are created before any transfer starts, so wall-clock would include the time spent
      * resolving/queueing the other websites in the batch.
      *
-     * @param array{origin: string, started: string, chain: array<int, array{url: string, status: int}>, visited: array<int, string>, ip: ?string, transfer: float} $state
+     * @param array{origin: string, started: string, chain: array<int, array{url: string, status: int}>, visited: array<int, string>, ip: ?string, transfer: float, ttfb: ?int} $state
      * @return PromiseInterface<ProbeResult>
      */
     private function hop(string $url, int $hopIndex, array $state): PromiseInterface
@@ -153,6 +154,7 @@ final class WebsiteMonitor
         $remaining = max(1, $this->options['timeout'] - (int) floor($state['transfer']));
         $remoteIp = null;
         $hopTime = null;
+        $hopTtfb = null;
         $hopStart = microtime(true);
         $requestOptions = [
             'connect_timeout' => min($this->options['connect_timeout'], $remaining),
@@ -169,18 +171,24 @@ final class WebsiteMonitor
                 CURLOPT_RESOLVE     => [$resolveEntry],
                 CURLOPT_MAXFILESIZE => 8 * 1024 * 1024,
             ],
-            'on_stats' => function (TransferStats $stats) use (&$remoteIp, &$hopTime): void {
+            'on_stats' => function (TransferStats $stats) use (&$remoteIp, &$hopTime, &$hopTtfb): void {
                 $handler = $stats->getHandlerStats();
                 if (!empty($handler['primary_ip'])) {
                     $remoteIp = (string) $handler['primary_ip'];
                 }
                 $hopTime = $stats->getTransferTime();
+                // Time to first byte of this hop, straight from cURL. On a redirect chain the last hop
+                // wins, which is the one that actually served the page.
+                if (isset($handler['starttransfer_time']) && is_numeric($handler['starttransfer_time'])) {
+                    $hopTtfb = max(0, (int) round((float) $handler['starttransfer_time'] * 1000));
+                }
             },
         ];
 
         return $this->client->getAsync($url, $requestOptions)->then(
-            function (ResponseInterface $response) use ($url, $hopIndex, $state, &$remoteIp, &$hopTime, $hopStart): PromiseInterface|ProbeResult {
+            function (ResponseInterface $response) use ($url, $hopIndex, $state, &$remoteIp, &$hopTime, &$hopTtfb, $hopStart): PromiseInterface|ProbeResult {
                 $state['transfer'] += $hopTime ?? (microtime(true) - $hopStart);
+                $state['ttfb'] = $hopTtfb ?? $state['ttfb'];
                 $elapsedMs = fn (): int => (int) round($state['transfer'] * 1000);
                 $status = $response->getStatusCode();
                 $state['chain'][] = ['url' => $url, 'status' => $status];
@@ -223,7 +231,8 @@ final class WebsiteMonitor
                     redirectCount: max(0, count($state['chain']) - 1),
                     redirectChain: $state['chain'],
                     remoteIp: $state['ip'],
-                    startedAt: $state['started']
+                    startedAt: $state['started'],
+                    ttfbMs: $state['ttfb']
                 );
             },
             function (Throwable $e) use ($state, &$hopTime, $hopStart): ProbeResult {

@@ -16,6 +16,7 @@ use App\Repositories\NotificationRepository;
 use App\Repositories\SettingsRepository;
 use App\Repositories\WebsiteRepository;
 use App\Services\MaintenanceService;
+use App\Services\PerformanceService;
 use Composer\CaBundle\CaBundle;
 use Psr\Log\LoggerInterface;
 use Throwable;
@@ -138,12 +139,12 @@ final class MonitorManager
     /**
      * Run one monitoring cycle. Safe to call every minute.
      *
-     * @return array{skipped: bool, checked: int, failures: int, incidents_opened: int, incidents_resolved: int, ssl_checked: int, duration_ms: int, message: string}
+     * @return array{skipped: bool, checked: int, failures: int, incidents_opened: int, incidents_resolved: int, ssl_checked: int, screenshots: int, duration_ms: int, message: string}
      */
     public function run(): array
     {
         $started = microtime(true);
-        $summary = ['skipped' => false, 'checked' => 0, 'failures' => 0, 'incidents_opened' => 0, 'incidents_resolved' => 0, 'ssl_checked' => 0, 'duration_ms' => 0, 'message' => ''];
+        $summary = ['skipped' => false, 'checked' => 0, 'failures' => 0, 'incidents_opened' => 0, 'incidents_resolved' => 0, 'ssl_checked' => 0, 'screenshots' => 0, 'duration_ms' => 0, 'message' => ''];
 
         $lock = new Lock($this->lockPath);
         if (!$lock->acquire()) {
@@ -158,6 +159,19 @@ final class MonitorManager
         try {
             $due = $this->scheduler->due(max(1, (int) App::config()->get('app.monitor.max_due_per_run', 300)));
             $concurrency = max(1, min(50, $this->settings->getInt('concurrency', 15)));
+
+            // Screenshots normally run on their own interval; only build the service when the
+            // administrator asked for one on every check.
+            $performance = null;
+            $shotsEveryCheck = false;
+            try {
+                $performance = PerformanceService::create();
+                $shotsEveryCheck = $performance->screenshotsEnabled()
+                    && $performance->screenshotIntervalMinutes() === PerformanceService::SCREENSHOT_EVERY_CHECK
+                    && $performance->screenshotProvider() !== 'pagespeed';
+            } catch (Throwable $e) {
+                $this->log->error('Screenshot service unavailable', ['error' => $e->getMessage()]);
+            }
             $this->log->info('Monitoring run started', ['due' => count($due), 'concurrency' => $concurrency]);
 
             if ($due !== []) {
@@ -178,7 +192,11 @@ final class MonitorManager
                         if ($outcome['incident_resolved'] !== null) {
                             $summary['incidents_resolved']++;
                         }
-                        $this->log->info('Checked', ['id' => $id, 'url' => $website['url'], 'status' => $result->status, 'http' => $result->httpStatus, 'ms' => $result->responseTime]);
+                        $this->log->info('Checked', ['id' => $id, 'url' => $website['url'], 'status' => $result->status, 'http' => $result->httpStatus, 'ms' => $result->responseTime, 'ttfb' => $result->ttfb]);
+                        if ($shotsEveryCheck) {
+                            $performance?->captureAfterCheck($outcome['website']);
+                            $summary['screenshots']++;
+                        }
                     } catch (Throwable $e) {
                         // One malformed record must never stop the cycle; push its next check so it is not retried every minute.
                         $this->log->error('Website processing failed', ['id' => $id, 'url' => $website['url'] ?? '', 'error' => $e->getMessage(), 'file' => $e->getFile(), 'line' => $e->getLine()]);

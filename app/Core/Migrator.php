@@ -21,7 +21,7 @@ use RuntimeException;
  */
 final class Migrator
 {
-    public const VERSION = 2;
+    public const VERSION = 3;
     /** Version of databases created before schema versions were recorded. */
     public const BASELINE = 1;
     public const SETTING = 'schema_version';
@@ -36,6 +36,15 @@ final class Migrator
                 'Links every user to a role — existing accounts become Administrators — and replaces the old users.role text column.',
                 'Adds users.session_version, used to sign an account out everywhere after a password reset or deactivation.',
                 'Creates the domain_info table for domain registration (WHOIS / RDAP) and hosting details.',
+            ],
+        ],
+        3 => [
+            'title'   => 'Core Web Vitals and website screenshots',
+            'changes' => [
+                'Creates the website_vitals table for Core Web Vitals history (lab and field, mobile and desktop).',
+                'Creates the website_screenshots table; the images themselves are kept in storage/screenshots.',
+                'Adds website_checks.ttfb and websites.last_ttfb, so time to first byte is recorded on every check.',
+                'Adds websites.vitals_checked_at and websites.screenshot_captured_at to schedule both jobs.',
             ],
         ],
     ];
@@ -135,7 +144,29 @@ final class Migrator
     {
         return [
             2 => fn () => $this->rolesAndDomainInfo(),
+            3 => fn () => $this->vitalsAndScreenshots(),
         ];
+    }
+
+    /**
+     * v3: Core Web Vitals history, screenshots, and time to first byte on every check.
+     */
+    private function vitalsAndScreenshots(): void
+    {
+        $this->createTable('website_vitals');
+        $this->createTable('website_screenshots');
+
+        $columns = [
+            ['website_checks', 'ttfb', "INT UNSIGNED NULL COMMENT 'milliseconds to the first response byte of the final hop' AFTER `response_time`"],
+            ['websites', 'last_ttfb', "INT UNSIGNED NULL COMMENT 'milliseconds to the first response byte, measured every check' AFTER `last_response_time`"],
+            ['websites', 'vitals_checked_at', "DATETIME NULL COMMENT 'last PageSpeed Insights run (both strategies)' AFTER `ssl_alert_level`"],
+            ['websites', 'screenshot_captured_at', "DATETIME NULL COMMENT 'last successful screenshot capture' AFTER `vitals_checked_at`"],
+        ];
+        foreach ($columns as [$table, $column, $definition]) {
+            if (!$this->columnExists($table, $column)) {
+                $this->db->pdo()->exec("ALTER TABLE `{$table}` ADD COLUMN `{$column}` {$definition}");
+            }
+        }
     }
 
     /**

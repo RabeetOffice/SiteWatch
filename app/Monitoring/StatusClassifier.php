@@ -53,6 +53,7 @@ final class StatusClassifier
         $base = [
             'httpStatus'       => $probe->httpStatus,
             'responseTime'     => $probe->responseTimeMs,
+            'ttfb'             => $probe->ttfbMs,
             'redirectCount'    => $probe->redirectCount,
             'finalUrl'         => $probe->finalUrl,
             'sslDaysRemaining' => $sslDays,

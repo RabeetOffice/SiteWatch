@@ -14,6 +14,7 @@ use App\Notifications\DiscordNotifier;
 use App\Notifications\EmailNotifier;
 use App\Notifications\NotificationManager;
 use App\Notifications\WhatsAppNotifier;
+use App\Performance\ScreenshotCapturer;
 use App\Repositories\SettingsRepository;
 use App\Repositories\WebsiteRepository;
 use App\Services\ActivityService;
@@ -22,7 +23,7 @@ Api::boot(['POST']);
 
 $input = Request::all();
 $section = Request::string('section');
-Api::authorize(in_array($section, ['general', 'monitoring'], true) ? 'settings.manage' : 'notifications.manage');
+Api::authorize(in_array($section, ['general', 'monitoring', 'performance'], true) ? 'settings.manage' : 'notifications.manage');
 $settings = App::settings();
 $v = new Validator($input);
 $values = [];
@@ -145,6 +146,39 @@ switch ($section) {
             $values = ['telegram_enabled' => $bool('telegram_enabled'), 'telegram_chat_id' => $str('telegram_chat_id')];
             if ($str('telegram_bot_token') !== '') {
                 $values['telegram_bot_token'] = $str('telegram_bot_token');
+            }
+        }
+        break;
+
+    case 'performance':
+        $v->in('vitals_strategies', ['mobile', 'desktop', 'both'], 'Strategies');
+        $v->integer('vitals_interval_hours', 1, 720, 'Vitals re-check interval');
+        $v->integer('vitals_retention_days', 7, 3650, 'Vitals retention');
+        $v->in('screenshot_provider', ScreenshotCapturer::PROVIDERS, 'Screenshot provider');
+        $v->integer('screenshot_interval_minutes', 0, 10080, 'Screenshot interval');
+        $v->integer('screenshot_retention_days', 1, 3650, 'Screenshot retention');
+        $v->integer('screenshot_keep_per_website', 1, 500, 'Screenshots kept per website');
+        $v->regex('pagespeed_api_key', '/^[A-Za-z0-9_-]{20,60}$/', 'A Google API key is 39 characters of letters, numbers, hyphens and underscores.');
+
+        if ($bool('vitals_enabled') && $str('pagespeed_api_key') === '' && $settings->getString('pagespeed_api_key') === '') {
+            // The keyless PageSpeed quota is a pool shared by every anonymous caller and is almost always
+            // exhausted, so enabling vitals without a key would just record failures.
+            $v->addError('pagespeed_api_key', 'A free Google API key is required — the anonymous PageSpeed quota is shared and is normally exhausted.');
+        }
+        if ($v->passes()) {
+            $values = [
+                'vitals_enabled'              => $bool('vitals_enabled'),
+                'vitals_interval_hours'       => $int('vitals_interval_hours', 24),
+                'vitals_strategies'           => $str('vitals_strategies') ?: 'both',
+                'vitals_retention_days'       => $int('vitals_retention_days', 180),
+                'screenshot_enabled'          => $bool('screenshot_enabled'),
+                'screenshot_provider'         => $str('screenshot_provider') ?: ScreenshotCapturer::DEFAULT_PROVIDER,
+                'screenshot_interval_minutes' => $int('screenshot_interval_minutes', 60),
+                'screenshot_retention_days'   => $int('screenshot_retention_days', 14),
+                'screenshot_keep_per_website' => $int('screenshot_keep_per_website', 30),
+            ];
+            if ($str('pagespeed_api_key') !== '') {
+                $values['pagespeed_api_key'] = $str('pagespeed_api_key');
             }
         }
         break;

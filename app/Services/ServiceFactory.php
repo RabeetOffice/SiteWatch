@@ -18,7 +18,9 @@ use App\Repositories\HeartbeatRepository;
 use App\Repositories\IncidentRepository;
 use App\Repositories\NotificationRepository;
 use App\Repositories\RoleRepository;
+use App\Repositories\ScreenshotRepository;
 use App\Repositories\UserRepository;
+use App\Repositories\VitalsRepository;
 use App\Repositories\WebsiteRepository;
 
 /**
@@ -114,6 +116,21 @@ final class ServiceFactory
     public static function reports(): ReportService
     {
         return new ReportService(self::websites(), self::dailyStats(), self::incidents());
+    }
+
+    public static function vitals(): VitalsRepository
+    {
+        return new VitalsRepository(App::db());
+    }
+
+    public static function screenshots(): ScreenshotRepository
+    {
+        return new ScreenshotRepository(App::db());
+    }
+
+    public static function performance(): PerformanceService
+    {
+        return PerformanceService::create();
     }
 
     public static function monitor(): MonitorManager

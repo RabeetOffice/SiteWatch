@@ -37,7 +37,8 @@ final class ProbeResult
         public readonly ?string $errorMessage = null,
         public readonly ?int $curlErrno = null,
         public readonly ?string $remoteIp = null,
-        public readonly string $startedAt = ''
+        public readonly string $startedAt = '',
+        public readonly ?int $ttfbMs = null
     ) {
     }
 

@@ -3,6 +3,8 @@
 /storage/logs/*
 /storage/cache/*
 /storage/locks/*
+/storage/screenshots/*
+!/storage/screenshots/.htaccess
 /storage/install.lock
 !/storage/**/.gitkeep
 /.phpunit.cache/

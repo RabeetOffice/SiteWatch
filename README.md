@@ -57,6 +57,8 @@ Manage Administrator, Manager, Viewer, and custom roles with server-side permiss
 | **WordPress diagnostics** | Detect critical errors, database connection failures, maintenance pages, and exposed PHP fatal errors. |
 | **Incident tracking** | Configurable consecutive-failure confirmation, recovery thresholds, incident history, and supporting diagnostics. |
 | **Alerts** | Email through SMTP, Telegram, WhatsApp (free through GREEN-API or CallMeBot, or Meta’s Cloud API) and Discord webhooks; global and per-website alert controls, recovery notifications, and delivery logs. |
+| **Performance & Core Web Vitals** | TTFB measured on every check; LCP, CLS, INP and Lighthouse scores for mobile and desktop through Google PageSpeed Insights, with historical trends. |
+| **Website screenshots** | A periodic picture of each monitored site through a free rendering service, with history and on-demand capture. |
 | **SSL monitoring** | Certificate checks, expiry information, and threshold-based expiry notifications. |
 | **Domains and hosting** | RDAP/WHOIS registration details, domain expiry, nameservers, and hosting/CDN/network information where available. |
 | **Reporting** | Observed uptime, response-time trends, performance reports, date/client/site filters, CSV exports, and print layouts. |
@@ -175,6 +177,7 @@ admin/               Dashboard and administration pages
 api/                 Authenticated JSON endpoints
 app/Core/            Authentication, permissions, configuration, database
 app/Monitoring/      Checks, classification, incidents, scheduling, uptime
+app/Performance/     Core Web Vitals (PageSpeed Insights) and screenshots
 app/Domains/         RDAP, WHOIS, and hosting inspection
 app/Notifications/   Email, Telegram, WhatsApp and Discord delivery
 app/Repositories/    Database access

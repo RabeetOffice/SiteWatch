@@ -23,10 +23,29 @@ $presented = $service->present($website);
 $pageTitle = $website['name'];
 $activeNav = 'websites';
 $canViewDomains = can('domains.view');
-$pageScripts = $canViewDomains ? ['domain-info.js', 'website-details.js'] : ['website-details.js'];
+$canViewReports = can('reports.view');
+$canRunChecks = can('websites.check');
+$performance = App::settings();
+
+$pageScripts = ['website-details.js'];
+if ($canViewDomains) {
+    array_unshift($pageScripts, 'domain-info.js');
+}
+if ($canViewReports) {
+    $pageScripts[] = 'website-performance.js';
+}
 $needsCharts = true;
 $hidePageHead = true;
-$pageData = ['id' => $id, 'website' => $presented];
+$pageData = [
+    'id'      => $id,
+    'website' => $presented,
+    'performance' => [
+        'vitalsEnabled'      => $performance->getBool('vitals_enabled'),
+        'screenshotsEnabled' => $performance->getBool('screenshot_enabled'),
+        'canRun'             => $canRunChecks,
+        'canManageSettings'  => can('settings.manage'),
+    ],
+];
 
 require dirname(__DIR__) . '/includes/header.php';
 ?>
@@ -226,6 +245,38 @@ require dirname(__DIR__) . '/includes/header.php';
         </div>
     </div>
 </div>
+
+<?php if ($canViewReports): ?>
+<section class="row g-3 mb-4" id="performanceSection" aria-label="Core Web Vitals and screenshot" style="scroll-margin-top:72px">
+    <div class="col-xl-7">
+        <div class="sw-card h-100">
+            <div class="sw-card-header">
+                <div>
+                    <h3>Core Web Vitals</h3>
+                    <p class="sub" data-cwv-sub>Measured by Google PageSpeed Insights</p>
+                </div>
+                <div class="d-flex gap-2 align-items-center">
+                    <div class="segmented" data-cwv-strategy role="group" aria-label="Device">
+                        <button type="button" data-strategy="mobile" class="active">Mobile</button>
+                        <button type="button" data-strategy="desktop">Desktop</button>
+                    </div>
+                    <?php if ($canRunChecks): ?><button type="button" class="btn btn-sm btn-light" data-cwv-run><i class="bi bi-lightning-charge" aria-hidden="true"></i> Measure now</button><?php endif; ?>
+                </div>
+            </div>
+            <div class="sw-card-body" data-cwv-body><div class="skeleton skeleton-block"></div></div>
+        </div>
+    </div>
+    <div class="col-xl-5">
+        <div class="sw-card h-100">
+            <div class="sw-card-header">
+                <div><h3>Screenshot</h3><p class="sub" data-shot-sub>How this website looks right now</p></div>
+                <?php if ($canRunChecks): ?><button type="button" class="btn btn-sm btn-light" data-shot-capture><i class="bi bi-camera" aria-hidden="true"></i> Capture now</button><?php endif; ?>
+            </div>
+            <div class="sw-card-body" data-shot-body><div class="skeleton skeleton-block"></div></div>
+        </div>
+    </div>
+</section>
+<?php endif; ?>
 
 <?php if ($canViewDomains): ?>
 <section class="row g-3 mb-4" id="domainSection" aria-label="Domain and hosting" style="scroll-margin-top:72px">

@@ -17,15 +17,16 @@ Detailed setup, configuration, monitoring behavior, and administration for the c
 9. [Telegram setup](#9-telegram-setup)
 10. [WhatsApp setup](#10-whatsapp-setup)
 11. [Discord setup](#11-discord-setup)
-12. [File permissions](#12-file-permissions)
-13. [Security recommendations](#13-security-recommendations)
-14. [How monitoring works](#14-how-monitoring-works)
-15. [Uptime calculation methodology](#15-uptime-calculation-methodology)
-16. [Testing](#16-testing)
-17. [Troubleshooting](#17-troubleshooting)
-18. [Users, roles & permissions](#18-users-roles--permissions)
-19. [Domain & hosting details](#19-domain--hosting-details)
-20. [Project structure](#20-project-structure)
+12. [Core Web Vitals & screenshots](#12-core-web-vitals--screenshots)
+13. [File permissions](#13-file-permissions)
+14. [Security recommendations](#14-security-recommendations)
+15. [How monitoring works](#15-how-monitoring-works)
+16. [Uptime calculation methodology](#16-uptime-calculation-methodology)
+17. [Testing](#17-testing)
+18. [Troubleshooting](#18-troubleshooting)
+19. [Users, roles & permissions](#19-users-roles--permissions)
+20. [Domain & hosting details](#20-domain--hosting-details)
+21. [Project structure](#21-project-structure)
 
 ---
 
@@ -38,7 +39,7 @@ Detailed setup, configuration, monitoring behavior, and administration for the c
 | Web server | Apache with `mod_rewrite` (recommended) — `.htaccess` files protect internal directories. nginx works with equivalent `location` deny rules. |
 | Composer | Only needed to install dependencies (locally or on the server) |
 | Cron | Ability to run `php cron/monitor.php` every minute (cPanel Cron Jobs, crontab, etc.) |
-| Outbound network | HTTP/HTTPS access from the server to the monitored websites, and to the alert channels you enable: SMTP, `api.telegram.org`, `green-api.com` / `graph.facebook.com` / `api.callmebot.com`, `discord.com` |
+| Outbound network | HTTP/HTTPS access from the server to the monitored websites; to the alert channels you enable (SMTP, `api.telegram.org`, `green-api.com` / `graph.facebook.com` / `api.callmebot.com`, `discord.com`); and, for Core Web Vitals and screenshots, `googleapis.com` and `s0.wp.com` / `image.thum.io` |
 
 Front-end libraries (Bootstrap, Bootstrap Icons, Chart.js) are loaded from the jsDelivr CDN, so the administrator's browser
 needs internet access.
@@ -105,7 +106,7 @@ mysql -u sitewatch -p sitewatch < database/schema.sql
 All timestamps are stored in **UTC** and rendered in the configured application timezone (default `Asia/Karachi`).
 
 Tables: `roles`, `users`, `login_attempts`, `remember_tokens`, `websites`, `website_checks`, `incidents`, `daily_stats`,
-`settings`, `notifications`, `activity_logs`, `monitor_heartbeats`, `domain_info`.
+`settings`, `notifications`, `activity_logs`, `monitor_heartbeats`, `domain_info`, `website_vitals`, `website_screenshots`.
 
 **Updating after a deploy (e.g. GitHub auto-deployment).** `database/schema.sql` always describes the latest schema; each
 installation keeps its own data and records its schema version in `settings.schema_version`. When newly deployed code needs
@@ -122,8 +123,9 @@ request or cron run after each deploy.
 php database/migrate.php
 ```
 
-The database user needs `ALTER` and `CREATE` privileges (cPanel's "ALL PRIVILEGES" includes them). Updating to schema
-version 2 creates the `roles` and `domain_info` tables and gives every existing account the **Administrator** role.
+The database user needs `ALTER` and `CREATE` privileges (cPanel's "ALL PRIVILEGES" includes them). Schema version 2
+creates the `roles` and `domain_info` tables and gives every existing account the **Administrator** role. Version 3 adds
+the `website_vitals` and `website_screenshots` tables and the `ttfb` columns.
 
 ---
 
@@ -140,7 +142,7 @@ version 2 creates the `roles` and `domain_info` tables and gives every existing 
 | `DB_*` | Database connection. |
 | `SESSION_LIFETIME` | Minutes of inactivity before an admin is signed out (default 480). |
 | `LOGIN_MAX_ATTEMPTS` / `LOGIN_LOCKOUT_MINUTES` | Login rate limiting per IP / email. |
-| `MONITOR_ALLOW_PRIVATE` | **Keep `false`.** Allows monitoring of private/internal addresses (see [Security](#13-security-recommendations)). |
+| `MONITOR_ALLOW_PRIVATE` | **Keep `false`.** Allows monitoring of private/internal addresses (see [Security](#14-security-recommendations)). |
 | `MONITOR_MAX_PER_RUN` | Maximum due websites processed by one cron run (default 300). |
 | `DB_AUTO_MIGRATE` | `false` (default): database updates for newly deployed code wait for an administrator under *System → Updates*. `true`: they are applied automatically by the first request or cron run. |
 
@@ -164,7 +166,7 @@ Runtime settings (thresholds, alert channels, retention, alert rules) live in th
 4. **Run the installer** – open `https://monitor.agency.com/install.php`, enter the database credentials (host is usually
    `localhost`), create the admin account and set the application URL/timezone. The wizard writes `.env`, creates the
    tables and `storage/install.lock`.
-5. **Permissions** – see [File permissions](#12-file-permissions). `storage/` must be writable by PHP.
+5. **Permissions** – see [File permissions](#13-file-permissions). `storage/` must be writable by PHP.
 6. **Cron** – see [Cron configuration](#7-cron-configuration).
 7. **SMTP / Telegram** – configure under *System → Notifications* and send the test messages.
 8. **HTTPS** – enable AutoSSL / Let's Encrypt for the subdomain and force HTTPS (cPanel → Domains → *Force HTTPS
@@ -192,11 +194,19 @@ Optional additional jobs (both are also performed automatically by `monitor.php`
 30 4 * * * /usr/local/bin/php /home/USERNAME/monitor.agency.com/cron/ssl-check.php >/dev/null 2>&1
 ```
 
-Recommended daily job for [domain & hosting details](#19-domain--hosting-details). Without it, details are still looked
+Recommended daily job for [domain & hosting details](#20-domain--hosting-details). Without it, details are still looked
 up when someone opens a website or the Domains page, but expiry dates are not kept current in the background:
 
 ```
 45 4 * * * /usr/local/bin/php /home/USERNAME/monitor.agency.com/cron/domain-check.php >/dev/null 2>&1
+```
+
+Recommended hourly job for [Core Web Vitals & screenshots](#12-core-web-vitals--screenshots). Both are rate limited by
+their providers, so this processes a small batch per run and works through the fleet steadily. Without it nothing is
+collected in the background, though the per-website **Measure now** and **Capture now** buttons still work:
+
+```
+20 * * * * /usr/local/bin/php /home/USERNAME/monitor.agency.com/cron/vitals-check.php >/dev/null 2>&1
 ```
 
 **Finding the correct PHP binary.** Do not assume `/usr/local/bin/php` exists or is PHP 8.2. Determine the path with one of:
@@ -329,7 +339,77 @@ webhook and answers `429` when that is exceeded; SiteWatch retries once and then
 
 ---
 
-## 12. File permissions
+## 12. Core Web Vitals & screenshots
+
+### Why this needs an external service
+
+LCP, CLS and INP describe what a browser does while it renders a page. Nothing measurable with cURL from PHP can stand
+in for them, and shared hosting has no headless browser, so SiteWatch asks **Google PageSpeed Insights** to run the
+measurement and stores the answer. Screenshots have the same problem and are produced by a free rendering service.
+
+**Time to first byte is the exception.** SiteWatch measures TTFB itself, from cURL, on *every* check of every website,
+and stores it on the check row. That works with no external service, no quota and no configuration, so TTFB history is
+as granular as your check interval even if you never enable anything below.
+
+### Core Web Vitals (PageSpeed Insights)
+
+Each run returns two independent sets of numbers:
+
+| | Where it comes from | Contains | Notes |
+|---|---|---|---|
+| **Lab** | A Lighthouse render Google performs on demand, in a throttled emulated browser | Score, LCP, CLS, TBT, TTFB, FCP, Speed Index, TTI | Always available and reproducible — the right thing for spotting a regression |
+| **Field** | The 75th percentile of real Chrome users over the last 28 days (CrUX) | LCP, **INP**, CLS, TTFB, FCP | What Google actually ranks on, and the only source of INP. Absent until a site has enough traffic |
+
+Lighthouse cannot measure INP, because there is no user to interact with the page. It reports **Total Blocking Time**
+instead, which SiteWatch shows as the lab stand-in rather than mislabelling it as INP. If a website has no field data,
+it has no INP, and that is a property of its traffic, not a fault in the setup.
+
+**Setup.** *Monitoring Settings → Core Web Vitals*: enable it, paste a Google API key, choose mobile, desktop or both,
+and set the re-check interval.
+
+A **free Google API key is required in practice.** PageSpeed can be called without one, but the anonymous quota is a
+pool shared by every anonymous caller on the internet and is almost always exhausted — you will simply record failures.
+Create a project in the [Google Cloud console](https://console.cloud.google.com/apis/credentials), enable the
+**PageSpeed Insights API**, and create an API key. No billing account is needed. The key is stored encrypted with
+`APP_KEY` and never returned to the browser.
+
+Keep the interval at a day or so. A Lighthouse run takes 10–40 seconds per page, and "mobile and desktop" is two
+requests per website per run.
+
+### Screenshots
+
+*Monitoring Settings → Screenshots*. Three providers, all free:
+
+| Provider | Notes |
+|----------|-------|
+| **WordPress mShots** | Default. No key. Renders in the background, so a brand new URL returns a placeholder and succeeds on the next attempt — SiteWatch detects that and reports it rather than storing the placeholder |
+| **thum.io** | No key, renders immediately, rate limited by IP |
+| **PageSpeed render** | Reuses the final render from a Core Web Vitals run, so no extra request — but needs vitals enabled and is only as fresh as that schedule |
+
+All three are sent the address of each monitored website. Images are written to `storage/screenshots`, which is outside
+the web root and denied by `.htaccess`; they are served only to signed-in users through `api/websites/screenshot.php`.
+
+**On the capture interval.** The interval list includes **Every check**, which captures a screenshot each time a
+website is checked. Be deliberate about it: 30 websites on 5-minute checks is roughly 8,600 requests a day to a free
+service, which they rate limit. An hour or more is the sensible setting, and the **Capture now** button on a website's
+details page gives you an image of that site this second when you actually need one.
+
+Old images are removed by the cleanup job, by age and by a per-website cap, whichever is reached first.
+
+### Cron
+
+Both jobs run from one command. Hourly is right — it works through the fleet a batch at a time and does nothing for
+websites that are not yet due:
+
+```
+20 * * * * /usr/local/bin/php /path/to/sitewatch/cron/vitals-check.php >/dev/null 2>&1
+```
+
+Screenshots set to "every check" are captured by `cron/monitor.php` instead and are skipped by this job.
+
+---
+
+## 13. File permissions
 
 ```
 storage/            775 (writable by the PHP user)  — logs, cache, locks, install.lock
@@ -345,7 +425,7 @@ On cPanel (suPHP/LSAPI) PHP runs as your account user, so the default upload per
 
 ---
 
-## 13. Security recommendations
+## 14. Security recommendations
 
 * **HTTPS only.** Run SiteWatch on an HTTPS subdomain; cookies become `Secure` automatically.
 * **Keep `APP_DEBUG=false` in production.** Errors are logged to `storage/logs/error.log`; visitors never see stack traces.
@@ -362,7 +442,7 @@ On cPanel (suPHP/LSAPI) PHP runs as your account user, so the default upload per
   regenerated on login. "Remember me" uses rotating selector/validator tokens with hashed validators. A password reset or
   deactivation signs the account out of every browser immediately.
 * **Authorisation.** Every page and API endpoint checks the signed-in user's role on the server; hiding buttons in the
-  interface is only a convenience. See [Users, roles & permissions](#18-users-roles--permissions).
+  interface is only a convenience. See [Users, roles & permissions](#19-users-roles--permissions).
 * **CSRF.** Every state-changing request (forms and JSON API) requires a session-bound token (`_token` field or
   `X-CSRF-Token` header). Logout is POST-only.
 * **Output escaping.** All dynamic HTML is escaped (`e()` on the server, `SW.escape()` in the browser). A Content Security
@@ -376,7 +456,7 @@ On cPanel (suPHP/LSAPI) PHP runs as your account user, so the default upload per
 
 ---
 
-## 14. How monitoring works
+## 15. How monitoring works
 
 1. **Scheduling** – every minute `cron/monitor.php` selects websites whose `next_check_at` has passed (respecting each
    website's own interval), up to `MONITOR_MAX_PER_RUN`.
@@ -412,7 +492,7 @@ for it to be sent.
 
 ---
 
-## 15. Uptime calculation methodology
+## 16. Uptime calculation methodology
 
 ```
 uptime % = up_checks / total_checks × 100
@@ -431,7 +511,7 @@ uptime % = up_checks / total_checks × 100
 
 ---
 
-## 16. Testing
+## 17. Testing
 
 ```bash
 composer install            # includes PHPUnit
@@ -451,7 +531,7 @@ first run, send test email/Telegram, import a CSV, export CSVs, and view the das
 
 ---
 
-## 17. Troubleshooting
+## 18. Troubleshooting
 
 | Symptom | Cause / fix |
 |---------|-------------|
@@ -473,6 +553,12 @@ first run, send test email/Telegram, import a CSV, export CSVs, and view the das
 | WhatsApp: nothing arrives through the Cloud API | Business-initiated messages need an approved template. Set the template name, or expect delivery only inside a 24-hour service window. |
 | Discord: `HTTP 404` on a webhook that used to work | The webhook was deleted or the channel was removed in Discord. Create a new webhook and paste the new URL. |
 | Discord: `HTTP 429` | More than about 30 messages a minute went to one webhook. SiteWatch retries once; use a separate webhook per channel if this recurs. |
+| Vitals: `Quota exceeded for quota metric 'Queries'` | The anonymous PageSpeed quota is shared and exhausted. Add a free Google API key under Monitoring Settings. |
+| Vitals: INP is always blank | INP only exists as real-user data. Chrome reports it once a site has enough traffic; until then the Total Blocking Time column is the closest lab equivalent. |
+| Vitals: a run takes 30+ seconds | Normal — Google renders the page in a real browser. Keep the batch small and the interval at a day. |
+| Screenshot: "mShots has queued this page" | Expected on a URL mShots has not seen before — it renders in the background. The next capture normally succeeds; nothing is stored in the meantime. |
+| Screenshot: "Could not create the screenshot directory" | `storage/` is not writable by PHP. See [File permissions](#13-file-permissions). |
+| Screenshots stop updating | Free services rate limit by IP. Raise the capture interval; "every check" across a fleet will hit the limit. |
 | `Composer dependencies are missing` | Run `composer install --no-dev` or upload `vendor/`. |
 | Blank page / 500 error | Set `APP_DEBUG=true` temporarily, or read `storage/logs/error.log`. Check PHP version ≥ 8.2 and file permissions. |
 | Times are off by several hours | Set the correct timezone under *General Settings*. Storage is UTC. |
@@ -486,7 +572,7 @@ first run, send test email/Telegram, import a CSV, export CSVs, and view the das
 
 ---
 
-## 18. Users, roles & permissions
+## 19. Users, roles & permissions
 
 *Team → Users* lists everyone who can sign in. Add a user with a name, email address, role and an initial password (use
 **Generate** and share it securely — they can change it from their profile). **Deactivate** blocks sign-in and ends their
@@ -515,7 +601,7 @@ are recorded in the activity log.
 
 ---
 
-## 19. Domain & hosting details
+## 20. Domain & hosting details
 
 Every website details page has **Domain** key figures (age, expiry, hosting company) and *Domain registration* / *Hosting*
 panels. *Monitoring → Domains & Hosting* shows all websites in one table (filter by expiring soon, expired or lookup
@@ -541,7 +627,7 @@ ipinfo.io token stored encrypted).
 
 ---
 
-## 20. Project structure
+## 21. Project structure
 
 ```
 admin/            Dashboard, websites, incidents, response times, domains & hosting, reports, notifications, settings, activity, users, roles, updates, profile
@@ -550,14 +636,15 @@ app/Core/         App container, Config, Database (PDO), Session, Auth, Permissi
 app/Domains/      DomainInspector, RdapClient/RdapParser, WhoisClient/WhoisParser, HostingInspector, HostingDetector, DomainName, HttpClient
 app/Monitoring/   WebsiteMonitor (Guzzle), SsrfGuard, ErrorDetector, StatusClassifier, SSLChecker, IncidentManager, MonitoringScheduler, UptimeCalculator, MonitorManager, Status
 app/Notifications NotificationManager, EmailNotifier (PHPMailer), TelegramNotifier, WhatsAppNotifier, DiscordNotifier, AlertMessage, NotifierInterface
-app/Repositories/ Website, Check, Incident, DailyStats, Settings, User, Role, Domain, Activity, Notification, Heartbeat repositories (PDO prepared statements)
-app/Services/     DashboardService, WebsiteService (CRUD/import/export), ReportService, DomainService, TeamService (users & roles), ActivityService, MaintenanceService, ServiceFactory
+app/Performance/  PageSpeedClient (Core Web Vitals), VitalsResult, ScreenshotCapturer
+app/Repositories/ Website, Check, Incident, DailyStats, Settings, User, Role, Domain, Activity, Notification, Heartbeat, Vitals, Screenshot repositories (PDO prepared statements)
+app/Services/     DashboardService, WebsiteService (CRUD/import/export), ReportService, DomainService, PerformanceService (vitals & screenshots), TeamService (users & roles), ActivityService, MaintenanceService, ServiceFactory
 assets/           app.css (light/dark design system), vanilla JS per page
 config/           app.php, database.php (read from .env)
-cron/             monitor.php (every minute), cleanup.php (daily), ssl-check.php (daily, optional), domain-check.php (daily, recommended)
+cron/             monitor.php (every minute), cleanup.php (daily), ssl-check.php (daily, optional), domain-check.php (daily, recommended), vitals-check.php (hourly, recommended)
 database/         schema.sql, migrate.php (explicit schema upgrade)
 includes/         header.php, sidebar.php, footer.php, forbidden.php, website-form.php, report-layout.php
-storage/          logs/, cache/, locks/, install.lock (protected)
+storage/          logs/, cache/, locks/, screenshots/, install.lock (all protected from the web)
 tests/            PHPUnit unit tests, fixture server, scenario and lifecycle scripts
 install.php       Installation wizard   ·   login.php / logout.php / index.php
 ```

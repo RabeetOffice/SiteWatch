@@ -21,6 +21,7 @@ $nav = [
     ['label' => 'Reports', 'items' => [
         ['key' => 'reports', 'icon' => 'bi-bar-chart-line', 'label' => 'Uptime', 'href' => 'admin/reports.php', 'permission' => 'reports.view'],
         ['key' => 'performance', 'icon' => 'bi-activity', 'label' => 'Performance', 'href' => 'admin/performance.php', 'permission' => 'reports.view'],
+        ['key' => 'web-vitals', 'icon' => 'bi-lightning-charge', 'label' => 'Core Web Vitals', 'href' => 'admin/web-vitals.php', 'permission' => 'reports.view'],
     ]],
     ['label' => 'Team', 'items' => [
         ['key' => 'users', 'icon' => 'bi-people', 'label' => 'Users', 'href' => 'admin/users.php', 'permission' => 'users.manage'],

@@ -27,6 +27,7 @@ final class SettingsRepository
         'whatsapp_cloud_token',
         'whatsapp_green_token',
         'discord_webhook_url',
+        'pagespeed_api_key',
     ];
 
     public const DEFAULTS = [
@@ -99,6 +100,20 @@ final class SettingsRepository
         'discord_webhook_url' => '',
         'discord_username'    => '', // overrides the webhook's own name
         'discord_mention'     => '', // @here, @everyone or <@&ROLE_ID>
+
+        // Core Web Vitals (Google PageSpeed Insights)
+        'vitals_enabled'         => 0,
+        'vitals_interval_hours'  => 24,   // a PageSpeed run drives a real browser; hourly would burn the quota
+        'vitals_strategies'      => 'both', // mobile | desktop | both
+        'vitals_retention_days'  => 180,
+        'pagespeed_api_key'      => '',   // optional, raises the free quota
+
+        // Website screenshots
+        'screenshot_enabled'          => 0,
+        'screenshot_provider'         => 'mshots', // mshots | thumio | pagespeed
+        'screenshot_interval_minutes' => 60,       // 0 = capture on every check of the website
+        'screenshot_retention_days'   => 14,
+        'screenshot_keep_per_website' => 30,
 
         // Domains & hosting
         'domain_check_interval_hours' => 24,   // WHOIS/RDAP and hosting details are refreshed no more often than this
