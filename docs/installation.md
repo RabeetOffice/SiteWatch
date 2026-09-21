@@ -38,7 +38,7 @@ Detailed setup, configuration, monitoring behavior, and administration for the c
 | Web server | Apache with `mod_rewrite` (recommended) — `.htaccess` files protect internal directories. nginx works with equivalent `location` deny rules. |
 | Composer | Only needed to install dependencies (locally or on the server) |
 | Cron | Ability to run `php cron/monitor.php` every minute (cPanel Cron Jobs, crontab, etc.) |
-| Outbound network | HTTP/HTTPS access from the server to the monitored websites, and to the alert channels you enable: SMTP, `api.telegram.org`, `api.callmebot.com` or `graph.facebook.com`, `discord.com` |
+| Outbound network | HTTP/HTTPS access from the server to the monitored websites, and to the alert channels you enable: SMTP, `api.telegram.org`, `green-api.com` / `graph.facebook.com` / `api.callmebot.com`, `discord.com` |
 
 Front-end libraries (Bootstrap, Bootstrap Icons, Chart.js) are loaded from the jsDelivr CDN, so the administrator's browser
 needs internet access.
@@ -136,7 +136,7 @@ version 2 creates the `roles` and `domain_info` tables and gives every existing 
 | `APP_ENV` / `APP_DEBUG` | Use `production` / `false` on live servers. Debug mode shows stack traces. |
 | `APP_URL` | Public URL of SiteWatch, e.g. `https://monitor.agency.com` or `https://agency.com/sitewatch`. Used for links in alerts and for cookie scoping. |
 | `APP_TIMEZONE` | Default display timezone (can be changed in Settings). |
-| `APP_KEY` | 32 random bytes, base64. Encrypts the SMTP password and Telegram token at rest. Generate with `php -r "echo base64_encode(random_bytes(32));"`. |
+| `APP_KEY` | 32 random bytes, base64. Encrypts every stored alert credential at rest (SMTP password, Telegram token, WhatsApp keys, Discord webhook URL). Generate with `php -r "echo base64_encode(random_bytes(32));"`. |
 | `DB_*` | Database connection. |
 | `SESSION_LIFETIME` | Minutes of inactivity before an admin is signed out (default 480). |
 | `LOGIN_MAX_ATTEMPTS` / `LOGIN_LOCKOUT_MINUTES` | Login rate limiting per IP / email. |
@@ -144,7 +144,7 @@ version 2 creates the `roles` and `domain_info` tables and gives every existing 
 | `MONITOR_MAX_PER_RUN` | Maximum due websites processed by one cron run (default 300). |
 | `DB_AUTO_MIGRATE` | `false` (default): database updates for newly deployed code wait for an administrator under *System → Updates*. `true`: they are applied automatically by the first request or cron run. |
 
-Runtime settings (thresholds, SMTP, Telegram, retention, alert rules) live in the database and are edited in the UI.
+Runtime settings (thresholds, alert channels, retention, alert rules) live in the database and are edited in the UI.
 
 ---
 
@@ -247,29 +247,41 @@ Telegram failures never interrupt monitoring; they are logged in the delivery lo
 
 ## 10. WhatsApp setup
 
-WhatsApp alerts go out through one of two providers, selected under *Notifications → WhatsApp*. Enter the destination
-number in international format (`+923001234567`) for either one.
+WhatsApp alerts go out through one of three providers, selected under *Notifications → WhatsApp*. Enter the destination
+number in international format (`+923001234567`) for any of them.
 
-### CallMeBot — free, recommended
+| Provider | Cost | Setup | Reaches | Watch out for |
+|----------|------|-------|---------|---------------|
+| **GREEN-API** | Free Developer plan, no card, no expiry | Scan a QR code | 3 chats | Bridges WhatsApp Web, so the linked number carries some restriction risk |
+| **Cloud API** | Free test number, no card | Meta app + approved template | 5 verified numbers | Business-initiated alerts need a template |
+| **CallMeBot** | Free, personal use | Message a bot, wait for a key | Only the number that activated it | The activation bot frequently never replies |
 
-[CallMeBot](https://www.callmebot.com/blog/free-api-whatsapp-messages/) is a free relay that needs no account, no Meta
-business profile and no payment method. It will only ever deliver to the one number that authorised it, which suits a
-single on-call phone; it is free for personal use.
+### GREEN-API — free plan, quickest to set up
 
-1. Save the WhatsApp number `+34 623 78 95 80` to your contacts as **CallMeBot**. Check the
-   [CallMeBot page](https://www.callmebot.com/blog/free-api-whatsapp-messages/) in case that number has changed.
-2. From the phone you want alerts on, send it: `I allow callmebot to send me messages`.
-3. It replies with an API key within a couple of minutes. If nothing arrives, try again after 24 hours.
-4. *Notifications → WhatsApp*: choose **CallMeBot**, enter the number and the key, enable, save, then **Send test message**.
+Alerts are sent **from your own WhatsApp number**, so there are no message templates to get approved and no business
+profile to create. The free *Developer* plan does not expire and needs no payment method.
 
-The key is stored encrypted with `APP_KEY` and is never returned to the browser. Alerts are trimmed to 900 characters
-because CallMeBot receives them in a URL.
+1. Create an account at [green-api.com](https://green-api.com/en/) and add an instance on the **Developer** plan.
+2. Open the instance and scan the QR code with the WhatsApp the alerts should be sent *from*. Wait until the instance
+   state reads `authorized`.
+3. Copy `idInstance`, `apiTokenInstance` and `ApiUrl` from the console.
+4. *Notifications → WhatsApp*: choose **GREEN-API**, paste all three, enter the destination number, enable, save, then
+   **Send test message**.
+
+The token is stored encrypted with `APP_KEY` and never returned to the browser. `ApiUrl` is optional — newer accounts get
+a numbered host such as `https://7103.api.greenapi.com`, and anything that is not a GREEN-API host is ignored in favour
+of `https://api.green-api.com`.
+
+Two limits are worth knowing. The free plan talks to **three chats**, which is ample for alerting but means you cannot
+fan out to a whole team. And because it works through WhatsApp Web rather than an official API, link a number you would
+not mind having restricted, and keep alert volume modest.
 
 ### WhatsApp Cloud API — Meta's official platform
 
-Use this when alerts must reach a team number or go through your own business profile. The API is free to call, but
-Meta meters the messages once a number passes its free allowance, and **alerts are business-initiated**, so they fall
-outside the free 24-hour service window.
+The official route, and the one with no risk to a personal WhatsApp account. A **test number** from the Meta developer
+dashboard is free and needs no card, but delivers only to up to five recipient numbers you verify there. Moving to a
+real business number means Meta meters the messages once it passes its free allowance. Either way **alerts are
+business-initiated**, so they fall outside the free 24-hour service window.
 
 1. Create a Meta app with the WhatsApp product, and note the **phone number ID** (a numeric ID, not the phone number).
 2. Generate a **permanent** system-user access token — the temporary token in the dashboard expires after 24 hours.
@@ -279,6 +291,22 @@ outside the free 24-hour service window.
 The alert is folded onto one line before it is passed as `{{1}}`, because Meta rejects newlines, tabs and long runs of
 spaces in template parameters. Leaving the template name empty sends plain text instead, which only arrives if the
 recipient messaged your business number within the last 24 hours — that is a testing convenience, not a setup for alerts.
+
+### CallMeBot — free, but often cannot be activated
+
+[CallMeBot](https://www.callmebot.com/blog/free-api-whatsapp-messages/) is a free relay needing no account and no
+business profile, and it delivers only to the one number that authorised it.
+
+1. Save the WhatsApp number `+34 623 78 95 80` to your contacts as **CallMeBot**. Check the
+   [CallMeBot page](https://www.callmebot.com/blog/free-api-whatsapp-messages/) in case that number has changed.
+2. From the phone you want alerts on, send it: `I allow callmebot to send me messages`.
+3. It should reply with an API key within a couple of minutes.
+4. *Notifications → WhatsApp*: choose **CallMeBot**, enter the number and the key, enable, save, then send a test message.
+
+The activation bot is run as a hobby service and **regularly answers nothing at all**. Sending the phrase repeatedly does
+not help and may get you rate limited. If no key arrives, send `Recover APIKey` to the same contact; if that is silent
+too, the service is not accepting you right now and GREEN-API or the Cloud API is the way through. Alerts are trimmed to
+900 characters here because CallMeBot receives them inside a URL.
 
 ---
 
@@ -436,7 +464,11 @@ first run, send test email/Telegram, import a CSV, export CSVs, and view the das
 | Website shows *Suspected Down* but is fine in the browser | A transient failure; it clears on the next successful check. Persistent suspected-down means intermittent failures — see the check history. |
 | Test email fails with "SMTP connect() failed" | Wrong host/port/encryption, or the hosting provider blocks outbound SMTP (common on shared hosting: use port 587 STARTTLS or the provider's relay). |
 | Telegram: `chat not found` | Start a conversation with the bot first (personal) or add the bot to the group/channel; check the sign of the chat ID. |
+| WhatsApp: CallMeBot never sends an API key | Its activation bot often does not reply. Try `Recover APIKey` once, then switch to GREEN-API or the Cloud API — repeating the activation phrase will not help. |
 | WhatsApp: CallMeBot rejects the message | The key is tied to one number: confirm the destination number is the phone that sent the activation message, and that the key was copied in full. |
+| WhatsApp: GREEN-API `HTTP 401` | The instance ID or token is wrong, or the instance was deleted in the console. |
+| WhatsApp: GREEN-API `HTTP 466` | The free Developer plan covers three chats and a monthly quota; the destination is outside it, or the quota is spent. |
+| WhatsApp: GREEN-API accepted nothing | The instance is not `authorized` — re-scan the QR code in the console; a linked phone that stays offline too long drops the session. |
 | WhatsApp: `Recipient phone number not in allowed list` | A Cloud API test number only delivers to numbers you added in the Meta dashboard. For any other recipient the number must be fully registered. |
 | WhatsApp: nothing arrives through the Cloud API | Business-initiated messages need an approved template. Set the template name, or expect delivery only inside a 24-hour service window. |
 | Discord: `HTTP 404` on a webhook that used to work | The webhook was deleted or the channel was removed in Discord. Create a new webhook and paste the new URL. |

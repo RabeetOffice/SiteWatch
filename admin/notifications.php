@@ -130,7 +130,7 @@ $alertRules = [
         <form id="whatsappForm" data-section="whatsapp" novalidate>
             <section class="sw-card mb-4">
                 <div class="sw-card-header">
-                    <div><h3>WhatsApp</h3><p class="sub">Alerts on your phone, free of charge through CallMeBot</p></div>
+                    <div><h3>WhatsApp</h3><p class="sub">Alerts on your phone — three providers, all with a free option</p></div>
                     <div class="form-check form-switch m-0">
                         <input class="form-check-input" type="checkbox" role="switch" id="whatsapp_enabled" name="whatsapp_enabled" value="1"<?= $s['whatsapp_enabled'] ? ' checked' : '' ?>>
                         <label class="form-check-label fw-600" for="whatsapp_enabled">Enabled</label>
@@ -141,14 +141,45 @@ $alertRules = [
                         <div class="col-md-6">
                             <label class="form-label" for="whatsapp_provider">Delivery method</label>
                             <select class="form-select" id="whatsapp_provider" name="whatsapp_provider">
-                                <option value="callmebot"<?= $s['whatsapp_provider'] === 'callmebot' ? ' selected' : '' ?>>CallMeBot — free, no account</option>
-                                <option value="cloud_api"<?= $s['whatsapp_provider'] === 'cloud_api' ? ' selected' : '' ?>>WhatsApp Cloud API — Meta business account</option>
+                                <option value="green_api"<?= $s['whatsapp_provider'] === 'green_api' ? ' selected' : '' ?>>GREEN-API — free plan, quickest to set up</option>
+                                <option value="cloud_api"<?= $s['whatsapp_provider'] === 'cloud_api' ? ' selected' : '' ?>>WhatsApp Cloud API — Meta, official</option>
+                                <option value="callmebot"<?= $s['whatsapp_provider'] === 'callmebot' ? ' selected' : '' ?>>CallMeBot — free, activation often fails</option>
                             </select>
                         </div>
                         <div class="col-md-6">
                             <label class="form-label" for="whatsapp_phone">Destination number</label>
                             <input type="tel" class="form-control" id="whatsapp_phone" name="whatsapp_phone" value="<?= e($s['whatsapp_phone']) ?>" placeholder="+923001234567" autocomplete="off">
                             <div class="form-text">International format, including the country code.</div>
+                        </div>
+                    </div>
+
+                    <div class="mt-3" data-whatsapp-provider="green_api">
+                        <ol class="text-muted fs-13 ps-3 mb-3">
+                            <li>Create a free account at <a href="https://green-api.com/en/" target="_blank" rel="noopener">green-api.com</a> and add an instance on the <b>Developer</b> plan — it is free, needs no card and does not expire.</li>
+                            <li>Open the instance and scan the QR code with the WhatsApp you want alerts to be <em>sent from</em>. Wait until its state shows <span class="code-inline">authorized</span>.</li>
+                            <li>Copy <span class="code-inline">idInstance</span>, <span class="code-inline">apiTokenInstance</span> and <span class="code-inline">ApiUrl</span> from the console into the fields below, save, then send a test message.</li>
+                        </ol>
+                        <div class="row g-3">
+                            <div class="col-md-5">
+                                <label class="form-label" for="whatsapp_green_instance">Instance ID</label>
+                                <input type="text" class="form-control" id="whatsapp_green_instance" name="whatsapp_green_instance" value="<?= e($s['whatsapp_green_instance']) ?>" placeholder="7103123456" autocomplete="off">
+                            </div>
+                            <div class="col-md-7">
+                                <label class="form-label" for="whatsapp_green_token">API token</label>
+                                <input type="password" class="form-control" id="whatsapp_green_token" name="whatsapp_green_token" value="" placeholder="<?= $s['whatsapp_green_token_set'] ? '•••••••••• (saved — leave blank to keep)' : 'apiTokenInstance' ?>" autocomplete="new-password">
+                                <div class="form-text">Stored encrypted and never sent back to the browser.</div>
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label" for="whatsapp_green_api_url">API URL <span class="text-muted fw-normal">(optional)</span></label>
+                                <input type="url" class="form-control" id="whatsapp_green_api_url" name="whatsapp_green_api_url" value="<?= e($s['whatsapp_green_api_url']) ?>" placeholder="https://api.green-api.com" autocomplete="off">
+                                <div class="form-text">Newer accounts get a numbered host such as <span class="code-inline">https://7103.api.greenapi.com</span>. Leave blank to use the default.</div>
+                            </div>
+                        </div>
+                        <div class="form-text mt-2">
+                            Alerts are sent from your own WhatsApp number, so there are no message templates to get approved.
+                            The free plan talks to three chats, which is enough for alerting. It works through WhatsApp Web
+                            rather than an official API, so use a number you would not mind having restricted, and keep the
+                            alert volume low.
                         </div>
                     </div>
 
@@ -163,7 +194,9 @@ $alertRules = [
                         <div class="form-text">
                             Stored encrypted and never sent back to the browser. CallMeBot is free for personal use and
                             only delivers to the one number that authorised it, so it suits a single on-call phone rather
-                            than a whole team.
+                            than a whole team. Its activation bot is run as a hobby service and often never replies — if
+                            no key arrives within a few minutes, send <span class="code-inline">Recover APIKey</span> to the
+                            same contact, and if that is silent too, use GREEN-API or the Cloud API instead.
                         </div>
                     </div>
 

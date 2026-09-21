@@ -25,6 +25,7 @@ final class SettingsRepository
         'ipinfo_token',
         'whatsapp_callmebot_apikey',
         'whatsapp_cloud_token',
+        'whatsapp_green_token',
         'discord_webhook_url',
     ];
 
@@ -80,15 +81,18 @@ final class SettingsRepository
         'telegram_bot_token' => '',
         'telegram_chat_id'   => '',
 
-        // WhatsApp (callmebot: free, personal, own number only — cloud_api: Meta's official platform)
+        // WhatsApp (green_api: free plan, own number by QR — cloud_api: Meta official — callmebot: free relay)
         'whatsapp_enabled'          => 0,
-        'whatsapp_provider'         => 'callmebot', // callmebot | cloud_api
+        'whatsapp_provider'         => 'green_api', // green_api | cloud_api | callmebot
         'whatsapp_phone'            => '',          // destination number in international format
-        'whatsapp_callmebot_apikey' => '',
+        'whatsapp_green_instance'   => '',          // idInstance from the GREEN-API console
+        'whatsapp_green_token'      => '',          // apiTokenInstance
+        'whatsapp_green_api_url'    => '',          // per-account host; blank uses api.green-api.com
         'whatsapp_cloud_phone_id'   => '',
         'whatsapp_cloud_token'      => '',
         'whatsapp_cloud_template'   => '',          // approved template name; empty sends plain text
         'whatsapp_cloud_language'   => 'en_US',
+        'whatsapp_callmebot_apikey' => '',
 
         // Discord (incoming channel webhook)
         'discord_enabled'     => 0,

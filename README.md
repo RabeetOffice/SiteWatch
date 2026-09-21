@@ -56,7 +56,7 @@ Manage Administrator, Manager, Viewer, and custom roles with server-side permiss
 | **Availability** | Scheduled HTTP/HTTPS checks; DNS, connection, timeout, redirect, HTTP, and SSL failure classification. |
 | **WordPress diagnostics** | Detect critical errors, database connection failures, maintenance pages, and exposed PHP fatal errors. |
 | **Incident tracking** | Configurable consecutive-failure confirmation, recovery thresholds, incident history, and supporting diagnostics. |
-| **Alerts** | Email through SMTP, Telegram, WhatsApp (free through CallMeBot, or Meta’s Cloud API) and Discord webhooks; global and per-website alert controls, recovery notifications, and delivery logs. |
+| **Alerts** | Email through SMTP, Telegram, WhatsApp (free through GREEN-API or CallMeBot, or Meta’s Cloud API) and Discord webhooks; global and per-website alert controls, recovery notifications, and delivery logs. |
 | **SSL monitoring** | Certificate checks, expiry information, and threshold-based expiry notifications. |
 | **Domains and hosting** | RDAP/WHOIS registration details, domain expiry, nameservers, and hosting/CDN/network information where available. |
 | **Reporting** | Observed uptime, response-time trends, performance reports, date/client/site filters, CSV exports, and print layouts. |

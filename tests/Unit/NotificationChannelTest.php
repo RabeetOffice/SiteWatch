@@ -64,6 +64,37 @@ final class NotificationChannelTest extends TestCase
         self::assertSame(20, mb_strlen(WhatsAppNotifier::flatten(str_repeat('a', 500), 20)));
     }
 
+    public function testGreenChatIdUsesTheBareDigits(): void
+    {
+        self::assertSame('923001234567@c.us', WhatsAppNotifier::greenChatId('+923001234567'));
+        self::assertSame('923001234567@c.us', WhatsAppNotifier::greenChatId('923001234567'));
+    }
+
+    public function testGreenApiUrlAcceptsGreenApisOwnHosts(): void
+    {
+        self::assertSame('https://api.green-api.com', WhatsAppNotifier::greenApiUrl('https://api.green-api.com'));
+        self::assertSame('https://7103.api.greenapi.com', WhatsAppNotifier::greenApiUrl('https://7103.api.greenapi.com/'));
+        self::assertSame('https://api.greenapi.com', WhatsAppNotifier::greenApiUrl('  https://api.greenapi.com  '));
+    }
+
+    public function testGreenApiUrlFallsBackRatherThanCallingAnArbitraryHost(): void
+    {
+        // The value is administrator-supplied and drives a server-side request carrying the API token.
+        $rejected = [
+            '',
+            'https://evil.test',
+            'http://api.green-api.com',              // plain http
+            'https://green-api.com.evil.test',       // suffixed host
+            'https://evilgreen-api.com',             // look-alike without a real subdomain boundary
+            'https://api.green-api.com@evil.test',   // userinfo trick
+            'https://api.green-api.com/../../evil',  // path smuggling
+            'not a url',
+        ];
+        foreach ($rejected as $bad) {
+            self::assertSame(WhatsAppNotifier::GREEN_DEFAULT_URL, WhatsAppNotifier::greenApiUrl($bad), $bad);
+        }
+    }
+
     // ------------------------------------------------------------------
     // Discord
     // ------------------------------------------------------------------

@@ -155,12 +155,24 @@ switch ($section) {
         if ($str('whatsapp_phone') !== '' && $phone === '') {
             $v->addError('whatsapp_phone', 'Enter the number in international format, for example +923001234567.');
         }
+        $v->regex('whatsapp_green_instance', '/^\d{4,20}$/', 'The instance ID is the number shown as idInstance in the GREEN-API console.');
+        if ($str('whatsapp_green_api_url') !== '' && WhatsAppNotifier::greenApiUrl($str('whatsapp_green_api_url')) !== rtrim($str('whatsapp_green_api_url'), '/')) {
+            $v->addError('whatsapp_green_api_url', 'Use the ApiUrl from the GREEN-API console, for example https://7103.api.greenapi.com.');
+        }
         $v->max('whatsapp_cloud_phone_id', 32, 'Phone number ID')->regex('whatsapp_cloud_phone_id', '/^\d{5,32}$/', 'The phone number ID is the numeric ID from Meta, not the phone number itself.');
         $v->regex('whatsapp_cloud_template', '/^[a-z0-9_]{1,512}$/', 'A template name uses lowercase letters, numbers and underscores only.');
         $v->regex('whatsapp_cloud_language', '/^[a-z]{2,3}(_[A-Za-z]{2,4})?$/', 'Use a language code such as en_US, en or es.');
         if ($bool('whatsapp_enabled')) {
             if ($phone === '') {
                 $v->addError('whatsapp_phone', 'A destination number is required when WhatsApp alerts are enabled.');
+            }
+            if ($provider === 'green_api') {
+                if ($str('whatsapp_green_instance') === '') {
+                    $v->addError('whatsapp_green_instance', 'An instance ID is required for the GREEN-API provider.');
+                }
+                if ($str('whatsapp_green_token') === '' && $settings->getString('whatsapp_green_token') === '') {
+                    $v->addError('whatsapp_green_token', 'An API token is required for the GREEN-API provider.');
+                }
             }
             if ($provider === 'callmebot' && $str('whatsapp_callmebot_apikey') === '' && $settings->getString('whatsapp_callmebot_apikey') === '') {
                 $v->addError('whatsapp_callmebot_apikey', 'A CallMeBot API key is required when WhatsApp alerts are enabled.');
@@ -179,11 +191,13 @@ switch ($section) {
                 'whatsapp_enabled'        => $bool('whatsapp_enabled'),
                 'whatsapp_provider'       => $provider,
                 'whatsapp_phone'          => $phone,
+                'whatsapp_green_instance' => $str('whatsapp_green_instance'),
+                'whatsapp_green_api_url'  => rtrim($str('whatsapp_green_api_url'), '/'),
                 'whatsapp_cloud_phone_id' => $str('whatsapp_cloud_phone_id'),
                 'whatsapp_cloud_template' => $str('whatsapp_cloud_template'),
                 'whatsapp_cloud_language' => $str('whatsapp_cloud_language') ?: 'en_US',
             ];
-            foreach (['whatsapp_callmebot_apikey', 'whatsapp_cloud_token'] as $secret) {
+            foreach (['whatsapp_callmebot_apikey', 'whatsapp_cloud_token', 'whatsapp_green_token'] as $secret) {
                 if ($str($secret) !== '') {
                     $values[$secret] = $str($secret);
                 }

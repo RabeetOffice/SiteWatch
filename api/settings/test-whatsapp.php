@@ -23,12 +23,21 @@ $phone = $notifier->recipient();
 if ($phone === '') {
     Response::error('Save a destination number in international format before sending a test alert.', ['whatsapp_phone' => 'Required'], 422);
 }
-if ($notifier->provider() === 'callmebot') {
-    if ($settings->getString('whatsapp_callmebot_apikey') === '') {
-        Response::error('Save the CallMeBot API key before sending a test alert.', ['whatsapp_callmebot_apikey' => 'Required'], 422);
-    }
-} elseif ($settings->getString('whatsapp_cloud_phone_id') === '' || $settings->getString('whatsapp_cloud_token') === '') {
-    Response::error('Save the phone number ID and access token before sending a test alert.', [], 422);
+switch ($notifier->provider()) {
+    case 'green_api':
+        if ($settings->getString('whatsapp_green_instance') === '' || $settings->getString('whatsapp_green_token') === '') {
+            Response::error('Save the GREEN-API instance ID and API token before sending a test alert.', [], 422);
+        }
+        break;
+    case 'cloud_api':
+        if ($settings->getString('whatsapp_cloud_phone_id') === '' || $settings->getString('whatsapp_cloud_token') === '') {
+            Response::error('Save the phone number ID and access token before sending a test alert.', [], 422);
+        }
+        break;
+    default:
+        if ($settings->getString('whatsapp_callmebot_apikey') === '') {
+            Response::error('Save the CallMeBot API key before sending a test alert.', ['whatsapp_callmebot_apikey' => 'Required'], 422);
+        }
 }
 
 $manager = new NotificationManager($settings, ServiceFactory::notifications(), App::logger('notifications'));
