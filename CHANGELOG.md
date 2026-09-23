@@ -7,6 +7,23 @@ The in-app copy of these notes (System → Updates) comes from `app/Core/Release
 both files. `tests/ReleaseTest.php` fails if they disagree. A release that changes the database also gets a
 `Migrator` step. Its schema number is listed below, so the code and database versions can be compared.
 
+## [1.8.0] - 2026-09-23 · database schema 8
+
+Known vulnerabilities and protected file changes.
+
+### Added
+- Known vulnerabilities: SiteWatch checks the plugins, themes and WordPress version reported by each connected site against the free WPVulnerability database, twice a day and after every health report. The Security tab lists each issue with its severity, CVE and the version that fixes it, and vulnerable plugins are flagged on the Plugins & themes tab.
+- New alert rule "Known vulnerabilities (plugin)": one alert per site when new vulnerabilities are found. Only plugin, theme and version names are looked up, never the site.
+- SiteWatch Connector 1.2.0 watches wp-config.php and .htaccess. A change made outside WordPress (FTP, hosting panel, malware) sends a security alert; changes WordPress makes itself, such as saving permalinks or activating a caching plugin, are logged in the Activity tab. The file contents never leave the site.
+
+### Upgrading
+- Apply the database update under System → Updates. Connected sites on plugin 1.1.0 install 1.2.0 by themselves when automatic plugin updates are on.
+- The monitoring cron (`cron/monitor.php`) does the vulnerability lookups, a few per run; no new cron job is needed. The server must be able to reach `https://www.wpvulnerability.net`.
+
+### Database (schema 8)
+- New table `vulnerability_feed` (shared cache of lookups, entries unused for 7 days are removed by the daily cleanup).
+- New `connector_sites` columns: `vuln_count`, `vuln_report`, `vuln_checked_at`, `vuln_incomplete`.
+
 ## [1.7.0] - 2026-09-23 · database schema 7
 
 Plugin self-update and fewer false outage alerts.

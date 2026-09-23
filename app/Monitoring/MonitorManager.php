@@ -19,6 +19,7 @@ use App\Repositories\WebsiteRepository;
 use App\Services\ConnectorService;
 use App\Services\MaintenanceService;
 use App\Services\PerformanceService;
+use App\Services\VulnerabilityScanner;
 use Composer\CaBundle\CaBundle;
 use Psr\Log\LoggerInterface;
 use Throwable;
@@ -223,6 +224,13 @@ final class MonitorManager
 
             // Refresh stale SSL information for a few HTTPS websites each run.
             $summary['ssl_checked'] = $this->refreshStaleSsl(10);
+
+            // Known vulnerabilities in WordPress plugins and themes: a few lookups per run, on the SiteWatch side.
+            try {
+                $summary['vulnerability_scan'] = VulnerabilityScanner::create()->scanDue();
+            } catch (Throwable $e) {
+                $this->log->error('Vulnerability scan failed', ['error' => $e->getMessage()]);
+            }
 
             // Daily housekeeping when a separate cleanup cron is not configured.
             try {

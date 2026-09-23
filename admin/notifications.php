@@ -28,6 +28,7 @@ $alertRules = [
     'alert_recovery' => ['Recovery', 'One notification when a website comes back online'],
     'alert_wp_error' => ['WordPress fatal error (plugin)', 'The file, line and plugin or theme behind a fatal error, reported by the SiteWatch Connector plugin'],
     'alert_security' => ['WordPress security (plugin)', 'New administrator accounts, administrator role changes and site address changes reported by the plugin'],
+    'alert_vulnerability' => ['Known vulnerabilities (plugin)', 'Installed plugins, themes or WordPress versions with a known security vulnerability, checked daily against the WPVulnerability database'],
 ];
 ?>
 

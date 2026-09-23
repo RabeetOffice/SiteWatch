@@ -264,7 +264,7 @@ switch ($section) {
         break;
 
     case 'alerts':
-        foreach (['alert_down', 'alert_critical', 'alert_database', 'alert_http', 'alert_timeout', 'alert_ssl', 'alert_slow', 'alert_recovery', 'alert_wp_error', 'alert_security'] as $key) {
+        foreach (['alert_down', 'alert_critical', 'alert_database', 'alert_http', 'alert_timeout', 'alert_ssl', 'alert_slow', 'alert_recovery', 'alert_wp_error', 'alert_security', 'alert_vulnerability'] as $key) {
             $values[$key] = $bool($key);
         }
         break;

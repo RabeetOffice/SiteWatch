@@ -47,7 +47,9 @@ final class SiteWatch_Connector_Activity
             $queue = array();
         }
         $user = function_exists('wp_get_current_user') ? wp_get_current_user() : null;
-        $data['by'] = $user && $user->ID ? $user->user_login : (defined('DOING_CRON') && DOING_CRON ? 'WP-Cron' : (defined('WP_CLI') && WP_CLI ? 'WP-CLI' : 'system'));
+        if (!isset($data['by'])) {
+            $data['by'] = $user && $user->ID ? $user->user_login : (defined('DOING_CRON') && DOING_CRON ? 'WP-Cron' : (defined('WP_CLI') && WP_CLI ? 'WP-CLI' : 'system'));
+        }
         $queue[] = array(
             'uid'      => function_exists('wp_generate_uuid4') ? wp_generate_uuid4() : md5(uniqid('', true)),
             'type'     => (string) $type,

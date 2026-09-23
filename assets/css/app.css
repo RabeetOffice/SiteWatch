@@ -2065,6 +2065,7 @@ a.metric-item .metric-sub { color: var(--sw-muted); }
 .wp-errors { display: flex; flex-direction: column; gap: 12px; }
 .wp-error { border: 1px solid var(--sw-border); border-left: 3px solid var(--sw-danger); border-radius: var(--sw-radius-sm); padding: 10px 12px; }
 .wp-error-msg { margin: 4px 0 6px; padding: 8px 10px; background: var(--sw-sunken); border-radius: 6px; font-size: 12.5px; white-space: pre-wrap; word-break: break-word; max-height: 160px; overflow: auto; }
+.wp-subhead { font-size: 14px; font-weight: 600; margin: 0; color: var(--sw-text); }
 .wp-checks, .wp-activity, .wp-admins { list-style: none; margin: 0; padding: 0; }
 .wp-checks li, .wp-activity li { display: flex; gap: 10px; align-items: flex-start; padding: 8px 0; border-bottom: 1px solid var(--sw-border); font-size: 13.5px; }
 .wp-checks li:last-child, .wp-activity li:last-child { border-bottom: 0; }

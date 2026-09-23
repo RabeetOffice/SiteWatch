@@ -150,7 +150,7 @@ final class ConnectorRepository extends BaseRepository
     {
         return $this->db->fetchAll(
             'SELECT c.website_id, c.connected_at, c.last_seen_at, c.last_reason, c.plugin_version, c.wp_version, c.php_version,
-                    c.updates_pending, c.security_issues, w.name, w.domain, w.client_name
+                    c.updates_pending, c.security_issues, c.vuln_count, w.name, w.domain, w.client_name
              FROM connector_sites c JOIN websites w ON w.id = c.website_id
              ORDER BY w.name ASC'
         );
@@ -169,6 +169,68 @@ final class ConnectorRepository extends BaseRepository
              ORDER BY e.last_occurred_at DESC LIMIT " . max(1, $limit),
             ['since' => utc_now()->modify('-7 days')->format('Y-m-d H:i:s')]
         );
+    }
+
+    // ------------------------------------------------------------------
+    // Known vulnerabilities
+    // ------------------------------------------------------------------
+
+    /**
+     * Connected sites whose vulnerability report is missing, older than their health snapshot, older than
+     * $staleBeforeUtc, or incomplete and older than $retryBeforeUtc. Oldest first.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function dueForVulnerabilityScan(string $staleBeforeUtc, string $retryBeforeUtc, int $limit): array
+    {
+        return $this->db->fetchAll(
+            "SELECT c.website_id, c.snapshot, c.snapshot_at, c.vuln_report, c.vuln_checked_at
+             FROM connector_sites c
+             WHERE c.snapshot_at IS NOT NULL AND c.connected_at IS NOT NULL
+               AND (c.last_reason IS NULL OR c.last_reason <> 'disconnect')
+               AND (c.vuln_checked_at IS NULL OR c.vuln_checked_at < c.snapshot_at OR c.vuln_checked_at < :stale
+                    OR (c.vuln_incomplete = 1 AND c.vuln_checked_at < :retry))
+             ORDER BY c.vuln_checked_at IS NOT NULL, c.vuln_checked_at ASC LIMIT " . max(1, $limit),
+            ['stale' => $staleBeforeUtc, 'retry' => $retryBeforeUtc]
+        );
+    }
+
+    /**
+     * Cached feed answers for these (component, slug) pairs, keyed "component:slug".
+     *
+     * @param array<int, array{0: string, 1: string}> $keys
+     * @return array<string, array{data: ?string, status: string, fetched_at: string}>
+     */
+    public function feedEntries(array $keys): array
+    {
+        $rows = [];
+        foreach (array_chunk(array_values($keys), 200) as $chunk) {
+            $where = [];
+            $params = [];
+            foreach ($chunk as $i => [$component, $slug]) {
+                $where[] = "(component = :c{$i} AND slug = :s{$i})";
+                $params["c{$i}"] = $component;
+                $params["s{$i}"] = $slug;
+            }
+            foreach ($this->db->fetchAll('SELECT component, slug, data, status, fetched_at FROM vulnerability_feed WHERE ' . implode(' OR ', $where), $params) as $row) {
+                $rows[$row['component'] . ':' . $row['slug']] = $row;
+            }
+        }
+        return $rows;
+    }
+
+    public function saveFeedEntry(string $component, string $slug, ?string $json, string $status): void
+    {
+        $this->db->query(
+            'INSERT INTO vulnerability_feed (component, slug, data, status, fetched_at) VALUES (:c, :s, :d, :st, :at)
+             ON DUPLICATE KEY UPDATE data = IF(VALUES(status) = \'ok\', VALUES(data), data), status = VALUES(status), fetched_at = VALUES(fetched_at)',
+            ['c' => $component, 's' => $slug, 'd' => $json, 'st' => $status, 'at' => $this->now()]
+        );
+    }
+
+    public function purgeFeedOlderThan(string $cutoffUtc): int
+    {
+        return $this->db->delete('vulnerability_feed', 'fetched_at < :c', ['c' => $cutoffUtc]);
     }
 
     public function purgeOlderThan(string $cutoffUtc, int $batchSize = 5000, int $maxBatches = 50): int

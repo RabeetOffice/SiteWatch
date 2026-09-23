@@ -3,7 +3,7 @@
  * Plugin Name:       SiteWatch Connector
  * Plugin URI:        https://github.com/RabeetOffice/SiteWatch
  * Description:       Connects this WordPress site to SiteWatch monitoring: real causes of fatal errors (without turning on debug), a daily health and security report, and a log of plugin, theme and admin changes.
- * Version:           1.1.0
+ * Version:           1.2.0
  * Requires at least: 5.2
  * Requires PHP:      7.2
  * Author:            SiteWatch
@@ -16,7 +16,7 @@
 
 defined('ABSPATH') || exit;
 
-define('SITEWATCH_CONNECTOR_VERSION', '1.1.0');
+define('SITEWATCH_CONNECTOR_VERSION', '1.2.0');
 define('SITEWATCH_CONNECTOR_FILE', __FILE__);
 define('SITEWATCH_CONNECTOR_DIR', __DIR__);
 define('SITEWATCH_CONNECTOR_BASENAME', plugin_basename(__FILE__));
@@ -27,6 +27,7 @@ require_once __DIR__ . '/includes/class-sitewatch-connector-pulse.php';
 require_once __DIR__ . '/includes/class-sitewatch-connector-updater.php';
 require_once __DIR__ . '/includes/class-sitewatch-connector-health.php';
 require_once __DIR__ . '/includes/class-sitewatch-connector-activity.php';
+require_once __DIR__ . '/includes/class-sitewatch-connector-files.php';
 require_once __DIR__ . '/includes/class-sitewatch-connector-admin.php';
 
 /**
@@ -51,6 +52,7 @@ final class SiteWatch_Connector
         add_action('admin_init', array(__CLASS__, 'ensure_loader'));
 
         SiteWatch_Connector_Activity::init();
+        SiteWatch_Connector_Files::init();
         if (is_admin()) {
             SiteWatch_Connector_Admin::init();
         }
@@ -89,6 +91,7 @@ final class SiteWatch_Connector
         $snapshot_due = $force_snapshot || !empty($state['want_snapshot'])
             || empty($state['last_snapshot']) || (time() - (int) $state['last_snapshot']) > DAY_IN_SECONDS;
 
+        SiteWatch_Connector_Files::check();
         SiteWatch_Connector_Activity::collect_login_failures();
         $events = SiteWatch_Connector_Activity::queued(100);
         $errors = SiteWatch_Connector_Errors::pending_events();

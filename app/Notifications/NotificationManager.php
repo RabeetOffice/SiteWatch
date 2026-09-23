@@ -134,7 +134,7 @@ final class NotificationManager
             'ssl'                  => 'ssl',
             'recovery'             => 'recovery',
             'wp_error'             => 'critical',
-            'security'             => 'security',
+            'security', 'vulnerability' => 'security',
             default                => 'down',
         };
         $raw = $website['alerts_json'] ?? null;
@@ -206,6 +206,24 @@ final class NotificationManager
             return false;
         }
         return $this->dispatch($this->buildWordpressSecurityMessage($website, $event), (int) $website['id'], null);
+    }
+
+    /**
+     * Known vulnerabilities newly found in a site's plugins, themes or WordPress version (one alert per scan).
+     *
+     * @param array<string, mixed> $website
+     * @param array<int, array<string, mixed>> $items VulnerabilityScanner report items.
+     */
+    public function wordpressVulnerabilities(array $website, array $items): bool
+    {
+        if ($items === []) {
+            return false;
+        }
+        if (!$this->isAlertEnabled($website, 'vulnerability')) {
+            $this->log->log('none', AlertMessage::EVENT_WP_VULNERABILITY, 'skipped', (int) $website['id'], null, null, null, 'Vulnerability alerts are disabled.');
+            return false;
+        }
+        return $this->dispatch($this->buildWordpressVulnerabilityMessage($website, $items), (int) $website['id'], null);
     }
 
     /**
@@ -479,6 +497,13 @@ final class NotificationManager
             $rows[] = ['Changed', $data['option'] . ': "' . ($data['from'] ?? '') . '" → "' . ($data['to'] ?? '') . '"'];
         }
         $intro = 'If you did not expect this change, sign in to WordPress and check the site now: it can be a sign of a break-in.';
+        if (isset($data['file'])) {
+            $size = static fn (mixed $bytes): string => $bytes === null ? 'none' : number_format((int) $bytes) . ' bytes';
+            $rows[] = ['File', (string) $data['file'] . ' (' . (string) ($data['change'] ?? 'modified') . ')'];
+            $rows[] = ['Size', $size($data['size_before'] ?? null) . ' → ' . $size($data['size_after'] ?? null)];
+            $intro = 'The file changed outside WordPress (FTP, the hosting panel, another program or malware). If nobody on your team did this, '
+                . 'compare the file with your backup now: attackers use wp-config.php and .htaccess to hide backdoors and redirect visitors.';
+        }
         $text = "{$subject}\n\n" . $this->textRows($rows) . "\n\n{$intro}\n\nOpen website details: " . $this->detailsUrl((int) $website['id']);
         $html = $this->htmlLayout($subject, 'Security', 'warning', $rows, $this->detailsUrl((int) $website['id']), 'Open Website Details', e($intro));
         $telegram = "🛡️ <b>Security alert</b>\n\n<b>" . self::tg($name) . "</b>\n" . self::tg($title)
@@ -488,6 +513,62 @@ final class NotificationManager
         $discord = $this->discordPayload($subject, '🛡️ ' . $title, 'warning', $rows, (string) $website['url'], (int) $website['id']);
 
         return new AlertMessage(AlertMessage::EVENT_WP_SECURITY, $subject, $text, $html, $telegram, (int) $website['id'], null, $whatsapp, $discord);
+    }
+
+    /**
+     * @param array<string, mixed> $website
+     * @param array<int, array<string, mixed>> $items
+     */
+    public function buildWordpressVulnerabilityMessage(array $website, array $items): AlertMessage
+    {
+        $name = (string) $website['name'];
+        $count = count($items);
+        $subject = sprintf('Known vulnerabilit%s — %s (%d)', $count === 1 ? 'y' : 'ies', $name, $count);
+        $describe = static function (array $item): string {
+            $level = ($item['severity'] ?? null) !== null ? ucfirst((string) $item['severity']) . (isset($item['score']) ? ' ' . $item['score'] : '') : 'Severity unknown';
+            $fix = $item['fixed_in'] !== null ? 'fixed in ' . $item['fixed_in']
+                : (!empty($item['unfixed']) ? 'no fix yet' : ($item['component'] === 'core' ? 'update WordPress' : 'fixed version unknown'));
+            return $item['title'] . ' (' . $level . '; ' . $fix . ($item['active'] === false ? '; inactive' : '') . ')';
+        };
+        $label = static fn (array $item): string => $item['name'] . ' ' . $item['version'];
+
+        $rows = [['Website', $name], ['Client', (string) ($website['client_name'] ?: '—')]];
+        foreach (array_slice($items, 0, 8) as $item) {
+            $rows[] = [$label($item), $describe($item)];
+        }
+        if ($count > 8) {
+            $rows[] = ['More', sprintf('%d more on the website page', $count - 8)];
+        }
+        $intro = 'Update the listed plugins, themes or WordPress, or remove them if no fix exists. Source: WPVulnerability database.';
+        $text = "{$subject}
+
+" . $this->textRows($rows) . "
+
+{$intro}
+
+Open website details: " . $this->detailsUrl((int) $website['id']);
+        $html = $this->htmlLayout($subject, 'Vulnerabilities', 'warning', $rows, $this->detailsUrl((int) $website['id']), 'Open Website Details', e($intro));
+        $lines = array_map(static fn (array $item): string => '• ' . $label($item) . ': ' . $describe($item), array_slice($items, 0, 8));
+        $more = $count > 8 ? "
+" . sprintf('and %d more', $count - 8) : '';
+        $telegram = "🔓 <b>Known vulnerabilities</b>
+
+<b>" . self::tg($name) . "</b>
+" . self::tg(implode("
+", $lines) . $more) . "
+
+" . self::tg($intro);
+        $whatsapp = "🔓 *Known vulnerabilities*
+
+*" . self::wa($name) . "*
+" . self::wa(implode("
+", $lines) . $more) . "
+
+" . self::wa($intro);
+        $discord = $this->discordPayload($subject, '🔓 ' . str_limit(implode("
+", $lines), 1500), 'warning', array_slice($rows, 0, 10), (string) $website['url'], (int) $website['id']);
+
+        return new AlertMessage(AlertMessage::EVENT_WP_VULNERABILITY, $subject, $text, $html, $telegram, (int) $website['id'], null, $whatsapp, $discord);
     }
 
     public function buildTestMessage(string $channel): AlertMessage

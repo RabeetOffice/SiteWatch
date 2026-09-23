@@ -5,7 +5,7 @@
 
 defined('WP_UNINSTALL_PLUGIN') || exit;
 
-foreach (array('sitewatch_connector', 'sitewatch_connector_state', 'sitewatch_connector_queue', 'sitewatch_connector_logins', 'sitewatch_connector_errors') as $option) {
+foreach (array('sitewatch_connector', 'sitewatch_connector_state', 'sitewatch_connector_queue', 'sitewatch_connector_logins', 'sitewatch_connector_errors', 'sitewatch_connector_files') as $option) {
     delete_option($option);
 }
 delete_metadata('user', 0, 'sitewatch_last_login', '', true);

@@ -72,6 +72,7 @@ final class SettingsRepository
         // SiteWatch Connector: sites install new plugin versions from this server by themselves.
         'connector_auto_update' => 1,
         'alert_security' => 1,
+        'alert_vulnerability' => 1,
 
         // Email
         'email_enabled'           => 0,

@@ -18,7 +18,7 @@ namespace App\Core;
  */
 final class Release
 {
-    public const VERSION = '1.7.0';
+    public const VERSION = '1.8.0';
 
     /**
      * Newest first. 'schema' is the database schema version the release requires (null: unchanged).
@@ -26,6 +26,16 @@ final class Release
      * @var array<string, array{date: string, title: string, schema: ?int, added?: array<int, string>, improved?: array<int, string>, fixed?: array<int, string>}>
      */
     public const NOTES = [
+        '1.8.0' => [
+            'date'     => '2026-09-23',
+            'title'    => 'Known vulnerabilities and protected file changes',
+            'schema'   => 8,
+            'added'    => [
+                'Known vulnerabilities: SiteWatch checks the plugins, themes and WordPress version reported by each connected site against the free WPVulnerability database, twice a day and after every health report. The Security tab lists each issue with its severity, CVE and the version that fixes it, and vulnerable plugins are flagged on the Plugins & themes tab.',
+                'New alert rule "Known vulnerabilities (plugin)": one alert per site when new vulnerabilities are found. Only plugin, theme and version names are looked up, never the site.',
+                'SiteWatch Connector 1.2.0 watches wp-config.php and .htaccess. A change made outside WordPress (FTP, hosting panel, malware) sends a security alert; changes WordPress makes itself, such as saving permalinks or activating a caching plugin, are logged in the Activity tab. The file contents never leave the site.',
+            ],
+        ],
         '1.7.0' => [
             'date'     => '2026-09-23',
             'title'    => 'Plugin self-update and fewer false outage alerts',

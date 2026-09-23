@@ -163,6 +163,12 @@ WordPress and pushes signed reports to SiteWatch.
   tasks, modified core files, PHP files in uploads and risky settings.
 - **Change log**: plugin/theme/core changes, administrator sign-ins, failed sign-in counts. New administrators and
   site address changes are alerted immediately.
+- **Known vulnerabilities**: SiteWatch matches each site's plugins, themes and WordPress version against the free
+  [WPVulnerability](https://www.wpvulnerability.com/) database (a few lookups per monitoring run, cached for a day;
+  only component names and versions are sent, never the site). The server needs outbound HTTPS to
+  `www.wpvulnerability.net`.
+- **File watch**: changes to `wp-config.php` and `.htaccess` made outside WordPress are alerted; the contents never
+  leave the site.
 
 Set up per website: open the website → **WordPress** → **Download plugin**, install and activate it in WordPress,
 click **Create connection key** in SiteWatch and paste the key under **Settings → SiteWatch** in WordPress.
@@ -170,7 +176,8 @@ click **Create connection key** in SiteWatch and paste the key under **Settings 
 Reports go from WordPress to `api/connector/ingest.php` every 5 minutes (WP-Cron), signed with HMAC-SHA256 using a
 per-site secret stored encrypted with `APP_KEY`; SiteWatch never connects to the WordPress site. The plugin needs
 PHP 7.2+ and WordPress 5.2+. Its version is set in `wordpress-plugin/sitewatch-connector/sitewatch-connector.php`;
-SiteWatch shows an update notice when a site runs an older copy.
+SiteWatch shows an update notice when a site runs an older copy. Architecture, protocol, test setup and roadmap:
+[docs/sitewatch-connector.md](docs/sitewatch-connector.md).
 
 ## Configuration and deployment
 

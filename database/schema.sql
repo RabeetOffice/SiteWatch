@@ -387,6 +387,10 @@ CREATE TABLE IF NOT EXISTS `connector_sites` (
   `want_update`     TINYINT(1)   NOT NULL DEFAULT 0 COMMENT '"Update now" requested in SiteWatch',
   `update_result`   VARCHAR(255) NULL COMMENT 'last self-update attempt reported by the plugin',
   `update_at`       DATETIME     NULL,
+  `vuln_count`      INT UNSIGNED NULL COMMENT 'known vulnerabilities in installed plugins, themes and WordPress',
+  `vuln_report`     MEDIUMTEXT   NULL COMMENT 'latest vulnerability report (JSON)',
+  `vuln_checked_at` DATETIME     NULL,
+  `vuln_incomplete` TINYINT(1)   NOT NULL DEFAULT 0 COMMENT 'some components could not be looked up',
   PRIMARY KEY (`website_id`),
   KEY `idx_connector_seen` (`last_seen_at`),
   CONSTRAINT `fk_connector_website` FOREIGN KEY (`website_id`) REFERENCES `websites` (`id`) ON DELETE CASCADE
@@ -413,4 +417,15 @@ CREATE TABLE IF NOT EXISTS `connector_events` (
   KEY `idx_connector_events_fp` (`website_id`, `fingerprint`),
   KEY `idx_connector_events_received` (`received_at`),
   CONSTRAINT `fk_connector_events_website` FOREIGN KEY (`website_id`) REFERENCES `websites` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Known vulnerabilities per plugin slug, theme slug or WordPress version (WPVulnerability API), shared by all sites.
+CREATE TABLE IF NOT EXISTS `vulnerability_feed` (
+  `component`  VARCHAR(10)  NOT NULL COMMENT 'plugin | theme | core',
+  `slug`       VARCHAR(191) NOT NULL COMMENT 'plugin or theme slug, or the WordPress version',
+  `data`       MEDIUMTEXT   NULL COMMENT 'normalised answer (JSON); kept from the last successful lookup',
+  `status`     VARCHAR(10)  NOT NULL COMMENT 'ok | error',
+  `fetched_at` DATETIME     NOT NULL,
+  PRIMARY KEY (`component`, `slug`),
+  KEY `idx_vulnerability_feed_fetched` (`fetched_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

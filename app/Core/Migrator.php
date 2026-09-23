@@ -24,7 +24,7 @@ use RuntimeException;
  */
 final class Migrator
 {
-    public const VERSION = 7;
+    public const VERSION = 8;
     /** Version of databases created before schema versions were recorded. */
     public const BASELINE = 1;
     public const SETTING = 'schema_version';
@@ -82,6 +82,14 @@ final class Migrator
             'changes' => [
                 'Adds connector_sites columns for what WordPress itself saw: the last page served, the last server error and the last SiteWatch check that reached it.',
                 'Adds connector_sites columns for plugin self-updates: "Update now" requests and the result of the last attempt.',
+            ],
+        ],
+        8 => [
+            'release' => '1.8.0',
+            'title'   => 'Known vulnerabilities in WordPress plugins and themes',
+            'changes' => [
+                'Creates the vulnerability_feed table, a shared cache of known vulnerabilities per plugin, theme and WordPress version.',
+                'Adds connector_sites columns for the latest vulnerability report of each site (count, details, time of the last check).',
             ],
         ],
     ];
@@ -194,7 +202,27 @@ final class Migrator
             5 => fn () => $this->userAvatars(),
             6 => fn () => $this->connectorTables(),
             7 => fn () => $this->connectorPulseAndUpdates(),
+            8 => fn () => $this->connectorVulnerabilities(),
         ];
+    }
+
+    /**
+     * v8 (1.8.0): known vulnerabilities in the plugins, themes and WordPress version each site reports.
+     */
+    private function connectorVulnerabilities(): void
+    {
+        $this->createTable('vulnerability_feed');
+        $columns = [
+            'vuln_count'      => "INT UNSIGNED NULL COMMENT 'known vulnerabilities in installed plugins, themes and WordPress' AFTER `update_at`",
+            'vuln_report'     => "MEDIUMTEXT NULL COMMENT 'latest vulnerability report (JSON)' AFTER `vuln_count`",
+            'vuln_checked_at' => 'DATETIME NULL AFTER `vuln_report`',
+            'vuln_incomplete' => "TINYINT(1) NOT NULL DEFAULT 0 COMMENT 'some components could not be looked up' AFTER `vuln_checked_at`",
+        ];
+        foreach ($columns as $column => $definition) {
+            if (!$this->columnExists('connector_sites', $column)) {
+                $this->db->pdo()->exec("ALTER TABLE `connector_sites` ADD COLUMN `{$column}` {$definition}");
+            }
+        }
     }
 
     /**

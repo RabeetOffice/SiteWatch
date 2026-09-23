@@ -230,6 +230,7 @@ final class SiteWatch_Connector_Admin
                 <li>A daily health report: WordPress, PHP and database versions, pending updates, installed plugins and themes, scheduled tasks and security checks.</li>
                 <li>Changes: plugins and themes installed, updated or switched, WordPress updates, administrator sign-ins, new administrators and changes to the site address or registration settings.</li>
                 <li>The number of failed sign-ins and the IP addresses they came from.</li>
+                <li>Whether wp-config.php or .htaccess changed: size, time and a short fingerprint, never the contents.</li>
             </ul>
             <p>Never sent: passwords, content, orders, customer or visitor data.</p>
         </div>

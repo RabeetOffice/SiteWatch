@@ -4,7 +4,7 @@ Tags: monitoring, uptime, errors, security, health
 Requires at least: 5.2
 Tested up to: 6.8
 Requires PHP: 7.2
-Stable tag: 1.1.0
+Stable tag: 1.2.0
 License: GPLv2 or later
 
 Connects a WordPress site to SiteWatch monitoring: the real cause of fatal errors, a daily health and security report, and a change log.
@@ -17,6 +17,7 @@ SiteWatch checks your sites from the outside. This plugin adds the inside view:
 * **Daily health report**: WordPress, PHP and database versions, pending core/plugin/theme updates, installed plugins and themes, database size, scheduled task health.
 * **Security checks**: modified WordPress core files, PHP files in the uploads folder, open registration with a privileged role, the "admin" username, file editing, debug output and more.
 * **Change log**: plugins and themes installed, updated, activated or switched, WordPress updates, administrator sign-ins, new administrators, failed sign-in counts and changes to the site address.
+* **File watch**: an alert when wp-config.php or .htaccess changes outside WordPress (FTP, hosting panel, malware). Only a fingerprint is kept; the contents never leave the site.
 
 Everything is pushed from this site to your SiteWatch server over HTTPS and signed with a secret unique to this site. The plugin opens no public endpoints.
 
@@ -28,6 +29,9 @@ Everything is pushed from this site to your SiteWatch server over HTTPS and sign
 4. In WordPress, go to Settings → SiteWatch, paste the key and click **Connect**.
 
 == Changelog ==
+
+= 1.2.0 =
+* Watches wp-config.php and .htaccess. Changes made outside WordPress are reported as critical; changes made while WordPress activates or updates plugins or writes its rewrite rules are logged with who did it. Only size, time and a short fingerprint are sent, never the contents.
 
 = 1.1.0 =
 * Updates itself from your SiteWatch server (with automatic rollback on WordPress 6.6+).

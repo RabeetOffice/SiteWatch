@@ -72,6 +72,8 @@ final class ConnectorService
         'setting_changed'    => 'Setting changed',
         'connector_updated'  => 'Plugin self-update',
         'connector_update_failed' => 'Plugin self-update failed',
+        'vulnerability'      => 'Known vulnerability',
+        'file_changed'       => 'Protected file changed',
     ];
 
     public function __construct(
@@ -690,8 +692,35 @@ final class ConnectorService
                 'probe_status' => isset($row['probe_status']) ? (int) $row['probe_status'] : null,
             ],
             'snapshot'        => is_array($snapshot) ? $snapshot : null,
+            'vulnerabilities' => self::presentVulnerabilities($row),
             'errors'          => $errors,
             'activity'        => $activity,
+        ];
+    }
+
+    /**
+     * The latest vulnerability report for the website page, or null before the first check.
+     *
+     * @param array<string, mixed>|null $row connector_sites row
+     * @return array<string, mixed>|null
+     */
+    public static function presentVulnerabilities(?array $row): ?array
+    {
+        $report = $row !== null && !empty($row['vuln_report']) ? json_decode((string) $row['vuln_report'], true) : null;
+        if (!is_array($report)) {
+            return null;
+        }
+        return [
+            'count'         => count($report['items'] ?? []),
+            'items'         => array_values((array) ($report['items'] ?? [])),
+            'closed'        => array_values((array) ($report['closed'] ?? [])),
+            'components'    => (int) ($report['components'] ?? 0),
+            'unavailable'   => (int) ($report['unavailable'] ?? 0),
+            'source'        => (string) ($report['source'] ?? VulnerabilityFeed::SOURCE_NAME),
+            'source_url'    => (string) ($report['source_url'] ?? VulnerabilityFeed::SOURCE_URL),
+            'checked_at'    => $row['vuln_checked_at'] ?? null,
+            'checked_label' => time_ago($row['vuln_checked_at'] ?? null),
+            'stale'         => !empty($row['snapshot_at']) && !empty($row['vuln_checked_at']) && $row['vuln_checked_at'] < $row['snapshot_at'],
         ];
     }
 
@@ -748,6 +777,7 @@ final class ConnectorService
                 'plugin_version' => $row['plugin_version'],
                 'updates'        => $row['updates_pending'] !== null ? (int) $row['updates_pending'] : null,
                 'issues'         => $row['security_issues'] !== null ? (int) $row['security_issues'] : null,
+                'vulnerabilities' => isset($row['vuln_count']) ? (int) $row['vuln_count'] : null,
                 'url'            => base_url('admin/website-details.php?id=' . (int) $row['website_id']) . '#wordpressSection',
             ];
         }
@@ -771,6 +801,7 @@ final class ConnectorService
 
     public function purge(): int
     {
+        $this->repo->purgeFeedOlderThan(utc_now()->modify('-' . VulnerabilityScanner::FEED_RETENTION_DAYS . ' days')->format('Y-m-d H:i:s'));
         return $this->repo->purgeOlderThan(utc_now()->modify('-' . self::RETENTION_DAYS . ' days')->format('Y-m-d H:i:s'));
     }
 

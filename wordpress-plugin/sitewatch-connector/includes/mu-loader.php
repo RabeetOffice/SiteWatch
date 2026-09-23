@@ -2,7 +2,7 @@
 /**
  * Plugin Name: SiteWatch Connector (early error capture)
  * Description: Starts SiteWatch Connector's fatal error capture before other plugins load. Added and removed automatically by the SiteWatch Connector plugin; delete it only if you have removed that plugin.
- * Version:     1.1.0
+ * Version:     1.2.0
  * Author:      SiteWatch
  */
 

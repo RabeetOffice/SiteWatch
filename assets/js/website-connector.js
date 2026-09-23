@@ -10,6 +10,7 @@
     const SEVERITY_ICONS = {
         info: 'bi-dot text-muted', warning: 'bi-exclamation-triangle text-warning', critical: 'bi-shield-exclamation text-danger',
     };
+    const VULN_TONES = { critical: 'danger', high: 'danger', medium: 'warning', low: 'neutral', none: 'neutral' };
     const TABS = [
         ['errors', 'Errors'], ['security', 'Security'], ['updates', 'Updates'], ['plugins', 'Plugins & themes'],
         ['activity', 'Activity'], ['environment', 'Environment'],
@@ -101,6 +102,7 @@
         const env = snap.environment || {};
         const updates = data.updates_pending;
         const issues = data.security_issues;
+        const vulns = data.vulnerabilities ? data.vulnerabilities.count : null;
         const tile = function (label, value, tone, help) {
             return '<div class="kv-tile"' + (help ? ' title="' + esc(help) + '"' : '') + '><div class="kv-tile-label">' + esc(label) + '</div>' +
                 '<div class="kv-tile-value' + (tone ? ' text-' + tone : '') + '">' + value + '</div></div>';
@@ -112,6 +114,7 @@
             tile('Last report', esc(data.last_seen_at ? SW.fmt.timeAgo(data.last_seen_at) : 'Never'), data.state === 'stale' ? 'warning' : '') +
             tile('Updates', updates === null ? '—' : String(updates), updates ? 'warning' : 'success', 'Core, plugin and theme updates waiting') +
             tile('Security', issues === null ? '—' : (issues ? issues + ' to fix' : 'OK'), issues ? 'danger' : 'success', 'Security checks in warning or critical state') +
+            tile('Vulnerabilities', vulns === null ? '—' : (vulns ? String(vulns) : 'None known'), vulns ? 'danger' : (vulns === null ? '' : 'success'), 'Known vulnerabilities in the installed plugins, themes and WordPress version') +
             '</div>';
     }
 
@@ -148,11 +151,52 @@
         }).join('') + '</div>';
     }
 
+    /** Known vulnerabilities from the latest scan (done by SiteWatch against the WPVulnerability database). */
+    function vulnerabilities() {
+        const v = data.vulnerabilities;
+        let html = '<div class="d-flex flex-wrap align-items-baseline gap-2 mb-2"><h4 class="wp-subhead">Known vulnerabilities</h4><span class="fs-12 text-muted">' +
+            (v ? 'Checked ' + esc(v.checked_label) + ' against the <a href="' + esc(v.source_url) + '" target="_blank" rel="noopener">' + esc(v.source) + '</a> database' +
+                (v.stale ? ' · checking the new health report' : '')
+                : 'Not checked yet: the first check runs within a few minutes of the health report') + '</span></div>';
+        if (!v) return html;
+        if (v.unavailable) {
+            html += '<p class="fs-12 text-warning mb-2"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i> ' + esc(v.unavailable) + ' of ' + esc(v.components) +
+                ' components could not be looked up; they are retried within the hour.</p>';
+        }
+        if (!v.items.length) {
+            html += '<p class="fs-13 text-success mb-2"><i class="bi bi-shield-check" aria-hidden="true"></i> No known vulnerabilities in the ' + esc(v.components) +
+                ' installed plugins, themes and WordPress version.</p>';
+        } else {
+            html += '<div class="sw-table-wrap mb-2"><table class="sw-table compact"><thead><tr><th>Component</th><th>Vulnerability</th><th>Severity</th><th>Fix</th></tr></thead><tbody>' +
+                v.items.map(function (i) {
+                    const kind = i.component === 'core' ? 'WordPress core' : (i.component === 'theme' ? 'Theme' : 'Plugin');
+                    const fix = i.fixed_in ? 'Update to ' + esc(i.fixed_in) + ' or later'
+                        : i.unfixed ? '<span class="text-danger">No fix yet: remove or replace it</span>'
+                        : i.component === 'core' ? 'Update WordPress' : 'Update to the latest version';
+                    const severity = i.severity
+                        ? '<span class="sw-pill tone-' + (VULN_TONES[i.severity] || 'neutral') + '">' + esc(i.severity.charAt(0).toUpperCase() + i.severity.slice(1)) +
+                            (i.score !== null && i.score !== undefined ? ' ' + esc(i.score) : '') + '</span>'
+                        : '<span class="text-faint">Unknown</span>';
+                    return '<tr><td><div class="fw-600">' + esc(i.name) + ' <span class="mono fw-normal">' + esc(i.version) + '</span></div>' +
+                        '<div class="fs-12 text-muted">' + kind + (i.active === false ? ' · inactive' : '') + (i.update ? ' · ' + esc(i.update) + ' available' : '') + '</div></td>' +
+                        '<td>' + (i.link ? '<a href="' + esc(i.link) + '" target="_blank" rel="noopener">' + esc(i.title) + '</a>' : esc(i.title)) +
+                        (i.cve ? '<div class="fs-12 text-muted mono">' + esc(i.cve) + '</div>' : '') + '</td>' +
+                        '<td>' + severity + '</td><td class="fs-13">' + fix + '</td></tr>';
+                }).join('') + '</tbody></table></div>';
+        }
+        if (v.closed.length) {
+            html += '<p class="fs-12 text-muted mb-2"><i class="bi bi-archive" aria-hidden="true"></i> Closed on WordPress.org, so no more updates: ' +
+                v.closed.map(function (c) { return '<b>' + esc(c.name) + '</b>' + (c.reason ? ' (' + esc(c.reason) + ')' : ''); }).join(', ') + '</p>';
+        }
+        return html + '<p class="fs-12 text-faint mb-0">Matched by plugin and theme folder name, so a custom plugin that shares its folder name with a WordPress.org plugin can show that plugin\'s vulnerabilities.</p>';
+    }
+
     function tabSecurity() {
         const checks = (data.snapshot && data.snapshot.security) || [];
-        if (!checks.length) return SW.emptyState('bi-shield', 'No security report yet.', 'It arrives with the plugin\'s first health report.');
+        const vulnHtml = '<section class="mb-4">' + vulnerabilities() + '</section>';
+        if (!checks.length) return vulnHtml + SW.emptyState('bi-shield', 'No security report yet.', 'It arrives with the plugin\'s first health report.');
         const order = { critical: 0, warning: 1, info: 2, ok: 3 };
-        return '<ul class="wp-checks">' + checks.slice().sort(function (a, b) { return order[a.status] - order[b.status]; }).map(function (c) {
+        return vulnHtml + '<h4 class="wp-subhead mb-2">Security checks</h4><ul class="wp-checks">' + checks.slice().sort(function (a, b) { return order[a.status] - order[b.status]; }).map(function (c) {
             return '<li><i class="bi ' + (CHECK_ICONS[c.status] || CHECK_ICONS.info) + '" aria-hidden="true"></i><div><div class="fw-600">' + esc(c.label) +
                 '<span class="visually-hidden"> (' + esc(c.status) + ')</span></div>' + (c.detail ? '<div class="fs-12 text-muted">' + esc(c.detail) + '</div>' : '') + '</div></li>';
         }).join('') + '</ul>';
@@ -176,16 +220,24 @@
         const plugins = snap.plugins || [];
         const themes = snap.themes || [];
         if (!plugins.length && !themes.length) return SW.emptyState('bi-plug', 'No plugin list yet.', '');
-        const row = function (name, version, state, update, auto) {
-            return '<tr><td class="fw-600">' + esc(name) + '</td><td class="mono">' + esc(version) + '</td><td>' + state + '</td><td>' +
+        const vulnerable = {};
+        ((data.vulnerabilities && data.vulnerabilities.items) || []).forEach(function (i) {
+            vulnerable[i.component + ':' + i.slug] = (vulnerable[i.component + ':' + i.slug] || 0) + 1;
+        });
+        const flag = function (component, slug) {
+            const n = vulnerable[component + ':' + String(slug || '').toLowerCase()];
+            return n ? ' <i class="bi bi-shield-exclamation text-danger" title="' + n + ' known vulnerabilit' + (n === 1 ? 'y' : 'ies') + ': see the Security tab"></i>' : '';
+        };
+        const row = function (name, version, state, update, auto, slug) {
+            return '<tr><td class="fw-600">' + esc(name) + flag('plugin', slug) + '</td><td class="mono">' + esc(version) + '</td><td>' + state + '</td><td>' +
                 (update ? '<span class="text-warning mono">' + esc(update) + '</span>' : '<span class="text-faint">—</span>') + '</td><td>' + (auto ? 'On' : '<span class="text-faint">Off</span>') + '</td></tr>';
         };
         return '<div class="sw-table-wrap"><table class="sw-table compact"><thead><tr><th>Plugin</th><th>Version</th><th>State</th><th>Update</th><th>Auto-update</th></tr></thead><tbody>' +
-            plugins.map(function (p) { return row(p.name, p.version, p.active ? '<span class="sw-pill tone-success">Active</span>' : '<span class="sw-pill tone-neutral">Inactive</span>', p.update, p.auto_update); }).join('') +
+            plugins.map(function (p) { return row(p.name, p.version, p.active ? '<span class="sw-pill tone-success">Active</span>' : '<span class="sw-pill tone-neutral">Inactive</span>', p.update, p.auto_update, p.slug); }).join('') +
             '</tbody></table></div>' +
             '<div class="sw-table-wrap mt-3"><table class="sw-table compact"><thead><tr><th>Theme</th><th>Version</th><th>State</th><th>Update</th></tr></thead><tbody>' +
             themes.map(function (t) {
-                return '<tr><td class="fw-600">' + esc(t.name) + '</td><td class="mono">' + esc(t.version) + '</td><td>' +
+                return '<tr><td class="fw-600">' + esc(t.name) + flag('theme', t.slug) + '</td><td class="mono">' + esc(t.version) + '</td><td>' +
                     (t.active ? '<span class="sw-pill tone-success">Active</span>' : (t.parent ? '<span class="sw-pill tone-info">Parent theme</span>' : '<span class="sw-pill tone-neutral">Installed</span>')) +
                     '</td><td>' + (t.update ? '<span class="text-warning mono">' + esc(t.update) + '</span>' : '<span class="text-faint">—</span>') + '</td></tr>';
             }).join('') + '</tbody></table></div>';
@@ -198,6 +250,8 @@
             let extra = '';
             if (a.type === 'login_failures' && d.ips) {
                 extra = Object.keys(d.ips).slice(0, 5).map(function (ip) { return esc(ip) + ' (' + esc(d.ips[ip]) + ')'; }).join(', ');
+            } else if (a.type === 'file_changed') {
+                extra = esc(d.change) + (d.size_before !== null && d.size_after !== null ? ', ' + esc(d.size_before) + ' → ' + esc(d.size_after) + ' bytes' : '');
             } else if (a.type === 'setting_changed') {
                 extra = esc(d.option) + ': “' + esc(d.from) + '” → “' + esc(d.to) + '”';
             } else if (d.ip) {
@@ -279,7 +333,7 @@
 
         const counts = {
             errors: data.errors.length,
-            security: data.security_issues || 0,
+            security: (data.security_issues || 0) + (data.vulnerabilities ? data.vulnerabilities.count : 0),
             updates: data.updates_pending || 0,
         };
         html += '<div class="segmented mb-3 wp-tabs" role="tablist" aria-label="WordPress details">' + TABS.map(function (t) {
