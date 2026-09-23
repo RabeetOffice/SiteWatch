@@ -107,6 +107,7 @@
                 (this.can.remote
                     ? '<select class="form-select form-select-sm" data-bulk-remote aria-label="WordPress remote action for selected websites" style="width:auto">' +
                       '<option value="">WordPress…</option><option value="clear_cache">Clear caches</option><option value="update_plugins">Install plugin updates</option>' +
+                      '<option value="update_themes">Install theme updates</option><option value="backup">Start a backup (UpdraftPlus or BackWPup)</option>' +
                       '<option value="maintenance:30">Maintenance page on (30 min)</option><option value="maintenance:60">Maintenance page on (1 hour)</option>' +
                       '<option value="maintenance:240">Maintenance page on (4 hours)</option><option value="maintenance:off">Maintenance page off</option></select>'
                     : '') +
@@ -892,6 +893,12 @@
             args = { mode: 'on', minutes: parseInt(parts[1], 10) };
             confirmOpts = { title: 'Show a maintenance page on ' + n + '?', confirmText: 'Switch on',
                 message: 'Visitors see "Briefly unavailable for scheduled maintenance" for ' + (args.minutes >= 60 ? args.minutes / 60 + ' hour(s)' : args.minutes + ' minutes') + '; signed-in editors see the site. SiteWatch holds maintenance alerts meanwhile. It ends by itself.' };
+        } else if (action === 'update_themes') {
+            confirmOpts = { title: 'Install theme updates on ' + n + '?', confirmText: 'Update themes', danger: false, icon: 'bi-arrow-up-circle',
+                message: 'Each site installs the theme updates listed in its last health report from WordPress.org. An updated active theme can change how a site looks.' };
+        } else if (action === 'backup') {
+            confirmOpts = { title: 'Start a backup on ' + n + '?', confirmText: 'Back up', danger: false, icon: 'bi-cloud-arrow-up',
+                message: 'Sites with UpdraftPlus or BackWPup back up files and database to wherever that plugin is set to store them. Backups use server resources for a few minutes.' };
         } else if (action === 'update_plugins') {
             confirmOpts = { title: 'Install plugin updates on ' + n + '?', confirmText: 'Update plugins', danger: false, icon: 'bi-arrow-up-circle',
                 message: 'Each site installs the plugin updates listed in its last health report (up to 20) from WordPress.org, with WordPress’s own updater. A broken update is rolled back on WordPress 6.6+.' };

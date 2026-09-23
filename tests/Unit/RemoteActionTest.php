@@ -91,6 +91,34 @@ final class RemoteActionTest extends TestCase
         }
     }
 
+    public function testThemeCoreAndBackupRequestsFollowTheSnapshot(): void
+    {
+        $snapshot = [
+            'updates' => ['core' => ['current' => '7.1.1', 'latest' => '7.1.2']],
+            'themes'  => [['slug' => 'twentytwentythree', 'name' => 'Twenty Twenty-Three', 'update' => '1.7'], ['slug' => 'twentytwentyfive', 'name' => 'Twenty Twenty-Five', 'update' => null]],
+            'backups' => ['plugin' => 'UpdraftPlus', 'last_at' => null],
+        ];
+        self::assertSame(['themes' => ['twentytwentythree']], RemoteActionService::validateArgs('update_themes', ['themes' => ['twentytwentythree']], $snapshot));
+        self::assertSame(['twentytwentythree'], RemoteActionService::pendingThemeUpdates($snapshot));
+        self::assertSame(['version' => '7.1.2'], RemoteActionService::validateArgs('update_core', ['version' => '7.1.2'], $snapshot));
+        self::assertSame([], RemoteActionService::validateArgs('backup', [], $snapshot));
+
+        foreach ([
+            ['update_themes', ['themes' => ['twentytwentyfive']], $snapshot],              // no update
+            ['update_themes', ['themes' => ['../../evil']], $snapshot],                    // unknown
+            ['update_core', ['version' => '8.0'], $snapshot],                              // not the offered version
+            ['update_core', ['version' => '7.1.2'], ['updates' => ['core' => ['latest' => null]]]], // nothing offered
+            ['backup', [], ['backups' => null]],                                           // no UpdraftPlus
+        ] as [$action, $args, $snap]) {
+            try {
+                RemoteActionService::validateArgs($action, $args, $snap);
+                self::fail("Accepted {$action} " . json_encode($args));
+            } catch (RuntimeException) {
+                $this->addToAssertionCount(1);
+            }
+        }
+    }
+
     public function testBulkUpdatesUseEachSitesOwnPendingUpdates(): void
     {
         self::assertSame(['akismet/akismet.php'], RemoteActionService::pendingUpdates(self::SNAPSHOT));
@@ -98,7 +126,7 @@ final class RemoteActionTest extends TestCase
         self::assertSame([], RemoteActionService::pendingUpdates($withConnectorUpdate), 'The connector updates itself.');
         $many = ['plugins' => array_map(static fn (int $i): array => ['file' => "p{$i}/p{$i}.php", 'update' => '2.0'], range(1, 30))];
         self::assertCount(20, RemoteActionService::pendingUpdates($many));
-        self::assertSame(['clear_cache', 'update_plugins', 'maintenance'], RemoteActionService::BULK_ACTIONS, 'Single-plugin actions are not offered in bulk.');
+        self::assertSame(['clear_cache', 'update_plugins', 'update_themes', 'maintenance', 'backup'], RemoteActionService::BULK_ACTIONS, 'Single-plugin actions and WordPress core updates are not offered in bulk.');
     }
 
     public function testPlannedMaintenanceHoldsAlertsUntilShortlyAfterItEnds(): void

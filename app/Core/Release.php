@@ -18,7 +18,7 @@ namespace App\Core;
  */
 final class Release
 {
-    public const VERSION = '1.12.0';
+    public const VERSION = '1.14.0';
 
     /**
      * Newest first. 'schema' is the database schema version the release requires (null: unchanged).
@@ -26,6 +26,29 @@ final class Release
      * @var array<string, array{date: string, title: string, schema: ?int, added?: array<int, string>, improved?: array<int, string>, fixed?: array<int, string>}>
      */
     public const NOTES = [
+        '1.14.0' => [
+            'date'     => '2026-09-23',
+            'title'    => 'BackWPup backups, earlier reports, background updates, new plugin page',
+            'schema'   => null,
+            'added'    => [
+                'SiteWatch Connector 1.8.0 has its own entry in the WordPress admin menu, with the SiteWatch mark, and a redesigned page in the SiteWatch look: status tiles, switches for remote actions and auto-fix, and the connection details at a glance. Links to the old Settings → SiteWatch page are redirected.',
+                'Backups with BackWPup: the backup remote action (single site and bulk) also starts BackWPup\'s first backup job when BackWPup is installed, and the Remote actions tab shows the last run of each backup plugin (UpdraftPlus and BackWPup).',
+                'Earlier daily reports on the Performance tab: choose any stored report of the last 90 days to see its page speed, slowest requests and slow database queries.',
+            ],
+            'improved' => [
+                'Plugin, theme and WordPress updates and rollbacks requested from SiteWatch run in a background request of their own on the site (SiteWatch Connector 1.8.0), one at a time with a longer time limit, so large updates on slow hosts no longer time out inside the 5-minute report.',
+            ],
+        ],
+        '1.13.0' => [
+            'date'     => '2026-09-23',
+            'title'    => 'Performance history, theme and core updates, backups',
+            'schema'   => 12,
+            'added'    => [
+                'History of page speed and PHP warnings: every daily report from the WordPress plugin is kept for 90 days. The Performance tab shows the median and 95% page generation time over time, and the PHP warnings section lists earlier reports.',
+                'Remote actions for SiteWatch Connector 1.7.0: install theme updates, install the WordPress update WordPress.org offers (with WordPress\'s own rollback on failure), and start an UpdraftPlus backup. Theme updates and backups also work in bulk from the website list; WordPress core updates are per site on purpose.',
+                'The Remote actions tab shows UpdraftPlus\'s last backup, from the health report.',
+            ],
+        ],
         '1.12.0' => [
             'date'     => '2026-09-23',
             'title'    => 'Private plugin data on every server, compressed reports',

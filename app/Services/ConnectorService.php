@@ -294,6 +294,7 @@ final class ConnectorService
                     'security_issues' => $summary['issues'],
                 ];
                 $snapshotStored = true;
+                $this->storeDaily($websiteId, $payload['snapshot']);
             }
         }
         $this->repo->update($websiteId, $update);
@@ -367,6 +368,69 @@ final class ConnectorService
     {
         $plain = @gzdecode($compressed, self::MAX_BODY + 1);
         return is_string($plain) && $plain !== '' && strlen($plain) <= self::MAX_BODY ? $plain : null;
+    }
+
+    /**
+     * Keep the page speed and PHP warning summaries of a health report as history (plugin 1.3.0+ sends them).
+     *
+     * @param array<string, mixed> $snapshot
+     */
+    private function storeDaily(int $websiteId, array $snapshot): void
+    {
+        $row = self::dailyRow($snapshot);
+        if ($row === null) {
+            return;
+        }
+        try {
+            $this->repo->saveDaily(['website_id' => $websiteId, 'received_at' => utc_now()->format('Y-m-d H:i:s')] + $row);
+        } catch (Throwable $e) {
+            $this->log->warning('Daily summary not stored', ['website_id' => $websiteId, 'error' => $e->getMessage()]);
+        }
+    }
+
+    /**
+     * The history row for a snapshot, or null when it carries nothing worth keeping.
+     *
+     * @param array<string, mixed> $snapshot
+     * @return array<string, mixed>|null
+     */
+    public static function dailyRow(array $snapshot): ?array
+    {
+        $perf = is_array($snapshot['performance'] ?? null) ? $snapshot['performance'] : null;
+        $warn = is_array($snapshot['php_warnings'] ?? null) ? $snapshot['php_warnings'] : null;
+        $hasPerf = $perf !== null && (int) ($perf['requests'] ?? 0) > 0;
+        $hasWarn = $warn !== null && !empty($warn['enabled']);
+        $end = (int) ($snapshot['generated_at'] ?? 0);
+        if ((!$hasPerf && !$hasWarn) || $end <= 0 || $end > time() + 300) {
+            return null;
+        }
+        $starts = array_filter([(int) ($perf['since'] ?? 0), (int) ($warn['since'] ?? 0)]);
+        $ctx = static fn (string $c, string $k): ?int => $hasPerf && isset($perf['contexts'][$c][$k]) && is_numeric($perf['contexts'][$c][$k]) ? (int) $perf['contexts'][$c][$k] : null;
+        $deprecations = null;
+        if ($hasWarn) {
+            $deprecations = 0;
+            foreach ((array) ($warn['entries'] ?? []) as $e) {
+                if (is_array($e) && ($e['type'] ?? '') === 'Deprecated') {
+                    $deprecations += (int) ($e['count'] ?? 0);
+                }
+            }
+        }
+        $json = static fn (mixed $v): ?string => $v === null ? null : (string) json_encode($v, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
+        return [
+            'period_start'    => $starts !== [] ? gmdate('Y-m-d H:i:s', min($starts)) : null,
+            'period_end'      => gmdate('Y-m-d H:i:s', min($end, time())),
+            'requests'        => $hasPerf ? (int) $perf['requests'] : null,
+            'p50_front'       => $ctx('front', 'p50'),
+            'p95_front'       => $ctx('front', 'p95'),
+            'p50_admin'       => $ctx('admin', 'p50'),
+            'p95_admin'       => $ctx('admin', 'p95'),
+            'queries_front'   => $hasPerf && isset($perf['contexts']['front']['avg_queries']) ? round((float) $perf['contexts']['front']['avg_queries'], 1) : null,
+            'warnings_total'  => $hasWarn ? (int) ($warn['total'] ?? 0) : null,
+            'warnings_places' => $hasWarn ? (int) ($warn['places'] ?? 0) : null,
+            'deprecations'    => $deprecations,
+            'performance'     => $hasPerf ? $json($perf) : null,
+            'php_warnings'    => $hasWarn ? $json(['total' => $warn['total'] ?? 0, 'places' => $warn['places'] ?? 0, 'entries' => array_slice((array) ($warn['entries'] ?? []), 0, 20)]) : null,
+        ];
     }
 
     private static function unixToDb(mixed $value): ?string
@@ -860,6 +924,7 @@ final class ConnectorService
                 'maintenance_label' => !empty($row['maintenance_until']) ? format_datetime($row['maintenance_until']) : null,
                 'commands'          => $this->remote()->recent($websiteId),
             ],
+            'history'         => $row === null ? [] : $this->repo->daily($websiteId, utc_now()->modify('-90 days')->format('Y-m-d H:i:s')),
             'insights'        => [
                 'php_warnings' => App::settings()->getBool('connector_php_warnings', false),
                 'perf_sample'  => App::settings()->getInt('connector_perf_sample', 20),
@@ -975,6 +1040,7 @@ final class ConnectorService
     public function purge(): int
     {
         $this->repo->purgeFeedOlderThan(utc_now()->modify('-' . VulnerabilityScanner::FEED_RETENTION_DAYS . ' days')->format('Y-m-d H:i:s'));
+        $this->repo->purgeDailyOlderThan(utc_now()->modify('-' . self::RETENTION_DAYS . ' days')->format('Y-m-d H:i:s'));
         $this->repo->purgeCommandsOlderThan(utc_now()->modify('-' . self::RETENTION_DAYS . ' days')->format('Y-m-d H:i:s'));
         return $this->repo->purgeOlderThan(utc_now()->modify('-' . self::RETENTION_DAYS . ' days')->format('Y-m-d H:i:s'));
     }

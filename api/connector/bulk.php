@@ -5,7 +5,7 @@ declare(strict_types=1);
 /**
  * Queue a remote action on many WordPress sites at once (bulk bar of the website list).
  *
- *   POST ids[], action (clear_cache | update_plugins | maintenance), args {…}
+ *   POST ids[], action (clear_cache | update_plugins | update_themes | maintenance | backup), args {…}
  *
  * Each site is queued separately with the same checks as a single request; sites that cannot take the action are
  * skipped and listed with the reason. Needs the "Run remote actions" permission (websites.remote).
@@ -49,6 +49,8 @@ try {
 
 $label = match ($action) {
     'update_plugins' => 'Update all plugins',
+    'update_themes'  => 'Update all themes',
+    'backup'         => 'Backup (UpdraftPlus or BackWPup)',
     'maintenance'    => ($args['mode'] ?? '') === 'off' ? 'Maintenance page off' : 'Maintenance page on for ' . (int) ($args['minutes'] ?? 0) . ' min',
     default          => RemoteActionService::ACTIONS[$action] ?? $action,
 };

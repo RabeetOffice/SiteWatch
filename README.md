@@ -170,10 +170,11 @@ WordPress and pushes signed reports to SiteWatch.
 - **File watch**: changes to `wp-config.php` and `.htaccess` made outside WordPress are alerted; the contents never
   leave the site.
 - **Page speed and PHP warnings from inside**: page generation time percentiles from sampled requests (slow queries
-  with `SAVEQUERIES`), and an optional daily summary of PHP warnings and deprecations. Both are set under Monitoring
+  with `SAVEQUERIES`), and an optional daily summary of PHP warnings and deprecations, with 90 days of history. Both are set under Monitoring
   Settings → WordPress plugin. The website page also says when SiteWatch's checks stop reaching WordPress (page cache,
   CDN or a firewall blocking SiteWatch).
-- **Remote actions**: clear caches, deactivate, activate or update plugins, and a maintenance page (alerts are held
+- **Remote actions**: clear caches, deactivate, activate or update plugins, update themes and WordPress, start an
+  UpdraftPlus or BackWPup backup, and a maintenance page (alerts are held
   while it shows), from the website page. Each action must be allowed by the site's WordPress administrator first,
   commands are signed with the site's secret, and the "Run remote actions" permission is needed in SiteWatch.
   Clearing caches, plugin updates and the maintenance page also work on many selected sites at once from the
@@ -183,7 +184,7 @@ WordPress and pushes signed reports to SiteWatch.
   again".
 
 Set up per website: open the website → **WordPress** → **Download plugin**, install and activate it in WordPress,
-click **Create connection key** in SiteWatch and paste the key under **Settings → SiteWatch** in WordPress.
+click **Create connection key** in SiteWatch and paste the key on the **SiteWatch** page in the WordPress admin menu.
 
 Reports go from WordPress to `api/connector/ingest.php` every 5 minutes (WP-Cron), signed with HMAC-SHA256 using a
 per-site secret stored encrypted with `APP_KEY`; SiteWatch never connects to the WordPress site. The plugin needs

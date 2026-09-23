@@ -1,7 +1,7 @@
 <?php
 /**
  * Remote actions: a short allowlist of things SiteWatch may ask this site to do, each switched off until an
- * administrator allows it under Settings → SiteWatch.
+ * administrator allows it under SiteWatch in the WordPress admin menu.
  *
  * Commands arrive in SiteWatch's reply to the signed heartbeat (the plugin opens no endpoint). Each one is checked
  * before it runs: HMAC signature with this site's secret, site ID, expiry, whether the action is allowed here, whether
@@ -19,6 +19,13 @@ final class SiteWatch_Connector_Remote
     const DONE_OPTION = 'sitewatch_connector_commands';
     /** {until: int, message: string}; autoloaded because the front end checks it on every request. */
     const MAINTENANCE_OPTION = 'sitewatch_connector_maintenance';
+    /** Checked commands waiting to run in their own background request: id => command. */
+    const QUEUE_OPTION = 'sitewatch_connector_command_queue';
+    const CRON_HOOK = 'sitewatch_connector_run_command';
+    /** Installs and downloads can take minutes, so they do not run inside the report request. */
+    const LONG = array('update_plugins', 'update_themes', 'update_core', 'rollback_plugin');
+    /** Seconds a long command may run (where the host lets PHP extend its time limit). */
+    const LONG_TIME_LIMIT = 900;
     const KEEP_DONE = 100;
     const MAX_AHEAD = 7200;
     const MAX_UPDATES = 20;
@@ -30,11 +37,15 @@ final class SiteWatch_Connector_Remote
         'update_plugins'    => 'Install plugin updates offered by WordPress.org',
         'maintenance'       => 'Switch a maintenance page on (5 minutes to 24 hours) and off',
         'rollback_plugin'   => 'Roll a WordPress.org plugin back to the version it had before its last update',
+        'update_themes'     => 'Install theme updates offered by WordPress.org',
+        'update_core'       => 'Install the WordPress update offered by WordPress.org (with WordPress\'s own rollback on failure)',
+        'backup'            => 'Start a backup with UpdraftPlus or BackWPup (whichever is installed)',
     );
 
     public static function init()
     {
         add_action('template_redirect', array(__CLASS__, 'maintenance_gate'), 0);
+        add_action(self::CRON_HOOK, array(__CLASS__, 'run_queued'));
     }
 
     /** @return array{enabled: bool, actions: string[]} */
@@ -82,6 +93,9 @@ final class SiteWatch_Connector_Remote
         }
         $done = get_option(self::DONE_OPTION, array());
         $done = is_array($done) ? $done : array();
+        $queue = get_option(self::QUEUE_OPTION, array());
+        $queue = is_array($queue) ? $queue : array();
+        $queued_now = false;
         $events = array();
         $plugins_changed = false;
 
@@ -97,6 +111,9 @@ final class SiteWatch_Connector_Remote
                 $events[] = self::event($id, $done[$id]); // SiteWatch did not get the result yet: send it again
                 continue;
             }
+            if (isset($queue[$id])) {
+                continue; // already waiting for its background run
+            }
             $result = self::check($command, $config);
             if ($result !== null && !empty($result['forged'])) {
                 // Not stored as done: a forged command must not block the genuine one with the same ID.
@@ -105,9 +122,15 @@ final class SiteWatch_Connector_Remote
                 $events[] = self::event($id, $result);
                 continue;
             }
+            if ($result === null && in_array($command['action'], self::LONG, true)) {
+                // Checked; runs in a request of its own (see run_queued()), and reports its result from there.
+                $queue[$id] = $command;
+                $queued_now = true;
+                continue;
+            }
             if ($result === null) {
                 $result = self::execute((string) $command['action'], json_decode((string) $command['args_json'], true));
-                if (in_array($command['action'], array('deactivate_plugin', 'activate_plugin', 'update_plugins', 'rollback_plugin'), true)) {
+                if (in_array($command['action'], array('deactivate_plugin', 'activate_plugin', 'update_plugins', 'rollback_plugin', 'update_themes', 'update_core'), true)) {
                     $plugins_changed = true;
                 }
             }
@@ -117,9 +140,19 @@ final class SiteWatch_Connector_Remote
             $events[] = self::event($id, $result);
         }
 
+        if ($queued_now) {
+            update_option(self::QUEUE_OPTION, $queue, false);
+            self::schedule_queue();
+        }
         if ($events === array()) {
             return;
         }
+        self::finish($done, $events, $plugins_changed);
+    }
+
+    /** Store results and send them to SiteWatch (with a fresh snapshot when plugins or themes changed). */
+    private static function finish(array $done, array $events, $plugins_changed)
+    {
         if (count($done) > self::KEEP_DONE) {
             $done = array_slice($done, -self::KEEP_DONE, null, true);
         }
@@ -135,6 +168,50 @@ final class SiteWatch_Connector_Remote
             SiteWatch_Connector_Client::update_state(array('want_snapshot' => true));
         }
         // Unsent results are repeated when SiteWatch re-sends the command.
+    }
+
+    private static function schedule_queue()
+    {
+        if (!wp_next_scheduled(self::CRON_HOOK)) {
+            wp_schedule_single_event(time(), self::CRON_HOOK);
+        }
+    }
+
+    /**
+     * WP-Cron: run the oldest queued long command in this request, with a longer time limit, then report it. Further
+     * commands get a request each.
+     */
+    public static function run_queued()
+    {
+        $queue = get_option(self::QUEUE_OPTION, array());
+        if (!is_array($queue) || $queue === array() || SiteWatch_Connector_Client::config() === null) {
+            return;
+        }
+        $id = (string) key($queue);
+        $command = $queue[$id];
+        unset($queue[$id]); // taken before it runs, so a second cron request does not run it too
+        update_option(self::QUEUE_OPTION, $queue, false);
+
+        if ((int) $command['expires'] < time()) {
+            $result = self::fail('Not run: the command expired while it waited for its turn.');
+        } else {
+            if (function_exists('set_time_limit') && (int) ini_get('max_execution_time') > 0 && (int) ini_get('max_execution_time') < self::LONG_TIME_LIMIT) {
+                @set_time_limit(self::LONG_TIME_LIMIT);
+            }
+            if (function_exists('ignore_user_abort')) {
+                @ignore_user_abort(true);
+            }
+            $result = self::execute((string) $command['action'], json_decode((string) $command['args_json'], true));
+        }
+        $result['action'] = (string) $command['action'];
+        $result['at'] = time();
+        $done = get_option(self::DONE_OPTION, array());
+        $done = is_array($done) ? $done : array();
+        $done[$id] = $result;
+        if ($queue !== array()) {
+            self::schedule_queue();
+        }
+        self::finish($done, array(self::event($id, $result)), true);
     }
 
     /**
@@ -158,7 +235,7 @@ final class SiteWatch_Connector_Remote
         }
         $settings = self::settings();
         if (!$settings['enabled'] || !in_array($action, $settings['actions'], true)) {
-            return self::fail('Refused: this action is not allowed under Settings → SiteWatch → Remote actions in WordPress.');
+            return self::fail('Refused: this action is not allowed under SiteWatch → Remote actions in the WordPress admin menu.');
         }
         return null;
     }
@@ -178,6 +255,12 @@ final class SiteWatch_Connector_Remote
                     return self::update_plugins(isset($args['plugins']) && is_array($args['plugins']) ? $args['plugins'] : array());
                 case 'maintenance':
                     return self::maintenance($args);
+                case 'update_themes':
+                    return self::update_themes(isset($args['themes']) && is_array($args['themes']) ? $args['themes'] : array());
+                case 'update_core':
+                    return self::update_core(isset($args['version']) ? (string) $args['version'] : '');
+                case 'backup':
+                    return self::backup(isset($args['plugin']) ? (string) $args['plugin'] : '');
                 case 'rollback_plugin':
                     return self::rollback_plugin(isset($args['plugin']) ? (string) $args['plugin'] : '', isset($args['version']) ? (string) $args['version'] : '');
             }
@@ -434,6 +517,168 @@ final class SiteWatch_Connector_Remote
         SiteWatch_Connector_Autofix::forget_previous($file); // a second click must not flip back to the broken version
         delete_site_transient('update_plugins');
         return self::ok($data['Name'] . ' rolled back from ' . $from . ' to ' . $version . '.', array('plugin' => $file, 'from' => $from, 'to' => $version, 'active' => is_plugin_active($file)));
+    }
+
+    /** WordPress's updater classes, loaded on demand (commands run from WP-Cron, where wp-admin is not loaded). */
+    private static function load_updater()
+    {
+        foreach (array('admin.php', 'class-wp-upgrader.php', 'update.php', 'plugin.php', 'theme.php') as $include) {
+            require_once ABSPATH . 'wp-admin/includes/' . $include;
+        }
+        if (!class_exists('WP_Automatic_Updater')) {
+            require_once ABSPATH . 'wp-admin/includes/class-wp-automatic-updater.php';
+        }
+        $updater = new WP_Automatic_Updater();
+        if ($updater->is_disabled()) {
+            return 'Automatic updates are disabled on this site (AUTOMATIC_UPDATER_DISABLED or a filter).';
+        }
+        if (!WP_Upgrader::create_lock('auto_updater')) {
+            return 'Another update is running. Try again in a few minutes.';
+        }
+        return $updater;
+    }
+
+    /** Install updates WordPress.org offers for these themes (stylesheet folder names). */
+    private static function update_themes(array $slugs)
+    {
+        $slugs = array_slice(array_values(array_unique(array_filter(array_map('strval', $slugs)))), 0, self::MAX_UPDATES);
+        if ($slugs === array()) {
+            return self::fail('Refused: no themes were named.');
+        }
+        require_once ABSPATH . 'wp-admin/includes/update.php';
+        wp_update_themes();
+        $available = get_site_transient('update_themes');
+        $updater = self::load_updater();
+        if (is_string($updater)) {
+            return self::fail($updater);
+        }
+        $allow = function ($update, $item) use ($slugs) {
+            return is_object($item) && isset($item->theme) && in_array($item->theme, $slugs, true) ? true : $update;
+        };
+        add_filter('auto_update_theme', $allow, 1000, 2);
+        $details = array();
+        $updated = 0;
+        foreach ($slugs as $slug) {
+            $theme = wp_get_theme($slug);
+            if (!$theme->exists()) {
+                $details[] = array('theme' => $slug, 'name' => $slug, 'ok' => false, 'message' => 'Not an installed theme.');
+                continue;
+            }
+            $offer = isset($available->response[$slug]) ? (object) $available->response[$slug] : null;
+            if ($offer === null || empty($offer->package)) {
+                $details[] = array('theme' => $slug, 'name' => $theme->get('Name'), 'ok' => false, 'message' => 'No update offered by WordPress.org.');
+                continue;
+            }
+            $from = $theme->get('Version');
+            $result = $updater->update('theme', $offer);
+            $ok = $result === true || (is_object($result) && !is_wp_error($result));
+            $updated += $ok ? 1 : 0;
+            $details[] = array('theme' => $slug, 'name' => $theme->get('Name'), 'ok' => $ok, 'from' => $from, 'to' => (string) $offer->new_version,
+                'message' => $ok ? 'Updated' : (is_wp_error($result) ? implode(' ', $result->get_error_messages()) : 'WordPress did not install the update.'));
+        }
+        remove_filter('auto_update_theme', $allow, 1000);
+        WP_Upgrader::release_lock('auto_updater');
+        wp_clean_themes_cache();
+        $message = sprintf('%d of %d theme update(s) installed.', $updated, count($slugs));
+        return $updated === count($slugs) ? self::ok($message, array('themes' => $details)) : self::fail($message, array('themes' => $details));
+    }
+
+    /**
+     * Install the WordPress version WordPress.org offers, only if it is the version SiteWatch saw in the last health
+     * report. Uses WordPress's automatic updater, which checks the files and restores the old version when the
+     * update fails. Major versions are allowed for this one run only.
+     */
+    private static function update_core($version)
+    {
+        if (!preg_match('/^\d+\.\d+(\.\d+)?$/', $version)) {
+            return self::fail('Refused: not a WordPress version number.');
+        }
+        require_once ABSPATH . 'wp-admin/includes/update.php';
+        wp_version_check(array(), true);
+        $offer = null;
+        foreach ((array) get_core_updates() as $candidate) {
+            if (is_object($candidate) && isset($candidate->response, $candidate->current) && $candidate->response === 'upgrade' && $candidate->current === $version) {
+                $offer = $candidate;
+                break;
+            }
+        }
+        $from = self::installed_wp_version();
+        if ($offer === null) {
+            return self::fail(version_compare($from, $version, '>=') ? 'WordPress is already at ' . $from . '.' : 'WordPress.org does not offer ' . $version . ' for this site now.');
+        }
+        $updater = self::load_updater();
+        if (is_string($updater)) {
+            return self::fail($updater);
+        }
+        $allow = function () {
+            return true;
+        };
+        foreach (array('auto_update_core', 'allow_major_auto_core_updates', 'allow_minor_auto_core_updates') as $filter) {
+            add_filter($filter, $allow, 1000);
+        }
+        $result = $updater->update('core', $offer);
+        foreach (array('auto_update_core', 'allow_major_auto_core_updates', 'allow_minor_auto_core_updates') as $filter) {
+            remove_filter($filter, $allow, 1000);
+        }
+        WP_Upgrader::release_lock('auto_updater');
+        $now = self::installed_wp_version();
+        if ($now !== $version) {
+            $why = is_wp_error($result) ? implode(' ', $result->get_error_messages()) : 'WordPress did not install it (files not writable, a version-control checkout, or the update was rolled back).';
+            return self::fail('WordPress was not updated: ' . $why, array('from' => $from, 'to' => $version));
+        }
+        return self::ok('WordPress updated from ' . $from . ' to ' . $version . '.', array('from' => $from, 'to' => $version));
+    }
+
+    /** The version in wp-includes/version.php now (the global keeps the value this request started with). */
+    private static function installed_wp_version()
+    {
+        $wp_version = '';
+        include ABSPATH . WPINC . '/version.php';
+        return (string) $wp_version;
+    }
+
+    /**
+     * Start a backup the way the backup plugin's own button does, in a request of its own; the outcome shows in the
+     * next health report. $plugin is "updraftplus" or "backwpup"; empty picks the one that is installed.
+     */
+    private static function backup($plugin)
+    {
+        $updraft = class_exists('UpdraftPlus') && has_action('updraft_backupnow_backup_all');
+        $backwpup = class_exists('BackWPup_Job') && class_exists('BackWPup_Option');
+        if ($plugin === 'backwpup' || ($plugin === '' && !$updraft && $backwpup)) {
+            return self::backup_backwpup();
+        }
+        if (!$updraft) {
+            return self::fail($plugin === 'updraftplus' || !$backwpup ? 'UpdraftPlus is not installed and active on this site.' : 'No supported backup plugin is active.');
+        }
+        if (wp_next_scheduled('updraft_backupnow_backup_all', array(array('always_keep' => false)))) {
+            return self::ok('An UpdraftPlus backup is already about to start.');
+        }
+        wp_schedule_single_event(time(), 'updraft_backupnow_backup_all', array(array('always_keep' => false)));
+        if (function_exists('spawn_cron')) {
+            spawn_cron();
+        }
+        // The next heartbeat carries a fresh health report with UpdraftPlus's result.
+        SiteWatch_Connector_Client::update_state(array('want_snapshot' => true));
+        return self::ok('UpdraftPlus backup started (files and database). Its result appears here with a later report.');
+    }
+
+    /** BackWPup: run its first backup job now, through the same request BackWPup's "Run now" link makes. */
+    private static function backup_backwpup()
+    {
+        if (!class_exists('BackWPup_Job') || !class_exists('BackWPup_Option')) {
+            return self::fail('BackWPup is not installed and active on this site.');
+        }
+        $job = SiteWatch_Connector_Health::backwpup_job();
+        if (!$job) {
+            return self::fail('BackWPup has no backup job. Create one in BackWPup first.');
+        }
+        if (BackWPup_Job::get_working_data()) {
+            return self::ok('A BackWPup job is already running.');
+        }
+        BackWPup_Job::get_jobrun_url('runnow', $job);
+        SiteWatch_Connector_Client::update_state(array('want_snapshot' => true));
+        return self::ok(sprintf('BackWPup job "%s" started. Its result appears here with a later report.', BackWPup_Option::get($job, 'name')), array('job' => $job));
     }
 
     private static function maintenance(array $args)

@@ -5,9 +5,9 @@ session can continue the work without re-reading the whole history.
 
 | | |
 |---|---|
-| Plugin version | **1.6.0** (`wordpress-plugin/sitewatch-connector/`) |
-| SiteWatch version | **1.12.0**, database schema **11** |
-| Last pushed commit | `212062d Plugin vUpload` (1.9.0 / plugin 1.3.0); 1.10.0–1.12.0 / plugin 1.4.0–1.6.0 not committed yet |
+| Plugin version | **1.8.0** (`wordpress-plugin/sitewatch-connector/`) |
+| SiteWatch version | **1.14.0**, database schema **12** |
+| Last pushed commit | `42cd039 Auto Rollback Feature` (1.12.0 / plugin 1.6.0); 1.13.0–1.14.0 / plugin 1.7.0–1.8.0 not committed yet |
 | Requirements | WordPress 5.2+, PHP 7.2+ (plugin); rollback on failed self-update needs WordPress 6.6+ |
 
 ---
@@ -76,7 +76,7 @@ Body: `{v: 1, reason, site_url, sent_at, status: {...}, snapshot?: {...}, events
 
 Reply `data`: `{website, want_snapshot, received, interval, server_time, auto_update, accepts_gzip, collect_warnings, perf_sample, plugin_update: {version, package, requires, requires_php, tested, url, notes} | null, update_now, commands?: [{id, action, args_json, expires, sig}]}` (`commands` only in replies to `heartbeat`, only when the site allows at least one action)
 
-**Connection key** (pasted into WordPress → Settings → SiteWatch): `"swc1_" + base64url({"u": SiteWatch URL, "i": website ID, "s": 64-hex secret})`.
+**Connection key** (pasted into WordPress → SiteWatch): `"swc1_" + base64url({"u": SiteWatch URL, "i": website ID, "s": 64-hex secret})`.
 The secret is stored in SiteWatch encrypted with `APP_KEY` (`connector_sites.secret`).
 
 **Self-update download:** `GET api/connector/package.php?site=&v=&expires=&sig=` where
@@ -102,8 +102,10 @@ typed properties, `str_contains`, named arguments or nullsafe operator.
 | `includes/class-sitewatch-connector-files.php` | Watches `wp-config.php` (also one folder up), `.htaccess` and, when WordPress lives in a subfolder, the site root `.htaccess`. Fingerprints (sha256, size, mtime) in `sitewatch_connector_files`; the first run is a silent baseline. Checked by every heartbeat and at shutdown of requests where WordPress may have written them (plugin (de)activation, `upgrader_process_complete`, `insert_with_markers_inline_instructions`). Event `file_changed`: `warning` with `during` when such a request explains it, otherwise `critical` with `by: outside WordPress`. Sends file, change, sizes, mtime and 12-character hash prefixes; never contents |
 | `includes/class-sitewatch-connector-updater.php` | Injects the SiteWatch offer into `update_plugins`, `plugins_api` details, `auto_update_plugin`, and runs `WP_Automatic_Updater::update('plugin', …)` from the single cron event `sitewatch_connector_self_update` |
 | `includes/class-sitewatch-connector-remote.php` | Remote actions (1.4.0): allowlist `ACTIONS`, consent option `sitewatch_connector_remote` {enabled, actions}, `handle()` called by the heartbeat with the reply's `commands` (signature, expiry ≤ 2 h, allowed, replay via `sitewatch_connector_commands` = last 100 results; forged commands are reported but not stored), the actions themselves, and the maintenance gate on `template_redirect` (503 + `Retry-After`, editors bypass, ends by itself; autoloaded option `sitewatch_connector_maintenance`). Results go out at once as `command_result` events (with a fresh snapshot after plugin changes) |
+| (Remote, 1.8.0) | Long actions (`update_plugins`, `update_themes`, `update_core`, `rollback_plugin`) are checked in the heartbeat but queued in `sitewatch_connector_command_queue` and run by the single WP-Cron event `sitewatch_connector_run_command`, one per request, with `set_time_limit(900)` where allowed; a re-sent command that is still queued is not queued twice. `backup` also works with BackWPup (`BackWPup_Job::get_jobrun_url('runnow', $job)`, the first job that makes files or a DB dump); the snapshot's `backups` is a list of `{plugin, key, version, job?, last_at, success, errors, running}` (UpdraftPlus and/or BackWPup; a single object from 1.7.0) |
+| (Remote, 1.7.0) | Also `update_themes` (WordPress.org offers in `update_themes`, through `WP_Automatic_Updater`), `update_core` (only the version SiteWatch saw in the snapshot and WordPress.org offers now; major versions allowed for that run; checks `wp-includes/version.php` afterwards), `backup` (schedules UpdraftPlus's own `updraft_backupnow_backup_all` event and asks for a fresh snapshot; the snapshot's `backups` block has UpdraftPlus's `updraft_last_backup`) |
 | `includes/class-sitewatch-connector-autofix.php` | Auto-fix (1.5.0): `consider()` from the fatal handler (file flag only, when the same fingerprint from a plugin folder hit 3 times in 10 min, `errors.json` keeps the last 10 times per error); `apply()` from the mu-loader removes the plugin from `active_plugins` (not protected, not the connector, not within 24 h of an earlier auto-fix of it); `report_pending()` on `init` records the critical `plugin_auto_deactivated` event and asks for a fresh snapshot. Also `before_update()` on `upgrader_pre_install` records the version before each plugin update (`sitewatch_connector_versions`), used by the `rollback_plugin` remote action (package URL built from the slug on downloads.wordpress.org; the record is cleared after a rollback) |
-| `includes/class-sitewatch-connector-admin.php` | Settings → SiteWatch screen: connect with key, status, "Send report now", "Disconnect", remote actions consent + history + "End maintenance now", captured errors, data disclosure; admin notice while the maintenance page is on |
+| `includes/class-sitewatch-connector-admin.php` | The SiteWatch page (own admin menu entry with the SiteWatch mark, `admin.php?page=sitewatch-connector`; the old Settings URL redirects; styles in `assets/admin.css`, loaded on this page only): connect with key, status, "Send report now", "Disconnect", remote actions consent + history + "End maintenance now", captured errors, data disclosure; admin notice while the maintenance page is on |
 | `uninstall.php`, `readme.txt`, `index.php` files | Clean-up, WordPress readme (changelog), silence files |
 
 WordPress options: `sitewatch_connector` (endpoint, site_id, secret, sitewatch_url, connected_at),
@@ -121,6 +123,7 @@ User meta: `sitewatch_last_login`.
 | `app/Services/ConnectorService.php` | Keys, signature and package verification, rate limit (30/min/site, file in `storage/cache`), `ingest()`, event normalisation, alerts, `causeFor()`/`describeError()`, `state()`, `details()`, `fleet()`, `insideEvidence()`/`judgeEvidence()`, `buildZip()` |
 | `app/Services/ConnectorException.php` | Rejection with HTTP status as code |
 | `app/Services/RemoteActionService.php` | Remote actions: `request()` (checks the site's allowed list and validates arguments against the last snapshot: known plugin files only, never the connector itself, updates only where the snapshot shows one, 5–1440 min), `forReply()` (signs open commands, marks them sent), `recordResult()` (from `command_result` events; keeps `maintenance_until` in step), `recent()` (expires unanswered commands after 1 h) |
+| `api/connector/daily.php` | One stored daily report (full JSON) for the Performance tab's report picker |
 | `api/connector/command.php` | POST a remote action (permission `websites.remote`); logged as `connector.remote_action` |
 | `api/connector/bulk.php` | POST `ids[]` (max 500), `action` in `RemoteActionService::BULK_ACTIONS` (clear_cache, update_plugins, maintenance), `args`: `RemoteActionService::bulk()` queues one command per site through `request()` and returns `{queued, skipped: [{name, reason}]}`; for update_plugins each site gets `pendingUpdates()` of its own snapshot. One activity entry per queued site |
 | `app/Services/VulnerabilityFeed.php` | WPVulnerability API client (`https://www.wpvulnerability.net/{plugin,theme,core}/{slug}/`, no key; the project asks only for a link back, shown on the Security tab). `normalise()` → `{closed, closed_reason, vulns: [{id, title, min, min_op, max, max_op, unfixed, score, severity, cve, link}]}`; `affects()`, `fixedIn()` |
@@ -142,10 +145,13 @@ User meta: `sitewatch_last_login`.
 | `tests/Unit/ConnectorReachabilityTest.php` | `ConnectorService::reachability()`: cached vs blocked, the cases with nothing to say, grace period after connecting |
 | `tests/Unit/VulnerabilityTest.php` | Feed normalising (titles, entities, links, scores), version ranges, report matching and dedupe, new-item detection |
 
-Database (see `database/schema.sql`, `App\Core\Migrator` steps 6 to 11):
+Database (see `database/schema.sql`, `App\Core\Migrator` steps 6 to 12):
 - `connector_sites`: one row per website with a key (secret, connected_at, last_seen_at, last_reason, versions,
   updates_pending, security_issues, snapshot JSON, want_snapshot, pulse_ok_at, pulse_error_at, probe_seen_at,
   probe_status, probe_ip, remote_actions JSON, maintenance_until, autofix JSON, want_update, update_result, update_at, vuln_count, vuln_report JSON, vuln_checked_at, vuln_incomplete).
+- `connector_daily`: one row per daily report with page speed and PHP warnings (`period_start/end`, `p50/p95_front`,
+  `p50/p95_admin`, `queries_front`, `warnings_total/places`, `deprecations`, full JSON). Filled by `ConnectorService::dailyRow()`
+  when a snapshot arrives, purged after 90 days, shown as the Performance tab's chart and the PHP warnings history.
 - `connector_commands`: remote actions (action, args JSON signed as stored, status pending|sent|done|failed|expired,
   requested_by, expires_at, result JSON). Purged after 90 days.
 - `vulnerability_feed`: (component, slug) → normalised answer JSON, status ok|error, fetched_at. Shared by all sites;
@@ -165,13 +171,13 @@ server's public `SERVER_ADDR` if any, and the last `probe_ip`.
 
 ## 4. Done and tested
 
-All of the following was tested end to end on a local WordPress 7.1.2 (see section 8), plus 193 unit tests, the
+All of the following was tested end to end on a local WordPress 7.1.2 (see section 8), plus 195 unit tests, the
 30 scenarios and the 32-step lifecycle test.
 
 **Setup and connection**
 - [x] Download plugin (zip built on the fly, `sitewatch-connector/` top folder)
 - [x] Create / show / replace / revoke connection key in SiteWatch
-- [x] Connect in WordPress → Settings → SiteWatch (key is verified with a signed `hello` before it is saved)
+- [x] Connect in WordPress → SiteWatch (key is verified with a signed `hello` before it is saved)
 - [x] Wrong secret, old timestamp and another site's ID are rejected with 401; tampered package links with 403
 - [x] Deactivate plugin → SiteWatch shows "Plugin deactivated"; reactivate → reporting resumes; loader removed and restored
 
@@ -244,6 +250,19 @@ All of the following was tested end to end on a local WordPress 7.1.2 (see secti
 - [x] Found while testing: the self-update from 1.5.0 failed with "Could not access filesystem" because WordPress's update list was missing (same cause as the rollback bug); fixed in the updater's `inject()` with `last_checked` 0 so WordPress still runs its own checks
 - Probe note in incidents: unit-tested (`ConnectorService::probeNote()`); a live incident needs failing checks while WordPress answers them with a 5xx
 
+**History, theme/core updates, backups (SiteWatch 1.13.0, plugin 1.7.0)**
+- [x] 1.6.0 → 1.7.0 self-update on wp-test
+- [x] Two daily reports with timings and warnings → `connector_daily` rows; Performance tab chart (median/95%), "Earlier reports" under PHP warnings
+- [x] Twenty Twenty-Three header lowered to 1.0 → `update_themes` installed 1.7 from WordPress.org
+- [x] UpdraftPlus 1.26.8 installed on wp-test → `backup` started a full backup that finished successfully (db, plugins, themes, uploads, others); last backup shown on the Remote actions tab
+- [x] `wp_version` set to 7.1.1 → `update_core` to 7.1.2 installed through WordPress's updater (site fine afterwards); 7.2 refused (not offered)
+
+**Earlier reports, background updates, BackWPup (SiteWatch 1.14.0, plugin 1.8.0)**
+- [x] 1.7.0 → 1.8.0 self-update on wp-test
+- [x] Performance tab report picker: choosing an earlier report loads it from `api/connector/daily.php` and shows its numbers
+- [x] Theme update through SiteWatch: after the report the command stays "Sent" and sits in the site's queue once (a second report did not queue it again); a separate WP-Cron request installed it (1.0 → 1.7) and reported "Done"
+- [x] BackWPup 5.7.6 installed on wp-test: `backup` with `plugin: backwpup` ran job "First backup" (27 s, 0 errors); the report lists UpdraftPlus and BackWPup with their last backups; `plugin: duplicator` refused
+
 **False alert protection**
 - [x] Checks fail but WordPress is serving pages → alert held, "Alert held: site OK inside WordPress"
 - [x] Held for more than 30 min → alert sent with a "SiteWatch is probably being blocked" note
@@ -266,7 +285,7 @@ SiteWatch check that reached WordPress) is shown for diagnosis but not used in t
 ## 6. Deploying (production: Hostinger, auto-deploy from GitHub)
 
 1. After a push that raises `Migrator::VERSION`, open **System → Updates → Update database**. Schema 8 is needed
-   for 1.8.0, schema 9 for 1.9.0, schema 10 for 1.10.0, schema 11 for 1.11.0. The monitoring cron needs outbound HTTPS to `www.wpvulnerability.net` for vulnerability lookups.
+   for 1.8.0, schema 9 for 1.9.0, schema 10 for 1.10.0, schema 11 for 1.11.0, schema 12 for 1.13.0. The monitoring cron needs outbound HTTPS to `www.wpvulnerability.net` for vulnerability lookups.
 2. Sites still on plugin **1.0.0** need one manual update to 1.1.0: SiteWatch → website → Download plugin, then
    WordPress → Plugins → Add New → Upload Plugin → "Replace current with uploaded". From 1.1.0 on, updates are
    automatic.
@@ -313,7 +332,7 @@ string, so both sides never re-encode it. The reply already comes over the HTTPS
 URL in its key; the signature additionally covers plain-HTTP SiteWatch URLs and proxies that rewrite replies.
 
 *Consent on both sides.*
-- WordPress: Settings → SiteWatch → "Remote actions", **off by default**, with one checkbox per action. Only an
+- WordPress: SiteWatch in the WordPress admin menu → "Remote actions", **off by default**, with one checkbox per action. Only an
   administrator (`manage_options`, nonce-checked form) can change it. The plugin reports the enabled list in
   `status.remote`, so SiteWatch only offers what the site allows.
 - SiteWatch: new permission `websites.remote` ("Run remote actions"). Administrators have it; Manager and Viewer do
@@ -355,8 +374,13 @@ cron job.
 available on the test site to verify), theme and core updates.
 
 ### Remote actions follow-ups
-- UpdraftPlus backup trigger, theme and core updates (need a site with those to test).
-- `update_plugins` runs inside the heartbeat request; many large updates on slow hosts can hit `max_execution_time`, and the command then shows "No answer".
+- ~~UpdraftPlus backup trigger, theme and core updates~~: done in 1.13.0 / plugin 1.7.0.
+- ~~BackWPup~~: done in 1.14.0 / plugin 1.8.0. **Duplicator** (free) builds packages only through its admin wizard
+  (scan, then build over AJAX) with no documented way to start one from code, and **Jetpack Backup** runs on
+  WordPress.com's servers on its own schedule, with nothing to start on the site; neither is added.
+- ~~Long updates inside the heartbeat~~: done in plugin 1.8.0 (background queue, one command per WP-Cron request, 900 s
+  time limit where the host allows it). A host that kills requests harder (e.g. PHP-FPM `request_terminate_timeout`)
+  can still stop a very large update; the command then shows "No answer" after an hour.
 
 ### ~~v4: auto-fix~~ (done: SiteWatch 1.11.0, plugin 1.5.0)
 
@@ -364,7 +388,7 @@ available on the test site to verify), theme and core updates.
 little, predictably, and to be easy to undo.
 
 *1. Deactivate a plugin that keeps crashing the site (automatic, opt-in).*
-- **Consent:** WordPress → Settings → SiteWatch → Auto-fix, **off by default**, administrators only. The
+- **Consent:** WordPress → SiteWatch → Auto-fix, **off by default**, administrators only. The
   administrator can also mark plugins as **protected** (never deactivated automatically, e.g. WooCommerce on a shop,
   where a crashing checkout may still be better than no shop at all).
 - **Trigger:** the same fatal error (same fingerprint) raised from a file inside one plugin's folder at least **3 times
@@ -398,11 +422,13 @@ little, predictably, and to be easy to undo.
 *3. Deactivate from the Errors tab* (was a v3 follow-up): each fatal error from a plugin gets "Deactivate" (and "Roll
 back to x" when that plugin was updated in the last 7 days), using the existing remote actions.
 
-### Auto-fix follow-ups
-- Deactivation removes the plugin from `active_plugins` without running its deactivation hook (as WordPress recovery
-  mode does); plugins that schedule cron events keep them until they are activated again.
-- Network-activated plugins on multisite are not handled.
-- Rollback needs the plugin to be on WordPress.org; premium plugins would need their vendor's package URL.
+### Auto-fix notes (closed)
+- Deactivation removes the plugin from `active_plugins` without running its deactivation hook, as WordPress recovery
+  mode does. Running the hook would mean loading the plugin that just crashed, so this stays as it is; plugins that
+  schedule cron events keep them until they are activated again.
+- Network-activated plugins on multisite are not handled (multisite is not supported, see below).
+- Rollback stays WordPress.org-only: premium plugins would need a package URL from their vendor, and letting SiteWatch
+  supply a URL would allow installing arbitrary code, which the remote-actions design rules out.
 
 ### Smaller items
 - ~~nginx could serve the plugin's data files~~: done in 1.6.0 (guarded `.php` files).
@@ -411,8 +437,11 @@ back to x" when that plugin was updated in the last 7 days), using the existing 
   SiteWatch's check with a 5xx in the last 15 minutes, the incident note says the error comes from the site itself.
 - ~~Pagination for "Captured errors"~~: not needed. The plugin keeps at most 30 errors (`MAX_ENTRIES`), and SiteWatch
   keeps the full history for 90 days.
-- Multisite (network activation) is only partly tested; there is no multisite install locally.
-- The "Slow database queries" and "PHP warnings" views keep only the latest daily summary (a history needs a table).
+- Multisite: not supported, on purpose (the owner decided against it on 23 Sep 2026; a network mode was built and
+  then removed). On a network the plugin behaves as before: activated per site, with the error folder shared by all
+  sites.
+- ~~History for the daily summaries~~: done in 1.13.0 (`connector_daily`, 90 days). The slow-query list itself is still
+  only in the latest report (the history keeps it inside the JSON but the page does not show older ones yet).
 
 ## 8. Local test environment
 
@@ -423,8 +452,10 @@ back to x" when that plugin was updated in the last 7 days), using the existing 
 | Test website in SiteWatch | "WP Test (local)", id 44, connected |
 | Crash plugin | `wp-test/wp-content/plugins/crash-test`: `?crash=1` crashes a request; a `crash-on-load.flag` file in its folder crashes while plugins load |
 | Local-only mu-plugin | `wp-test/wp-content/mu-plugins/local-test-allow-localhost.php` lets WordPress download packages from localhost (production does not need it) |
-| Auto-fix for tests | Off on the test site (so `?crash=1` keeps working for error tests). To test: switch it on under Settings → SiteWatch, load `?crash=1` 3 times. The 24-hour rule is in `sitewatch_connector_autofix_log` (`last`); clear it to test again |
-| Remote actions for tests | Allowed for all actions on the test site (Settings → SiteWatch). Deliver queued commands with `SiteWatch_Connector::heartbeat()` from a `wp-load.php` script. Lower a WordPress.org plugin's `Version:` header to get an update offer |
+| BackWPup for tests | Installed and active on wp-test; its default job "First backup" is used; archives go to `wp-test/wp-content/uploads/backwpup/` |
+| UpdraftPlus for tests | Installed and active on wp-test; backups are stored in `wp-test/wp-content/updraft` (delete old ones when they pile up) |
+| Auto-fix for tests | Off on the test site (so `?crash=1` keeps working for error tests). To test: switch it on under SiteWatch in the WordPress admin menu, load `?crash=1` 3 times. The 24-hour rule is in `sitewatch_connector_autofix_log` (`last`); clear it to test again |
+| Remote actions for tests | Allowed for all actions on the test site (SiteWatch in the WordPress admin menu). Deliver queued commands with `SiteWatch_Connector::heartbeat()` from a `wp-load.php` script. Lower a WordPress.org plugin's `Version:` header to get an update offer |
 | Warnings for tests | The crash-test plugin also answers `?warn=1` with a deprecation, a warning and an undefined-key warning (switch on "Collect PHP warnings" in SiteWatch first) |
 | Vulnerable plugin for tests | Create `wp-test/wp-content/plugins/contact-form-7/wp-contact-form-7.php` containing only a plugin header with `Version: 5.3.1` (no code), send a heartbeat with a snapshot, then run `VulnerabilityScanner::create()->scanDue()`. Delete the folder afterwards |
 
@@ -445,7 +476,7 @@ To reinstall the plugin on the test site: delete `wp-test/wp-content/plugins/sit
 ## 9. Prompt to continue in a new chat
 
 > Read `docs/sitewatch-connector.md` in the SiteWatch repo (C:\xampp\htdocs\sitewatch). It describes the SiteWatch
-> Connector WordPress plugin and its SiteWatch side. All numbered roadmap items and most smaller items are done;
-> continue with what is left in section 7 (follow-ups, multisite, history for daily summaries). Keep plugin code PHP 7.2-compatible, add database changes as a new Migrator step with a new
+> Connector WordPress plugin and its SiteWatch side. The roadmap and notes in section 7 are done or closed with a
+> reason; check there before adding anything. Multisite is out of scope. Keep plugin code PHP 7.2-compatible, add database changes as a new Migrator step with a new
 > release in `App\Core\Release` and `CHANGELOG.md`, bump the plugin version in all three places, and test on the
 > local WordPress at http://localhost/wp-test/.

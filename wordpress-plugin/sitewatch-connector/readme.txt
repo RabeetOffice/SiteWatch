@@ -4,7 +4,7 @@ Tags: monitoring, uptime, errors, security, health
 Requires at least: 5.2
 Tested up to: 6.8
 Requires PHP: 7.2
-Stable tag: 1.6.0
+Stable tag: 1.8.0
 License: GPLv2 or later
 
 Connects a WordPress site to SiteWatch monitoring: the real cause of fatal errors, a daily health and security report, and a change log.
@@ -20,7 +20,7 @@ SiteWatch checks your sites from the outside. This plugin adds the inside view:
 * **Page speed from inside**: page generation time percentiles from a sample of requests, and slow database queries when SAVEQUERIES is on.
 * **PHP warnings** (optional): warnings and deprecation notices counted per file, so you know what will break on the next PHP version.
 * **Auto-fix** (off until you switch it on): a plugin that crashes the site 3 times in 10 minutes is deactivated so visitors get a working site, and SiteWatch alerts you. Plugins you mark as protected are never touched.
-* **Remote actions** (off until you allow them under Settings → SiteWatch): clear caches, deactivate or re-activate a plugin, install plugin updates from WordPress.org, and a maintenance page, requested from SiteWatch.
+* **Remote actions** (off until you allow them under SiteWatch in the WordPress admin menu): clear caches, deactivate or re-activate a plugin, install plugin updates from WordPress.org, and a maintenance page, requested from SiteWatch.
 * **File watch**: an alert when wp-config.php or .htaccess changes outside WordPress (FTP, hosting panel, malware). Only a fingerprint is kept; the contents never leave the site.
 
 Everything is pushed from this site to your SiteWatch server over HTTPS and signed with a secret unique to this site. The plugin opens no public endpoints.
@@ -30,9 +30,18 @@ Everything is pushed from this site to your SiteWatch server over HTTPS and sign
 1. In SiteWatch, open the website, go to the WordPress section and click **Download plugin**.
 2. In WordPress, go to Plugins → Add New → Upload Plugin, choose the zip file and activate it.
 3. In SiteWatch, click **Create connection key** and copy it.
-4. In WordPress, go to Settings → SiteWatch, paste the key and click **Connect**.
+4. In WordPress, open SiteWatch in the admin menu, paste the key and click **Connect**.
 
 == Changelog ==
+
+= 1.8.0 =
+* SiteWatch has its own entry in the WordPress admin menu (with the SiteWatch mark) instead of Settings → SiteWatch, and a redesigned page: status tiles, switches for remote actions and auto-fix, and the connection details at a glance. Old links to the Settings page are redirected.
+* Plugin, theme and WordPress updates and rollbacks requested from SiteWatch run in a background request of their own, one at a time and with a longer time limit, instead of inside the 5-minute report (large updates on slow hosts could time out).
+* Backups can also be started with BackWPup (its first backup job, the way its "Run now" link does). The health report lists every supported backup plugin with its last backup.
+
+= 1.7.0 =
+* Remote actions: install theme updates, install the WordPress update WordPress.org offers, and start an UpdraftPlus backup. Each needs its own tick under Remote actions.
+* The health report includes UpdraftPlus's last backup.
 
 = 1.6.0 =
 * Data files in wp-content/sitewatch-connector are now PHP files that print nothing when requested over the web, so they stay private on nginx too (the folder's .htaccess only protects Apache and LiteSpeed). Existing files are converted with the next report.

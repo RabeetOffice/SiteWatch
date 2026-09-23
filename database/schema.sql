@@ -451,3 +451,26 @@ CREATE TABLE IF NOT EXISTS `connector_commands` (
   KEY `idx_connector_commands_site` (`website_id`, `status`),
   CONSTRAINT `fk_connector_commands_website` FOREIGN KEY (`website_id`) REFERENCES `websites` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Daily inside views from the WordPress plugin (page speed and PHP warnings), one row per reported period.
+CREATE TABLE IF NOT EXISTS `connector_daily` (
+  `id`              BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `website_id`      INT UNSIGNED NOT NULL,
+  `period_start`    DATETIME     NULL,
+  `period_end`      DATETIME     NOT NULL COMMENT 'when the plugin built the health report',
+  `requests`        INT UNSIGNED NULL COMMENT 'sampled requests',
+  `p50_front`       INT UNSIGNED NULL COMMENT 'median page generation time of front-end pages (ms)',
+  `p95_front`       INT UNSIGNED NULL,
+  `p50_admin`       INT UNSIGNED NULL,
+  `p95_admin`       INT UNSIGNED NULL,
+  `queries_front`   DECIMAL(8,1) NULL COMMENT 'average database queries per front-end page',
+  `warnings_total`  INT UNSIGNED NULL COMMENT 'PHP warnings, notices and deprecations counted (NULL: collection off)',
+  `warnings_places` INT UNSIGNED NULL,
+  `deprecations`    INT UNSIGNED NULL,
+  `performance`     MEDIUMTEXT   NULL COMMENT 'full performance summary (JSON)',
+  `php_warnings`    MEDIUMTEXT   NULL COMMENT 'warning summary, top places (JSON)',
+  `received_at`     DATETIME     NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_connector_daily_period` (`website_id`, `period_end`),
+  CONSTRAINT `fk_connector_daily_website` FOREIGN KEY (`website_id`) REFERENCES `websites` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

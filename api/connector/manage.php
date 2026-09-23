@@ -41,7 +41,7 @@ switch (Request::string('action')) {
             Response::error($e->getMessage(), [], 500);
         }
         ActivityService::log('connector.key_created', sprintf('Connection key created for %s', $website['name']), $id);
-        Response::success('Connection key created. Paste it in WordPress under Settings → SiteWatch.', ['key' => $key, 'connector' => $service->details($id)]);
+        Response::success('Connection key created. Paste it on the SiteWatch page in the WordPress admin menu.', ['key' => $key, 'connector' => $service->details($id)]);
 
     case 'show':
         $key = $service->currentKey($id);

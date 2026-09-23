@@ -5,11 +5,13 @@
 
 defined('WP_UNINSTALL_PLUGIN') || exit;
 
-foreach (array('sitewatch_connector', 'sitewatch_connector_state', 'sitewatch_connector_queue', 'sitewatch_connector_logins', 'sitewatch_connector_errors', 'sitewatch_connector_files', 'sitewatch_connector_insights', 'sitewatch_connector_remote', 'sitewatch_connector_commands', 'sitewatch_connector_maintenance', 'sitewatch_connector_autofix', 'sitewatch_connector_autofix_log', 'sitewatch_connector_versions') as $option) {
+$sitewatch_options = array('sitewatch_connector', 'sitewatch_connector_state', 'sitewatch_connector_queue', 'sitewatch_connector_logins', 'sitewatch_connector_errors', 'sitewatch_connector_files', 'sitewatch_connector_insights', 'sitewatch_connector_remote', 'sitewatch_connector_commands', 'sitewatch_connector_maintenance', 'sitewatch_connector_autofix', 'sitewatch_connector_autofix_log', 'sitewatch_connector_versions', 'sitewatch_connector_command_queue');
+foreach ($sitewatch_options as $option) {
     delete_option($option);
 }
 delete_metadata('user', 0, 'sitewatch_last_login', '', true);
 wp_clear_scheduled_hook('sitewatch_connector_heartbeat');
+wp_clear_scheduled_hook('sitewatch_connector_run_command');
 
 if (defined('WPMU_PLUGIN_DIR') && is_file(WPMU_PLUGIN_DIR . '/sitewatch-connector-loader.php')) {
     @unlink(WPMU_PLUGIN_DIR . '/sitewatch-connector-loader.php');

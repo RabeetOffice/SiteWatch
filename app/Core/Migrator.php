@@ -24,7 +24,7 @@ use RuntimeException;
  */
 final class Migrator
 {
-    public const VERSION = 11;
+    public const VERSION = 12;
     /** Version of databases created before schema versions were recorded. */
     public const BASELINE = 1;
     public const SETTING = 'schema_version';
@@ -112,6 +112,13 @@ final class Migrator
             'title'   => 'Auto-fix for WordPress plugins',
             'changes' => [
                 'Adds connector_sites.autofix: whether a site deactivates crashing plugins by itself, and which plugins it protects.',
+            ],
+        ],
+        12 => [
+            'release' => '1.13.0',
+            'title'   => 'History of page speed and PHP warnings',
+            'changes' => [
+                'Creates the connector_daily table: one row per daily report from the WordPress plugin with page generation times and PHP warning counts, kept for 90 days.',
             ],
         ],
     ];
@@ -228,6 +235,7 @@ final class Migrator
             9 => fn () => $this->connectorProbeIp(),
             10 => fn () => $this->connectorRemoteActions(),
             11 => fn () => $this->connectorAutofix(),
+            12 => fn () => $this->createTable('connector_daily'),
         ];
     }
 

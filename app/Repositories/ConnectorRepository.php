@@ -292,6 +292,43 @@ final class ConnectorRepository extends BaseRepository
         return $this->db->delete('connector_commands', 'created_at < :c', ['c' => $cutoffUtc]);
     }
 
+    // ------------------------------------------------------------------
+    // Daily inside views (page speed, PHP warnings)
+    // ------------------------------------------------------------------
+
+    /** @param array<string, mixed> $row */
+    public function saveDaily(array $row): void
+    {
+        $columns = array_keys($row);
+        $this->db->query(
+            'INSERT INTO connector_daily (' . implode(', ', $columns) . ') VALUES (:' . implode(', :', $columns) . ')
+             ON DUPLICATE KEY UPDATE received_at = VALUES(received_at)',
+            $row
+        );
+    }
+
+    /** @return array<int, array<string, mixed>> Oldest first. */
+    public function daily(int $websiteId, string $sinceUtc): array
+    {
+        return $this->db->fetchAll(
+            'SELECT id, period_start, period_end, requests, p50_front, p95_front, p50_admin, p95_admin, queries_front,
+                    warnings_total, warnings_places, deprecations
+             FROM connector_daily WHERE website_id = :w AND period_end >= :since ORDER BY period_end ASC LIMIT 400',
+            ['w' => $websiteId, 'since' => $sinceUtc]
+        );
+    }
+
+    /** @return array<string, mixed>|null One stored report with its full JSON. */
+    public function dailyOne(int $websiteId, int $id): ?array
+    {
+        return $this->db->fetch('SELECT * FROM connector_daily WHERE website_id = :w AND id = :id', ['w' => $websiteId, 'id' => $id]);
+    }
+
+    public function purgeDailyOlderThan(string $cutoffUtc): int
+    {
+        return $this->db->delete('connector_daily', 'period_end < :c', ['c' => $cutoffUtc]);
+    }
+
     public function purgeFeedOlderThan(string $cutoffUtc): int
     {
         return $this->db->delete('vulnerability_feed', 'fetched_at < :c', ['c' => $cutoffUtc]);

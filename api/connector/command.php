@@ -44,6 +44,9 @@ $args = json_decode((string) $command['args'], true) ?: [];
 $what = match ($action) {
     'deactivate_plugin', 'activate_plugin' => RemoteActionService::ACTIONS[$action] . ' ' . ($args['plugin'] ?? ''),
     'update_plugins' => 'Update ' . count($args['plugins'] ?? []) . ' plugin(s)',
+    'update_themes'  => 'Update ' . count($args['themes'] ?? []) . ' theme(s)',
+    'update_core'    => 'Update WordPress to ' . ($args['version'] ?? ''),
+    'rollback_plugin' => 'Roll back ' . ($args['plugin'] ?? '') . ' to ' . ($args['version'] ?? ''),
     'maintenance'    => ($args['mode'] ?? '') === 'on' ? 'Maintenance page on for ' . (int) ($args['minutes'] ?? 0) . ' min' : 'Maintenance page off',
     default          => RemoteActionService::ACTIONS[$action] ?? $action,
 };

@@ -1,7 +1,8 @@
 <?php
 /**
- * Settings → SiteWatch: connect with a key, see the connection status and what is being reported.
- * Only administrators (manage_options) can see or change anything here.
+ * The SiteWatch page (its own entry in the admin menu): connect with a key, see the connection status, choose remote
+ * actions and auto-fix, and see what is reported. Only administrators (manage_options) can see or change anything.
+ * Styles: assets/admin.css, loaded on this page only.
  */
 
 defined('ABSPATH') || exit;
@@ -9,10 +10,18 @@ defined('ABSPATH') || exit;
 final class SiteWatch_Connector_Admin
 {
     const PAGE = 'sitewatch-connector';
+    /** Dashicons for the remote actions list. */
+    const ACTION_ICONS = array(
+        'clear_cache' => 'performance', 'deactivate_plugin' => 'dismiss', 'activate_plugin' => 'yes-alt', 'update_plugins' => 'update',
+        'maintenance' => 'hammer', 'rollback_plugin' => 'backup', 'update_themes' => 'admin-appearance', 'update_core' => 'wordpress',
+        'backup' => 'cloud-upload',
+    );
 
     public static function init()
     {
         add_action('admin_menu', array(__CLASS__, 'menu'));
+        add_action('admin_init', array(__CLASS__, 'redirect_old_url'));
+        add_action('admin_enqueue_scripts', array(__CLASS__, 'assets'));
         add_action('admin_post_sitewatch_connector_connect', array(__CLASS__, 'handle_connect'));
         add_action('admin_post_sitewatch_connector_send', array(__CLASS__, 'handle_send'));
         add_action('admin_post_sitewatch_connector_disconnect', array(__CLASS__, 'handle_disconnect'));
@@ -26,12 +35,49 @@ final class SiteWatch_Connector_Admin
 
     public static function url(array $args = array())
     {
-        return add_query_arg(array_merge(array('page' => self::PAGE), $args), admin_url('options-general.php'));
+        return add_query_arg(array_merge(array('page' => self::PAGE), $args), admin_url('admin.php'));
     }
 
+    /** Its own top-level menu entry with the SiteWatch mark, right below Dashboard. */
     public static function menu()
     {
-        add_options_page('SiteWatch Connector', 'SiteWatch', 'manage_options', self::PAGE, array(__CLASS__, 'render'));
+        add_menu_page('SiteWatch Connector', 'SiteWatch', 'manage_options', self::PAGE, array(__CLASS__, 'render'), self::menu_icon(), 3);
+    }
+
+    /**
+     * The SiteWatch mark for the admin menu, drawn with filled shapes only: WordPress repaints the `fill` attributes of
+     * menu icons in its own colours (grey, white when selected, following the admin colour scheme); strokes and shapes
+     * without a fill attribute would not be repainted.
+     */
+    private static function menu_icon()
+    {
+        $svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">'
+            . '<path fill="#a7aaad" d="M43.08 18.89A19.75 19.75 0 1 1 29.11 4.92A2.75 2.75 0 0 1 27.69 10.24A14.25 14.25 0 1 0 37.76 20.31A2.75 2.75 0 0 1 43.08 18.89Z"/>'
+            . '<circle fill="#a7aaad" cx="36.8" cy="11.2" r="5.2"/>'
+            . '<path fill="#a7aaad" d="M10 30L17.5 30L17.5 25L10 25Z"/><path fill="#a7aaad" d="M19.83 28.41L24.33 16.91L19.67 15.09L15.17 26.59Z"/>'
+            . '<path fill="#a7aaad" d="M19.59 16.65L24.59 35.15L29.41 33.85L24.41 15.35Z"/><path fill="#a7aaad" d="M29.24 35.62L32.74 28.62L28.26 26.38L24.76 33.38Z"/>'
+            . '<path fill="#a7aaad" d="M30.5 30L38 30L38 25L30.5 25Z"/>'
+            . '<circle fill="#a7aaad" cx="17.5" cy="27.5" r="2.5"/><circle fill="#a7aaad" cx="22" cy="16" r="2.5"/><circle fill="#a7aaad" cx="27" cy="34.5" r="2.5"/><circle fill="#a7aaad" cx="30.5" cy="27.5" r="2.5"/></svg>';
+        return 'data:image/svg+xml;base64,' . base64_encode($svg);
+    }
+
+    /** The page used to live under Settings; send old links and bookmarks to the new place. */
+    public static function redirect_old_url()
+    {
+        global $pagenow;
+        if ($pagenow === 'options-general.php' && isset($_GET['page']) && $_GET['page'] === self::PAGE && current_user_can('manage_options')) {
+            wp_safe_redirect(self::url());
+            exit;
+        }
+    }
+
+    public static function assets($hook)
+    {
+        if ($hook !== 'toplevel_page_' . self::PAGE) {
+            return;
+        }
+        $file = SITEWATCH_CONNECTOR_DIR . '/assets/admin.css';
+        wp_enqueue_style('sitewatch-connector-admin', plugins_url('assets/admin.css', SITEWATCH_CONNECTOR_FILE), array(), SITEWATCH_CONNECTOR_VERSION . '.' . (int) @filemtime($file));
     }
 
     public static function action_links($links)
@@ -47,13 +93,13 @@ final class SiteWatch_Connector_Admin
         if ($until !== null && current_user_can('manage_options')) {
             echo '<div class="notice notice-warning"><p><strong>Maintenance page on</strong> (switched on from SiteWatch): visitors see "Briefly unavailable for scheduled maintenance" until '
                 . esc_html(wp_date(get_option('time_format'), $until)) . '. Signed-in editors see the site normally. '
-                . '<a href="' . esc_url(self::url()) . '#sitewatch-remote">End it now</a></p></div>';
+                . '<a href="' . esc_url(self::url()) . '#sitewatch-maintenance">End it now</a></p></div>';
         }
         if (!current_user_can('manage_options') || SiteWatch_Connector_Client::config() !== null) {
             return;
         }
         $screen = function_exists('get_current_screen') ? get_current_screen() : null;
-        if ($screen && in_array($screen->id, array('settings_page_' . self::PAGE), true)) {
+        if ($screen && $screen->id === 'toplevel_page_' . self::PAGE) {
             return;
         }
         echo '<div class="notice notice-info"><p><strong>SiteWatch Connector</strong> is installed but not connected yet. '
@@ -178,170 +224,282 @@ final class SiteWatch_Connector_Admin
         $errors = SiteWatch_Connector_Errors::recent();
         $queued = count(SiteWatch_Connector_Activity::queued(SiteWatch_Connector_Activity::MAX_QUEUE));
         $next = wp_next_scheduled(SiteWatch_Connector::CRON_HOOK);
+        $failing = !empty($state['last_error']);
+        $post = esc_url(admin_url('admin-post.php'));
         ?>
-        <div class="wrap">
-            <h1>SiteWatch Connector</h1>
+        <div class="wrap swc">
+            <h1 class="screen-reader-text">SiteWatch Connector</h1>
+
+            <header class="swc-header">
+                <div class="swc-brand">
+                    <span class="swc-logo" aria-hidden="true"><?php echo self::logo(); // static SVG ?></span>
+                    <div>
+                        <div class="swc-title">SiteWatch Connector</div>
+                        <div class="swc-subtitle">Monitoring from inside WordPress · version <?php echo esc_html(SITEWATCH_CONNECTOR_VERSION); ?></div>
+                    </div>
+                </div>
+                <div class="swc-header-actions">
+                    <?php if ($config === null): ?>
+                        <span class="swc-pill swc-pill-neutral"><span class="swc-dot"></span> Not connected</span>
+                    <?php elseif ($failing): ?>
+                        <span class="swc-pill swc-pill-danger"><span class="swc-dot"></span> Report failing</span>
+                    <?php else: ?>
+                        <span class="swc-pill swc-pill-success"><span class="swc-dot"></span> Connected</span>
+                    <?php endif; ?>
+                    <?php if ($config !== null): ?>
+                        <a class="swc-btn swc-btn-light" href="<?php echo esc_url($config['sitewatch_url'] . '/admin/website-details.php?id=' . (int) $config['site_id']); ?>" target="_blank" rel="noopener">
+                            <span class="dashicons dashicons-external" aria-hidden="true"></span> Open SiteWatch</a>
+                        <form method="post" action="<?php echo $post; ?>">
+                            <input type="hidden" name="action" value="sitewatch_connector_send">
+                            <?php wp_nonce_field('sitewatch_connector_send'); ?>
+                            <button type="submit" class="swc-btn swc-btn-primary"><span class="dashicons dashicons-update" aria-hidden="true"></span> Send report now</button>
+                        </form>
+                    <?php endif; ?>
+                </div>
+            </header>
+
             <?php if ($notice): ?>
-                <div class="notice notice-<?php echo esc_attr($notice['type']); ?> is-dismissible"><p><?php echo esc_html($notice['message']); ?></p></div>
+                <div class="swc-alert swc-alert-<?php echo $notice['type'] === 'error' ? 'danger' : 'success'; ?>" role="status">
+                    <span class="dashicons dashicons-<?php echo $notice['type'] === 'error' ? 'warning' : 'yes-alt'; ?>" aria-hidden="true"></span>
+                    <div><?php echo esc_html($notice['message']); ?></div>
+                </div>
             <?php endif; ?>
 
             <?php if ($config === null): ?>
-                <div class="card" style="max-width:720px">
-                    <h2>Connect this site</h2>
-                    <ol>
-                        <li>In SiteWatch, open this website and go to the <strong>WordPress</strong> section.</li>
-                        <li>Click <strong>Create connection key</strong> and copy the key.</li>
-                        <li>Paste it below and click <strong>Connect</strong>.</li>
+                <section class="swc-card swc-connect">
+                    <span class="swc-connect-logo" aria-hidden="true"><?php echo self::logo(); ?></span>
+                    <h2>Connect this site to SiteWatch</h2>
+                    <p class="swc-muted">See why errors happen, not just that they happened: fatal errors with their cause, a daily health and security report, and a change log.</p>
+                    <ol class="swc-steps">
+                        <li><span>1</span><div>In SiteWatch, open this website and go to the <strong>WordPress</strong> section.</div></li>
+                        <li><span>2</span><div>Click <strong>Create connection key</strong> and copy the key.</div></li>
+                        <li><span>3</span><div>Paste it below and click <strong>Connect</strong>.</div></li>
                     </ol>
-                    <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
+                    <form method="post" action="<?php echo $post; ?>">
                         <input type="hidden" name="action" value="sitewatch_connector_connect">
                         <?php wp_nonce_field('sitewatch_connector_connect'); ?>
-                        <p><label for="sw-key"><strong>Connection key</strong></label></p>
-                        <textarea id="sw-key" name="connection_key" rows="4" class="large-text code" required placeholder="swc1_…" autocomplete="off" spellcheck="false"></textarea>
-                        <p><?php submit_button('Connect', 'primary', 'submit', false); ?></p>
+                        <label class="swc-label" for="sw-key">Connection key</label>
+                        <textarea id="sw-key" name="connection_key" rows="3" class="swc-input swc-mono" required placeholder="swc1_…" autocomplete="off" spellcheck="false"></textarea>
+                        <button type="submit" class="swc-btn swc-btn-primary swc-btn-lg"><span class="dashicons dashicons-admin-links" aria-hidden="true"></span> Connect</button>
                     </form>
-                </div>
-            <?php else: ?>
-                <table class="widefat striped" style="max-width:720px;margin-top:16px">
-                    <tbody>
-                        <tr><th style="width:200px">Status</th><td>
-                            <?php if (!empty($state['last_error'])): ?>
-                                <span style="color:#b32d2e">&#9679;</span> Last report failed: <?php echo esc_html($state['last_error']); ?>
-                            <?php else: ?>
-                                <span style="color:#008a20">&#9679;</span> Connected
-                            <?php endif; ?>
-                        </td></tr>
-                        <tr><th>SiteWatch</th><td><a href="<?php echo esc_url($config['sitewatch_url']); ?>" target="_blank" rel="noopener"><?php echo esc_html($config['sitewatch_url']); ?></a> · website #<?php echo (int) $config['site_id']; ?></td></tr>
-                        <tr><th>Connected</th><td><?php echo esc_html(self::time_ago(isset($config['connected_at']) ? $config['connected_at'] : 0)); ?></td></tr>
-                        <tr><th>Last successful report</th><td><?php echo esc_html(self::time_ago(isset($state['last_ok']) ? $state['last_ok'] : 0)); ?></td></tr>
-                        <tr><th>Last health snapshot</th><td><?php echo esc_html(self::time_ago(isset($state['last_snapshot']) ? $state['last_snapshot'] : 0)); ?></td></tr>
-                        <tr><th>Next report</th><td><?php echo $next ? esc_html(sprintf('in %s', human_time_diff(time(), $next))) : 'not scheduled'; ?>
-                            <?php if (defined('DISABLE_WP_CRON') && DISABLE_WP_CRON): ?><br><em>WP-Cron is disabled on this site; reports go out when your server cron calls wp-cron.php.</em><?php endif; ?></td></tr>
-                        <tr><th>Waiting to send</th><td><?php echo (int) $queued; ?> activity event(s)</td></tr>
-                        <tr><th>Early error capture</th><td><?php echo SiteWatch_Connector::loader_installed()
-                            ? 'Active (must-use loader installed)'
-                            : 'Limited: the loader could not be written to ' . esc_html(defined('WPMU_PLUGIN_DIR') ? str_replace(ABSPATH, '', WPMU_PLUGIN_DIR) : 'wp-content/mu-plugins') . '. Errors in plugins that load before this one may be missed.'; ?></td></tr>
-                    </tbody>
-                </table>
-                <div style="display:flex;gap:8px;flex-wrap:wrap;margin:16px 0">
-                    <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" style="display:inline">
-                        <input type="hidden" name="action" value="sitewatch_connector_send">
-                        <?php wp_nonce_field('sitewatch_connector_send'); ?>
-                        <?php submit_button('Send report now', 'primary', 'submit', false); ?>
-                    </form>
-                    <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" style="display:inline" onsubmit="return confirm('Disconnect this site from SiteWatch?');">
-                        <input type="hidden" name="action" value="sitewatch_connector_disconnect">
-                        <?php wp_nonce_field('sitewatch_connector_disconnect'); ?>
-                        <?php submit_button('Disconnect', 'secondary', 'submit', false); ?>
-                    </form>
-                </div>
-            <?php endif; ?>
+                </section>
+            <?php else:
+                $remote = SiteWatch_Connector_Remote::settings();
+                $recent = SiteWatch_Connector_Remote::recent(10);
+                $until = SiteWatch_Connector_Remote::maintenance_until();
+                $autofix = SiteWatch_Connector_Autofix::settings();
+                $fixed = SiteWatch_Connector_Autofix::recent();
+                if (!function_exists('get_plugins')) {
+                    require_once ABSPATH . 'wp-admin/includes/plugin.php';
+                }
+                $all_plugins = get_plugins();
+                $loader = SiteWatch_Connector::loader_installed();
+                ?>
 
-            <?php if ($config !== null): $remote = SiteWatch_Connector_Remote::settings(); $recent = SiteWatch_Connector_Remote::recent(); $until = SiteWatch_Connector_Remote::maintenance_until(); ?>
-                <h2 id="sitewatch-remote" style="margin-top:32px">Remote actions</h2>
-                <p style="max-width:720px">Let SiteWatch users ask this site to do the things you tick below. Nothing else can be requested:
-                    no code, file or user changes. Requests arrive with the next report (every 5 minutes), are checked against this site's secret, and each one is listed below with its result.</p>
+                <?php if ($failing): ?>
+                    <div class="swc-alert swc-alert-danger"><span class="dashicons dashicons-warning" aria-hidden="true"></span>
+                        <div><strong>The last report failed:</strong> <?php echo esc_html($state['last_error']); ?></div></div>
+                <?php endif; ?>
                 <?php if ($until !== null): ?>
-                    <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" style="margin-bottom:12px">
-                        <input type="hidden" name="action" value="sitewatch_connector_maintenance_off">
-                        <?php wp_nonce_field('sitewatch_connector_maintenance_off'); ?>
-                        <strong>The maintenance page is on until <?php echo esc_html(wp_date(get_option('date_format') . ' ' . get_option('time_format'), $until)); ?>.</strong>
-                        <?php submit_button('End maintenance now', 'secondary small', 'submit', false); ?>
-                    </form>
+                    <div class="swc-alert swc-alert-warning" id="sitewatch-maintenance">
+                        <span class="dashicons dashicons-hammer" aria-hidden="true"></span>
+                        <div><strong>Maintenance page on</strong> until <?php echo esc_html(wp_date(get_option('date_format') . ' ' . get_option('time_format'), $until)); ?>. Visitors see a maintenance message; signed-in editors see the site.</div>
+                        <form method="post" action="<?php echo $post; ?>">
+                            <input type="hidden" name="action" value="sitewatch_connector_maintenance_off">
+                            <?php wp_nonce_field('sitewatch_connector_maintenance_off'); ?>
+                            <button type="submit" class="swc-btn swc-btn-light swc-btn-sm">End maintenance now</button>
+                        </form>
+                    </div>
                 <?php endif; ?>
-                <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" class="card" style="max-width:720px">
-                    <input type="hidden" name="action" value="sitewatch_connector_remote">
-                    <?php wp_nonce_field('sitewatch_connector_remote'); ?>
-                    <p><label><input type="checkbox" name="remote_enabled" value="1"<?php checked($remote['enabled']); ?>> <strong>Allow remote actions from SiteWatch</strong></label></p>
-                    <fieldset style="margin-left:24px">
-                        <?php foreach (SiteWatch_Connector_Remote::ACTIONS as $key => $label): ?>
-                            <p style="margin:4px 0"><label><input type="checkbox" name="remote_actions[]" value="<?php echo esc_attr($key); ?>"<?php checked(in_array($key, $remote['actions'], true)); ?>> <?php echo esc_html($label); ?></label></p>
-                        <?php endforeach; ?>
-                    </fieldset>
-                    <p><?php submit_button('Save remote actions', 'secondary', 'submit', false); ?></p>
-                </form>
-                <?php if ($recent !== array()): ?>
-                    <table class="widefat striped" style="max-width:1000px;margin-top:12px">
-                        <thead><tr><th>When</th><th>Action</th><th>Result</th></tr></thead>
-                        <tbody>
-                        <?php foreach ($recent as $id => $r): ?>
-                            <tr>
-                                <td><?php echo esc_html(self::time_ago(isset($r['at']) ? $r['at'] : 0)); ?></td>
-                                <td><?php echo esc_html(isset($r['action']) ? $r['action'] : ''); ?> <span style="color:#646970">#<?php echo (int) $id; ?></span></td>
-                                <td><span style="color:<?php echo !empty($r['ok']) ? '#008a20' : '#b32d2e'; ?>">&#9679;</span> <?php echo esc_html(isset($r['message']) ? $r['message'] : ''); ?></td>
-                            </tr>
-                        <?php endforeach; ?>
-                        </tbody>
-                    </table>
-                <?php endif; ?>
-            <?php endif; ?>
 
-            <?php if ($config !== null): $autofix = SiteWatch_Connector_Autofix::settings(); $fixed = SiteWatch_Connector_Autofix::recent();
-                if (!function_exists('get_plugins')) { require_once ABSPATH . 'wp-admin/includes/plugin.php'; }
-                $all_plugins = get_plugins(); ?>
-                <h2 id="sitewatch-autofix" style="margin-top:32px">Auto-fix</h2>
-                <p style="max-width:720px">When the same fatal error from one plugin happens 3 times within 10 minutes, deactivate that plugin so visitors get a working site,
-                    and alert SiteWatch. WordPress's own recovery mode only helps the administrator who opens its link. A plugin is deactivated automatically at most
-                    once a day: if you activate it again, it stays on. Its settings and data are kept; activate it again from the Plugins screen or from SiteWatch.</p>
-                <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" class="card" style="max-width:720px">
-                    <input type="hidden" name="action" value="sitewatch_connector_autofix">
-                    <?php wp_nonce_field('sitewatch_connector_autofix'); ?>
-                    <p><label><input type="checkbox" name="autofix_enabled" value="1"<?php checked($autofix['enabled']); ?>> <strong>Deactivate a plugin that keeps crashing the site</strong></label></p>
-                    <p style="margin-bottom:4px">Never deactivate automatically:</p>
-                    <fieldset style="margin-left:24px;max-height:220px;overflow:auto">
-                        <?php foreach ($all_plugins as $file => $p): if ($file === SITEWATCH_CONNECTOR_BASENAME || !is_plugin_active($file)) { continue; } ?>
-                            <p style="margin:2px 0"><label><input type="checkbox" name="autofix_protected[]" value="<?php echo esc_attr($file); ?>"<?php checked(in_array($file, $autofix['protected'], true)); ?>> <?php echo esc_html($p['Name']); ?></label></p>
-                        <?php endforeach; ?>
-                    </fieldset>
-                    <p><?php submit_button('Save auto-fix', 'secondary', 'submit', false); ?></p>
-                </form>
-                <?php if ($fixed !== array()): ?>
-                    <p><strong>Deactivated automatically in the last 7 days:</strong>
-                        <?php echo esc_html(implode(', ', array_map(function ($file) use ($fixed, $all_plugins) {
-                            return (isset($all_plugins[$file]['Name']) ? $all_plugins[$file]['Name'] : $file) . ' (' . human_time_diff((int) $fixed[$file], time()) . ' ago)';
-                        }, array_keys($fixed)))); ?></p>
-                <?php endif; ?>
-            <?php endif; ?>
+                <div class="swc-tiles">
+                    <?php
+                    self::tile('clock', 'Last report', self::time_ago(isset($state['last_ok']) ? $state['last_ok'] : 0), $failing ? 'danger' : 'success');
+                    self::tile('calendar-alt', 'Next report', $next ? sprintf('in %s', human_time_diff(time(), $next)) : 'Not scheduled', $next ? '' : 'warning',
+                        defined('DISABLE_WP_CRON') && DISABLE_WP_CRON ? 'WP-Cron is off: your server cron sends the reports.' : 'Every 5 minutes through WP-Cron.');
+                    self::tile('heart', 'Health report', self::time_ago(isset($state['last_snapshot']) ? $state['last_snapshot'] : 0), '', 'Sent daily, or when SiteWatch asks.');
+                    self::tile('shield', 'Early error capture', $loader ? 'Active' : 'Limited', $loader ? 'success' : 'warning',
+                        $loader ? 'Must-use loader installed.' : 'The loader could not be written to wp-content/mu-plugins.');
+                    ?>
+                </div>
 
-            <h2 style="margin-top:32px">Captured errors</h2>
-            <p>Fatal errors are recorded here and sent to SiteWatch. Visitors still see only the standard WordPress error page.</p>
-            <?php if ($errors === array()): ?>
-                <p><em>No fatal errors recorded.</em></p>
-            <?php else: ?>
-                <table class="widefat striped" style="max-width:1000px">
-                    <thead><tr><th>Error</th><th>Source</th><th>Times</th><th>Last seen</th></tr></thead>
-                    <tbody>
-                    <?php foreach ($errors as $entry): $d = $entry['event']['data']; ?>
-                        <tr>
-                            <td><strong><?php echo esc_html($d['error_type']); ?>:</strong> <?php echo esc_html($d['message']); ?><br><code><?php echo esc_html($d['file'] . ':' . $d['line']); ?></code></td>
-                            <td><?php echo esc_html($d['component']['name'] !== '' ? $d['component']['name'] . ($d['component']['version'] !== '' ? ' ' . $d['component']['version'] : '') : '—'); ?></td>
-                            <td><?php echo (int) $entry['count']; ?></td>
-                            <td><?php echo esc_html(self::time_ago($entry['last_at'])); ?></td>
-                        </tr>
-                    <?php endforeach; ?>
-                    </tbody>
-                </table>
-                <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
-                    <input type="hidden" name="action" value="sitewatch_connector_clear_errors">
-                    <?php wp_nonce_field('sitewatch_connector_clear_errors'); ?>
-                    <?php submit_button('Clear list', 'secondary small', 'submit', false); ?>
-                </form>
-            <?php endif; ?>
+                <div class="swc-grid">
+                    <div class="swc-main">
 
-            <h2 style="margin-top:32px">What is sent to SiteWatch</h2>
-            <ul style="list-style:disc;padding-left:20px;max-width:720px">
-                <li>Fatal PHP errors: message, file, line and the plugin or theme involved.</li>
-                <li>A daily health report: WordPress, PHP and database versions, pending updates, installed plugins and themes, scheduled tasks and security checks.</li>
-                <li>Changes: plugins and themes installed, updated or switched, WordPress updates, administrator sign-ins, new administrators and changes to the site address or registration settings.</li>
-                <li>The number of failed sign-ins and the IP addresses they came from.</li>
-                <li>Whether wp-config.php or .htaccess changed: size, time and a short fingerprint, never the contents.</li>
-                <li>Page generation time, query count and memory of a sample of requests (page paths without query strings), and database queries slower than 50 ms with all values replaced by "?" (only when SAVEQUERIES is on).</li>
-                <li>If switched on in SiteWatch: PHP warnings, notices and deprecations with file, line and a count.</li>
-                <li>Which remote actions you allow, whether the maintenance page is on, and the results of remote actions.</li>
-                <li>Whether auto-fix is on, which plugins it must not touch, plugins it deactivated, and the version each plugin had before its last update.</li>
-            </ul>
-            <p>Never sent: passwords, content, orders, customer or visitor data.</p>
+                        <section class="swc-card" id="sitewatch-remote">
+                            <form method="post" action="<?php echo $post; ?>" data-swc-group>
+                                <input type="hidden" name="action" value="sitewatch_connector_remote">
+                                <?php wp_nonce_field('sitewatch_connector_remote'); ?>
+                                <div class="swc-card-head">
+                                    <div>
+                                        <h2><span class="dashicons dashicons-admin-generic" aria-hidden="true"></span> Remote actions</h2>
+                                        <p class="swc-muted">Let SiteWatch users ask this site to do the things you switch on. Nothing else can be requested: no code, file or user changes.
+                                            Requests are checked against this site's secret and arrive with the next report.</p>
+                                    </div>
+                                    <label class="swc-switch"><input type="checkbox" name="remote_enabled" value="1" data-swc-master<?php checked($remote['enabled']); ?>><span></span><b>Allow</b></label>
+                                </div>
+                                <ul class="swc-options" data-swc-options>
+                                    <?php foreach (SiteWatch_Connector_Remote::ACTIONS as $key => $label): ?>
+                                        <li>
+                                            <span class="swc-option-icon dashicons dashicons-<?php echo esc_attr(array_key_exists($key, self::ACTION_ICONS) ? self::ACTION_ICONS[$key] : 'admin-tools'); ?>" aria-hidden="true"></span>
+                                            <span class="swc-option-text"><?php echo esc_html($label); ?></span>
+                                            <label class="swc-switch swc-switch-sm"><input type="checkbox" name="remote_actions[]" value="<?php echo esc_attr($key); ?>"<?php checked(in_array($key, $remote['actions'], true)); ?>><span></span><span class="screen-reader-text"><?php echo esc_html($label); ?></span></label>
+                                        </li>
+                                    <?php endforeach; ?>
+                                </ul>
+                                <div class="swc-card-foot"><button type="submit" class="swc-btn swc-btn-primary">Save remote actions</button></div>
+                            </form>
+                            <?php if ($recent !== array()): ?>
+                                <h3 class="swc-subhead">Recent requests</h3>
+                                <ul class="swc-list">
+                                    <?php foreach ($recent as $id => $r): $ok = !empty($r['ok']); ?>
+                                        <li>
+                                            <span class="swc-pill swc-pill-<?php echo $ok ? 'success' : 'danger'; ?>"><?php echo $ok ? 'Done' : 'Failed'; ?></span>
+                                            <div class="swc-list-body">
+                                                <div><?php echo esc_html(isset($r['message']) ? $r['message'] : ''); ?></div>
+                                                <div class="swc-muted swc-small"><?php echo esc_html(self::action_label(isset($r['action']) ? $r['action'] : '')); ?> · #<?php echo (int) $id; ?> · <?php echo esc_html(self::time_ago(isset($r['at']) ? $r['at'] : 0)); ?></div>
+                                            </div>
+                                        </li>
+                                    <?php endforeach; ?>
+                                </ul>
+                            <?php endif; ?>
+                        </section>
+
+                        <section class="swc-card" id="sitewatch-autofix">
+                            <form method="post" action="<?php echo $post; ?>" data-swc-group>
+                                <input type="hidden" name="action" value="sitewatch_connector_autofix">
+                                <?php wp_nonce_field('sitewatch_connector_autofix'); ?>
+                                <div class="swc-card-head">
+                                    <div>
+                                        <h2><span class="dashicons dashicons-sos" aria-hidden="true"></span> Auto-fix</h2>
+                                        <p class="swc-muted">When the same fatal error from one plugin happens 3 times within 10 minutes, switch that plugin off so visitors get a working site,
+                                            and alert SiteWatch. At most once a day per plugin; its settings and data are kept.</p>
+                                    </div>
+                                    <label class="swc-switch"><input type="checkbox" name="autofix_enabled" value="1" data-swc-master<?php checked($autofix['enabled']); ?>><span></span><b>On</b></label>
+                                </div>
+                                <div data-swc-options>
+                                    <div class="swc-label">Never switch off automatically</div>
+                                    <div class="swc-chips">
+                                        <?php foreach ($all_plugins as $file => $p): if ($file === SITEWATCH_CONNECTOR_BASENAME || !is_plugin_active($file)) { continue; } ?>
+                                            <label class="swc-chip"><input type="checkbox" name="autofix_protected[]" value="<?php echo esc_attr($file); ?>"<?php checked(in_array($file, $autofix['protected'], true)); ?>><span><?php echo esc_html($p['Name']); ?></span></label>
+                                        <?php endforeach; ?>
+                                    </div>
+                                </div>
+                                <?php if ($fixed !== array()): ?>
+                                    <p class="swc-small swc-muted"><strong>Switched off in the last 7 days:</strong>
+                                        <?php echo esc_html(implode(', ', array_map(function ($file) use ($fixed, $all_plugins) {
+                                            return (isset($all_plugins[$file]['Name']) ? $all_plugins[$file]['Name'] : $file) . ' (' . human_time_diff((int) $fixed[$file], time()) . ' ago)';
+                                        }, array_keys($fixed)))); ?></p>
+                                <?php endif; ?>
+                                <div class="swc-card-foot"><button type="submit" class="swc-btn swc-btn-primary">Save auto-fix</button></div>
+                            </form>
+                        </section>
+
+                        <section class="swc-card" id="sitewatch-errors">
+                            <div class="swc-card-head">
+                                <div>
+                                    <h2><span class="dashicons dashicons-warning" aria-hidden="true"></span> Captured errors</h2>
+                                    <p class="swc-muted">Fatal errors are recorded here and sent to SiteWatch. Visitors only see the standard WordPress error page.</p>
+                                </div>
+                                <?php if ($errors !== array()): ?>
+                                    <form method="post" action="<?php echo $post; ?>">
+                                        <input type="hidden" name="action" value="sitewatch_connector_clear_errors">
+                                        <?php wp_nonce_field('sitewatch_connector_clear_errors'); ?>
+                                        <button type="submit" class="swc-btn swc-btn-light swc-btn-sm">Clear list</button>
+                                    </form>
+                                <?php endif; ?>
+                            </div>
+                            <?php if ($errors === array()): ?>
+                                <div class="swc-empty"><span class="dashicons dashicons-smiley" aria-hidden="true"></span> No fatal errors recorded.</div>
+                            <?php else: ?>
+                                <div class="swc-errors">
+                                    <?php foreach ($errors as $entry): $d = $entry['event']['data']; $c = $d['component']; ?>
+                                        <article class="swc-error">
+                                            <div class="swc-error-head">
+                                                <strong><?php echo esc_html($c['name'] !== '' ? $c['name'] . ($c['version'] !== '' ? ' ' . $c['version'] : '') : 'Unknown source'); ?></strong>
+                                                <span class="swc-pill swc-pill-danger"><?php echo esc_html($d['error_type']); ?></span>
+                                                <?php if ((int) $entry['count'] > 1): ?><span class="swc-pill swc-pill-neutral"><?php echo (int) $entry['count']; ?>×</span><?php endif; ?>
+                                                <span class="swc-muted swc-small swc-push"><?php echo esc_html(self::time_ago($entry['last_at'])); ?></span>
+                                            </div>
+                                            <pre class="swc-error-msg"><?php echo esc_html($d['message']); ?></pre>
+                                            <div class="swc-muted swc-small swc-mono"><?php echo esc_html($d['file'] . ':' . $d['line']); ?></div>
+                                        </article>
+                                    <?php endforeach; ?>
+                                </div>
+                            <?php endif; ?>
+                        </section>
+                    </div>
+
+                    <aside class="swc-side">
+                        <section class="swc-card">
+                            <h2><span class="dashicons dashicons-admin-links" aria-hidden="true"></span> Connection</h2>
+                            <dl class="swc-kv">
+                                <dt>SiteWatch</dt><dd><a href="<?php echo esc_url($config['sitewatch_url']); ?>" target="_blank" rel="noopener"><?php echo esc_html(preg_replace('#^https?://#', '', $config['sitewatch_url'])); ?></a></dd>
+                                <dt>Website</dt><dd>#<?php echo (int) $config['site_id']; ?></dd>
+                                <dt>Connected</dt><dd><?php echo esc_html(self::time_ago(isset($config['connected_at']) ? $config['connected_at'] : 0)); ?></dd>
+                                <dt>Waiting to send</dt><dd><?php echo (int) $queued; ?> event(s)</dd>
+                            </dl>
+                            <form method="post" action="<?php echo $post; ?>" onsubmit="return confirm('Disconnect this site from SiteWatch? Nothing is reported until you connect again.');">
+                                <input type="hidden" name="action" value="sitewatch_connector_disconnect">
+                                <?php wp_nonce_field('sitewatch_connector_disconnect'); ?>
+                                <button type="submit" class="swc-btn swc-btn-danger-outline swc-btn-block"><span class="dashicons dashicons-dismiss" aria-hidden="true"></span> Disconnect</button>
+                            </form>
+                        </section>
+
+                        <section class="swc-card">
+                            <h2><span class="dashicons dashicons-privacy" aria-hidden="true"></span> What is sent</h2>
+                            <ul class="swc-sent">
+                                <li>Fatal PHP errors: message, file, line and the plugin or theme involved.</li>
+                                <li>A daily health report: versions, pending updates, plugins and themes, scheduled tasks and security checks.</li>
+                                <li>Changes: plugin, theme and WordPress updates, administrator sign-ins, new administrators, site address and registration settings.</li>
+                                <li>Failed sign-in counts and the IP addresses they came from.</li>
+                                <li>Whether wp-config.php or .htaccess changed: size, time and a short fingerprint, never the contents.</li>
+                                <li>Page generation time, query count and memory of sampled requests; slow queries with all values replaced by "?" (only with SAVEQUERIES).</li>
+                                <li>If switched on in SiteWatch: PHP warnings, notices and deprecations with file, line and a count.</li>
+                                <li>Your remote action and auto-fix settings, their results, and the version each plugin had before its last update.</li>
+                            </ul>
+                            <p class="swc-never"><span class="dashicons dashicons-lock" aria-hidden="true"></span> Never sent: passwords, content, orders, customer or visitor data.</p>
+                        </section>
+                    </aside>
+                </div>
+            <?php endif; ?>
         </div>
+        <script>
+            // Dim the options of a section while its main switch is off (the saved values are kept).
+            document.querySelectorAll('.swc [data-swc-group]').forEach(function (form) {
+                var master = form.querySelector('[data-swc-master]');
+                var options = form.querySelector('[data-swc-options]');
+                if (!master || !options) return;
+                var sync = function () { options.classList.toggle('swc-off', !master.checked); };
+                master.addEventListener('change', sync);
+                sync();
+            });
+        </script>
         <?php
+    }
+
+    /** One status tile. */
+    private static function tile($icon, $label, $value, $tone = '', $help = '')
+    {
+        echo '<div class="swc-tile' . ($tone !== '' ? ' swc-tone-' . esc_attr($tone) : '') . '">'
+            . '<span class="swc-tile-icon dashicons dashicons-' . esc_attr($icon) . '" aria-hidden="true"></span>'
+            . '<div><div class="swc-tile-label">' . esc_html($label) . '</div><div class="swc-tile-value">' . esc_html($value) . '</div>'
+            . ($help !== '' ? '<div class="swc-tile-help">' . esc_html($help) . '</div>' : '') . '</div></div>';
+    }
+
+    private static function action_label($action)
+    {
+        $labels = array(
+            'clear_cache' => 'Clear caches', 'deactivate_plugin' => 'Deactivate plugin', 'activate_plugin' => 'Activate plugin',
+            'update_plugins' => 'Update plugins', 'maintenance' => 'Maintenance page', 'rollback_plugin' => 'Roll back plugin',
+            'update_themes' => 'Update themes', 'update_core' => 'Update WordPress', 'backup' => 'Backup',
+        );
+        return isset($labels[$action]) ? $labels[$action] : (string) $action;
+    }
+
+    /** The SiteWatch mark in its brand colour (inline SVG for the page header). */
+    private static function logo()
+    {
+        return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="40" height="40" focusable="false"><path d="M40.42 19.6A17 17 0 1 1 28.4 7.58" fill="none" stroke="#EA580C" stroke-width="5.5" stroke-linecap="round"/><circle cx="36.8" cy="11.2" r="5.2" fill="#EA580C"/><path d="M10 27.5H17.5L22 16L27 34.5L30.5 27.5H38" fill="none" stroke="#EA580C" stroke-width="5" stroke-linejoin="miter" stroke-miterlimit="2"/></svg>';
     }
 }

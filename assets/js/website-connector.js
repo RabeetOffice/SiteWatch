@@ -21,6 +21,9 @@
     let data = null;
     let tab = SW.storage.get('sw-wp-tab', 'errors');
     let key = null;
+    let historyChart = null;
+    /** Earlier daily report chosen on the Performance tab (null: the latest health report). */
+    let pickedReport = null;
 
     const el = {};
 
@@ -83,7 +86,7 @@
     function keyBox() {
         if (!key) return '';
         return '<div class="wp-key mb-3">' +
-            '<label class="form-label" for="wpKey">Connection key <span class="text-muted fw-normal">· paste in WordPress → Settings → SiteWatch</span></label>' +
+            '<label class="form-label" for="wpKey">Connection key <span class="text-muted fw-normal">· paste in WordPress → SiteWatch</span></label>' +
             '<div class="d-flex gap-2"><textarea class="form-control mono fs-12" id="wpKey" rows="2" readonly>' + esc(key) + '</textarea>' +
             '<button type="button" class="btn btn-light" data-wp="copy"><i class="bi bi-clipboard" aria-hidden="true"></i> Copy</button></div>' +
             '<div class="form-text">Treat it like a password: anyone with this key can send reports for this website. Replace it if it leaks.</div></div>';
@@ -94,7 +97,7 @@
             '<li><b>Download the plugin</b> with the button above.</li>' +
             '<li>In WordPress: <b>Plugins → Add New → Upload Plugin</b>, choose the zip, then <b>Activate</b>.</li>' +
             '<li>' + (conf.canManage ? 'Click <b>Create connection key</b> and copy it.' : 'Ask an administrator for a connection key.') + '</li>' +
-            '<li>In WordPress: <b>Settings → SiteWatch</b>, paste the key and click <b>Connect</b>.</li></ol>';
+            '<li>In WordPress: open <b>SiteWatch</b> in the admin menu, paste the key and click <b>Connect</b>.</li></ol>';
     }
 
     function tiles() {
@@ -141,7 +144,7 @@
                 : 'Off. Turn on "Collect PHP warnings and deprecations" under Monitoring Settings → WordPress plugin to see what will break on the next PHP version.') + '</p>';
         }
         if (!w.entries.length) {
-            return html + '<p class="fs-13 text-success mb-0"><i class="bi bi-check2-circle" aria-hidden="true"></i> No PHP warnings' + (w.since ? ' since ' + ago(w.since) : '') + '.</p>';
+            return html + '<p class="fs-13 text-success mb-0"><i class="bi bi-check2-circle" aria-hidden="true"></i> No PHP warnings' + (w.since ? ' since ' + ago(w.since) : '') + '.</p>' + warningHistory();
         }
         const tones = { Warning: 'warning', Notice: 'neutral', Deprecated: 'info' };
         return html + '<p class="fs-12 text-muted mb-2">At least ' + esc(w.total.toLocaleString()) + ' in ' + esc(w.places) + ' places since ' + ago(w.since) + '. Deprecations become errors in a later PHP version.</p>' +
@@ -152,7 +155,7 @@
                     '<td><div class="fw-600">' + esc(c.name ? c.name + (c.version ? ' ' + c.version : '') : (c.type === 'core' ? 'WordPress core' : '—')) + '</div>' +
                     '<div class="fs-12 text-muted mono">' + esc(e.file) + ':' + esc(e.line) + '</div></td>' +
                     '<td class="fs-13">' + esc(e.message) + '</td><td class="text-end mono">' + esc(Number(e.count).toLocaleString()) + '</td></tr>';
-            }).join('') + '</tbody></table></div>';
+            }).join('') + '</tbody></table></div>' + warningHistory();
     }
 
     /** Snapshot plugin for a plugin folder slug (fatal errors know the folder, not the main file). */
@@ -184,6 +187,17 @@
                 'Install ' + p.name + ' ' + p.previous_version + ' from WordPress.org again, replacing ' + p.version + '? Check the Security tab: an older version can have known vulnerabilities.');
         }
         return html;
+    }
+
+    /** PHP warning counts of the daily reports, newest first. */
+    function warningHistory() {
+        const rows = (data.history || []).filter(function (h) { return h.warnings_total !== null; }).slice(-14).reverse();
+        if (rows.length < 2) return '';
+        return '<h4 class="wp-subhead mb-2 mt-3">Earlier reports</h4><div class="sw-table-wrap"><table class="sw-table compact"><thead><tr><th>Report</th><th class="text-end">Warnings</th><th class="text-end">Deprecations</th><th class="text-end">Places</th></tr></thead><tbody>' +
+            rows.map(function (h) {
+                return '<tr><td>' + esc(SW.fmt.timeAgo(h.period_end)) + '</td><td class="text-end mono">' + esc(Number(h.warnings_total).toLocaleString()) + '</td><td class="text-end mono">' +
+                    esc(h.deprecations === null ? '—' : Number(h.deprecations).toLocaleString()) + '</td><td class="text-end mono">' + esc(h.warnings_places) + '</td></tr>';
+            }).join('') + '</tbody></table></div>';
     }
 
     function tabErrors() {
@@ -302,7 +316,7 @@
 
     /** Page generation time measured inside WordPress on sampled requests (plugin 1.3.0+). */
     function tabPerformance() {
-        const perf = data.snapshot && data.snapshot.performance;
+        const perf = pickedReport ? pickedReport.performance : (data.snapshot && data.snapshot.performance);
         if (!perf) {
             return SW.emptyState('bi-speedometer2', 'No page speed data yet.', data.insights && data.insights.perf_sample
                 ? 'Plugin 1.3.0 or later measures 1 in ' + data.insights.perf_sample + ' requests and reports with the daily health report.'
@@ -310,8 +324,26 @@
         }
         const labels = { front: 'Pages', admin: 'Admin', ajax: 'AJAX', rest: 'REST API' };
         const ms = function (v) { return v === null || v === undefined ? '—' : Number(v).toLocaleString() + ' ms'; };
+        const history = (data.history || []).filter(function (h) { return h.p50_front !== null; });
+        let top = '';
+        if (history.length >= 2) {
+            top = '<h4 class="wp-subhead mb-2">Page generation time, last 90 days</h4>' +
+                '<div class="chart-box mb-1" style="height:200px"><canvas id="wpPerfHistory" role="img" aria-label="Median and 95th percentile page generation time per daily report"></canvas></div>' +
+                '<p class="fs-12 text-muted mb-4">One point per daily report: median and 95% of front-end pages. A rising 95% line usually means a plugin or a database table is getting slower.</p>';
+        } else if (history.length === 1) {
+            top = '<p class="fs-12 text-muted mb-3">The trend chart appears after the second daily report.</p>';
+        }
         const keys = Object.keys(perf.contexts || {}).sort(function (a, b) { return (labels[a] ? Object.keys(labels).indexOf(a) : 9) - (labels[b] ? Object.keys(labels).indexOf(b) : 9); });
-        let html = '<p class="fs-12 text-muted mb-2">Time WordPress took to build the page (server side, before the network), from ' + esc((perf.requests || 0).toLocaleString()) +
+        const earlier = (data.history || []).filter(function (h) { return h.requests; }).slice().reverse();
+        const picker = earlier.length > 1
+            ? '<select class="form-select form-select-sm w-auto" data-wp-report aria-label="Choose a daily report"><option value="">Latest report</option>' +
+                earlier.map(function (h) {
+                    return '<option value="' + h.id + '"' + (pickedReport && pickedReport.id === h.id ? ' selected' : '') + '>' +
+                        esc(new Date(h.period_end.replace(' ', 'T') + 'Z').toLocaleString()) + ' · ' + esc(h.requests) + ' samples</option>';
+                }).join('') + '</select>'
+            : '';
+        let html = top + '<div class="d-flex flex-wrap align-items-center gap-2 mb-2"><h4 class="wp-subhead mb-0">' + (pickedReport ? 'Report of ' + esc(new Date(pickedReport.period_end.replace(' ', 'T') + 'Z').toLocaleString()) : 'Latest report') + '</h4>' + picker + '</div>' +
+            '<p class="fs-12 text-muted mb-2">Time WordPress took to build the page (server side, before the network), from ' + esc((perf.requests || 0).toLocaleString()) +
             ' sampled requests' + (perf.sample_rate ? ' (1 in ' + esc(perf.sample_rate) + ')' : '') + (perf.since ? ' since ' + ago(perf.since) : '') + '.</p>';
         if (!keys.length) {
             html += '<p class="fs-13 text-muted">No sampled requests in this period yet. Low-traffic sites need a day or two.</p>';
@@ -356,7 +388,7 @@
         if (allowed === null) {
             html += '<p class="fs-13 text-muted">Remote actions need SiteWatch Connector 1.4.0 or later on this site' + (data.plugin_outdated ? ' (the update to ' + esc(data.bundled_version) + ' is on its way).' : '.') + '</p>';
         } else if (!allowed.length) {
-            html += '<p class="fs-13 text-muted">This site allows no remote actions. A WordPress administrator can allow them one by one under <b>Settings → SiteWatch → Remote actions</b>.</p>';
+            html += '<p class="fs-13 text-muted">This site allows no remote actions. A WordPress administrator can allow them one by one under <b>SiteWatch → Remote actions in the WordPress admin menu</b>.</p>';
         } else if (!conf.canRemote) {
             html += '<p class="fs-13 text-muted">This site allows: ' + esc(allowed.map(function (a) { return r.actions[a]; }).join(', ')) + '. Your role does not include "Run remote actions".</p>';
         } else {
@@ -385,6 +417,35 @@
                         return '<label class="form-check fs-13"><input class="form-check-input" type="checkbox" data-remote-update value="' + esc(p.file) + '" checked> ' + esc(p.name) + ' <span class="mono text-muted">' + esc(p.version) + ' \u2192 ' + esc(p.update) + '</span></label>';
                     }).join('') + '</div><button type="button" class="btn btn-sm btn-light" data-remote="update_plugins"><i class="bi bi-arrow-up-circle" aria-hidden="true"></i> Update selected</button>' : '');
             }
+            if (allowed.indexOf('update_themes') !== -1) {
+                const themes = ((data.snapshot && data.snapshot.themes) || []).filter(function (t) { return t.update; });
+                html += row('Update themes', themes.length ? themes.length + ' theme update(s) in the last health report.' : 'No theme updates in the last health report.',
+                    themes.length ? goButton('update_themes', { themes: themes.map(function (t) { return t.slug; }) },
+                        '<i class="bi bi-arrow-up-circle" aria-hidden="true"></i> Update ' + themes.map(function (t) { return esc(t.name) + ' \u2192 ' + esc(t.update); }).join(', '),
+                        'btn-light', 'Install the theme update(s) from WordPress.org? An active theme changes how the site looks; check the site afterwards.') : '');
+            }
+            if (allowed.indexOf('update_core') !== -1) {
+                const core = (data.snapshot && data.snapshot.updates && data.snapshot.updates.core) || {};
+                html += row('Update WordPress', core.latest ? 'WordPress ' + esc(core.current) + ' \u2192 ' + esc(core.latest) + ' is available. WordPress\u2019s updater checks the files and restores the old version if the update fails.'
+                        : 'WordPress is up to date (' + esc(core.current || data.wp_version || '?') + ').',
+                    core.latest ? goButton('update_core', { version: core.latest }, 'Update to ' + esc(core.latest), 'btn-light',
+                        'Update WordPress from ' + core.current + ' to ' + core.latest + '? The site shows a maintenance message for about a minute. Consider a backup first.') : '');
+            }
+            if (allowed.indexOf('backup') !== -1) {
+                const raw = data.snapshot && data.snapshot.backups;
+                const list = !raw ? [] : (Array.isArray(raw) ? raw : [raw]);
+                const when = function (b) {
+                    return b.last_at ? 'last backup ' + esc(SW.fmt.timeAgo(new Date(b.last_at * 1000).toISOString().slice(0, 19).replace('T', ' '))) +
+                        (b.success === false ? ' <span class="text-danger">with errors</span>' : '') : 'no backup recorded yet';
+                };
+                html += row('Backup', !list.length ? 'No supported backup plugin (UpdraftPlus or BackWPup) on this site.'
+                        : list.map(function (b) { return '<b>' + esc(b.plugin) + '</b>' + (b.job ? ' (job "' + esc(b.job.name) + '")' : '') + ': ' + when(b) + (b.running ? ', running now' : ''); }).join(' · ') +
+                            '. Stored where the backup plugin is set to store backups.',
+                    list.map(function (b) {
+                        const key = b.key || String(b.plugin || '').toLowerCase();
+                        return goButton('backup', list.length > 1 ? { plugin: key } : {}, '<i class="bi bi-cloud-arrow-up" aria-hidden="true"></i> Back up' + (list.length > 1 ? ' with ' + esc(b.plugin) : ' now'), 'btn-light');
+                    }).join(''));
+            }
             if (allowed.indexOf('deactivate_plugin') !== -1) {
                 const active = plugins.filter(function (p) { return p.active; });
                 html += row('Deactivate a plugin', 'For example the plugin behind a fatal error. It stays installed and can be activated again.',
@@ -403,7 +464,7 @@
             : af.enabled
                 ? '<i class="bi bi-bandaid text-success" aria-hidden="true"></i> On: a plugin whose fatal error repeats 3 times in 10 minutes is deactivated and you get an alert.' +
                     (af.protected.length ? ' Never touched: ' + esc(af.protected.join(', ')) + '.' : '')
-                : 'Off. A WordPress administrator can switch it on under Settings → SiteWatch → Auto-fix.') + '</p>';
+                : 'Off. A WordPress administrator can switch it on under SiteWatch → Auto-fix in the WordPress admin menu.') + '</p>';
         if (allows('rollback_plugin')) {
             const rollbacks = ((data.snapshot && data.snapshot.plugins) || []).filter(function (p) { return p.previous_version; });
             html += '<div class="wp-remote-row"><div class="min-w-0"><div class="fw-600">Roll back a plugin update</div><div class="fs-12 text-muted">Installs the version a plugin had before its last update, from WordPress.org. Versions are recorded at each update from plugin 1.5.0 on.</div></div>' +
@@ -421,7 +482,9 @@
             if (c.args.plugins) what += ': ' + c.args.plugins.length + ' plugin(s)';
             if (c.action === 'maintenance') what += c.args.mode === 'on' ? ' on for ' + c.args.minutes + ' min' : ' off';
             if (c.action === 'rollback_plugin') what += ' to ' + c.args.version;
-            const lines = (d.plugins || []).map(function (p) { return esc(p.name) + ': ' + esc(p.message) + (p.to ? ' (' + esc(p.from) + ' \u2192 ' + esc(p.to) + ')' : ''); });
+            if (c.args.themes) what += ': ' + c.args.themes.join(', ');
+            if (c.action === 'update_core') what += ' to ' + c.args.version;
+            const lines = (d.plugins || []).concat(d.themes || []).map(function (p) { return esc(p.name) + ': ' + esc(p.message) + (p.to ? ' (' + esc(p.from) + ' \u2192 ' + esc(p.to) + ')' : ''); });
             return '<li><span class="sw-pill tone-' + (COMMAND_TONES[c.status] || 'neutral') + '">' + esc(c.status_label) + '</span><div class="min-w-0">' +
                 '<div>' + esc(what) + '</div><div class="fs-12 text-muted">' + esc(c.created_ago) + (c.requested_by ? ' · by ' + esc(c.requested_by) : '') + (c.message ? ' · ' + esc(c.message) : '') + '</div>' +
                 (lines.length ? '<div class="fs-12 text-muted">' + lines.join('<br>') + '</div>' : '') + '</div></li>';
@@ -533,7 +596,7 @@
             const why = {
                 stale: 'No report for over 30 minutes. The site may be down, WP-Cron may not be running (low-traffic sites report less often), or the plugin was removed.',
                 deactivated: 'The plugin was deactivated in WordPress. Activate it again to resume reporting.',
-                disconnected: 'Someone clicked Disconnect in WordPress. Paste the key again under Settings → SiteWatch to reconnect.',
+                disconnected: 'Someone clicked Disconnect in WordPress. Paste the key again under SiteWatch in the WordPress admin menu to reconnect.',
             }[data.state] || '';
             html += '<div class="alert alert-warning py-2 fs-13">' + esc(why) + '</div>';
         }
@@ -600,6 +663,37 @@
         if (!panel) return;
         const renderers = { errors: tabErrors, security: tabSecurity, updates: tabUpdates, plugins: tabPlugins, performance: tabPerformance, remote: tabRemote, activity: tabActivity, environment: tabEnvironment };
         panel.innerHTML = (renderers[tab] || tabErrors)();
+        if (historyChart) { historyChart.destroy(); historyChart = null; }
+        const canvas = panel.querySelector('#wpPerfHistory');
+        if (canvas && typeof Chart !== 'undefined') drawHistory(canvas);
+    }
+
+    function drawHistory(canvas) {
+        const c = SW.chartDefaults();
+        const rows = (data.history || []).filter(function (h) { return h.p50_front !== null; });
+        const labels = rows.map(function (h) { return new Date(h.period_end.replace(' ', 'T') + 'Z').toLocaleDateString(); });
+        const line = function (label, key, color, soft) {
+            return { label: label, data: rows.map(function (h) { return h[key]; }), borderColor: color, backgroundColor: soft || color, fill: !!soft,
+                tension: 0.3, pointRadius: rows.length < 20 ? 3 : 0, pointHoverRadius: 4, pointHitRadius: 10, borderWidth: 2, spanGaps: true };
+        };
+        historyChart = new Chart(canvas, {
+            type: 'line',
+            data: { labels: labels, datasets: [line('Median', 'p50_front', c.primary, c.primarySoft), line('95%', 'p95_front', c.warning)] },
+            options: {
+                responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    legend: { display: true, position: 'bottom' },
+                    tooltip: { callbacks: {
+                        label: function (item) { return item.dataset.label + ': ' + SW.fmt.ms(item.raw); },
+                        afterBody: function (items) { const h = rows[items[0].dataIndex]; return h.requests ? h.requests + ' sampled requests · ' + h.queries_front + ' queries per page' : ''; },
+                    } },
+                },
+                scales: {
+                    x: { grid: { display: false }, ticks: { maxTicksLimit: 8 } },
+                    y: { beginAtZero: true, border: { display: false }, grid: { color: c.grid }, ticks: { callback: function (v) { return SW.fmt.ms(v); }, maxTicksLimit: 5 } },
+                },
+            },
+        });
     }
 
     document.addEventListener('sw:ready', function () {
@@ -608,6 +702,25 @@
         el.body = section.querySelector('[data-wp-body]');
         el.actions = section.querySelector('[data-wp-actions]');
         el.sub = section.querySelector('[data-wp-sub]');
+
+        section.addEventListener('change', async function (ev) {
+            const pick = ev.target.closest('[data-wp-report]');
+            if (!pick) return;
+            if (!pick.value) {
+                pickedReport = null;
+                renderTab();
+                return;
+            }
+            pick.disabled = true;
+            try {
+                const res = await SW.api('api/connector/daily.php', { query: { website_id: id, id: pick.value } });
+                pickedReport = res.data.report;
+                pickedReport.id = parseInt(pick.value, 10);
+            } catch (e) {
+                SW.toast(e.message, 'danger');
+            }
+            renderTab();
+        });
 
         section.addEventListener('click', function (ev) {
             const t = ev.target.closest('[data-wp-tab]');
@@ -650,7 +763,7 @@
             } else if (action === 'create') {
                 manage('create', data.state === 'none' ? null : {
                     title: 'Replace the connection key?', danger: true, confirmText: 'Replace key',
-                    message: 'The plugin stops reporting until the new key is pasted in WordPress (Settings → SiteWatch).',
+                    message: 'The plugin stops reporting until the new key is pasted on the SiteWatch page in WordPress.',
                 });
             } else if (action === 'update') {
                 manage('update');

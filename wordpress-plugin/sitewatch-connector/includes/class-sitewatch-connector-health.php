@@ -60,9 +60,71 @@ final class SiteWatch_Connector_Health
             'database'     => self::database(),
             'cron'         => self::cron(),
             'admins'       => self::admins(),
+            'backups'      => self::backups(),
         );
         $snapshot['security'] = self::security_checks($snapshot);
         return $snapshot;
+    }
+
+    /**
+     * Backup plugins SiteWatch can start and read (UpdraftPlus, BackWPup), with their last backup; null when none is
+     * active. Each entry: {plugin, key, version, last_at, success, errors[], running, job?}.
+     */
+    private static function backups()
+    {
+        $list = array();
+        if (class_exists('UpdraftPlus_Options')) {
+            $last = UpdraftPlus_Options::get_updraft_option('updraft_last_backup', array());
+            $last = is_array($last) ? $last : array();
+            $list[] = array(
+                'plugin'  => 'UpdraftPlus',
+                'key'     => 'updraftplus',
+                'version' => defined('UPDRAFTPLUS_DIR') && is_readable(UPDRAFTPLUS_DIR . '/updraftplus.php') ? (string) get_file_data(UPDRAFTPLUS_DIR . '/updraftplus.php', array('Version' => 'Version'))['Version'] : '',
+                'last_at' => isset($last['backup_time']) ? (int) $last['backup_time'] : null,
+                'success' => isset($last['success']) ? (bool) $last['success'] : null,
+                'errors'  => isset($last['errors']) && is_array($last['errors']) ? array_slice(array_map(function ($e) {
+                    return substr(is_array($e) && isset($e['message']) ? (string) $e['message'] : (string) (is_scalar($e) ? $e : ''), 0, 200);
+                }, $last['errors']), 0, 5) : array(),
+                'running' => (bool) wp_next_scheduled('updraft_backup_resume') || (bool) wp_next_scheduled('updraft_backupnow_backup_all', array(array('always_keep' => false))),
+            );
+        }
+        if (class_exists('BackWPup_Option') && class_exists('BackWPup_Job')) {
+            $job = self::backwpup_job();
+            $errors = null;
+            $log = $job ? (string) BackWPup_Option::get($job, 'logfile') : '';
+            if ($log !== '' && is_readable($log)) {
+                // BackWPup writes the error count into the head of each log file.
+                $head = (string) @file_get_contents($log, false, null, 0, 4096);
+                if (preg_match('/<meta name="backwpup_errors" content="(\d+)"/', $head, $m)) {
+                    $errors = (int) $m[1];
+                }
+            }
+            $list[] = array(
+                'plugin'  => 'BackWPup',
+                'key'     => 'backwpup',
+                'version' => class_exists('BackWPup') && method_exists('BackWPup', 'get_plugin_data') ? (string) BackWPup::get_plugin_data('Version') : '',
+                'job'     => $job ? array('id' => $job, 'name' => (string) BackWPup_Option::get($job, 'name')) : null,
+                'last_at' => $job && BackWPup_Option::get($job, 'lastrun') ? (int) BackWPup_Option::get($job, 'lastrun') : null,
+                'success' => $errors === null ? null : $errors === 0,
+                'errors'  => $errors ? array(sprintf('%d error(s) in the last run; see the BackWPup log.', $errors)) : array(),
+                'running' => (bool) BackWPup_Job::get_working_data(),
+            );
+        }
+        return $list === array() ? null : $list;
+    }
+
+    /** The BackWPup job SiteWatch starts: the first job that creates a backup file (the default "First backup"). */
+    public static function backwpup_job()
+    {
+        $ids = (array) BackWPup_Option::get_job_ids();
+        sort($ids);
+        foreach ($ids as $id) {
+            $types = (array) BackWPup_Option::get($id, 'type');
+            if (in_array('FILE', $types, true) || in_array('DBDUMP', $types, true)) {
+                return (int) $id;
+            }
+        }
+        return isset($ids[0]) ? (int) $ids[0] : 0;
     }
 
     private static function load_admin_includes()

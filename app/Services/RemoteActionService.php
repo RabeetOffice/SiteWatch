@@ -30,6 +30,9 @@ final class RemoteActionService
         'update_plugins'    => 'Update plugins',
         'maintenance'       => 'Maintenance page',
         'rollback_plugin'   => 'Roll back plugin',
+        'update_themes'     => 'Update themes',
+        'update_core'       => 'Update WordPress',
+        'backup'            => 'Backup',
     ];
 
     public const STATUS_LABELS = [
@@ -88,7 +91,7 @@ final class RemoteActionService
             throw new RuntimeException('Remote actions need SiteWatch Connector 1.4.0 or later on this site.');
         }
         if (!in_array($action, $allowed, true)) {
-            throw new RuntimeException('This site does not allow "' . self::ACTIONS[$action] . '". A WordPress administrator can allow it under Settings → SiteWatch → Remote actions.');
+            throw new RuntimeException('This site does not allow "' . self::ACTIONS[$action] . '". A WordPress administrator can allow it under SiteWatch → Remote actions in the WordPress admin menu.');
         }
         $snapshot = !empty($row['snapshot']) ? json_decode((string) $row['snapshot'], true) : null;
         $clean = self::validateArgs($action, $args, is_array($snapshot) ? $snapshot : []);
@@ -111,7 +114,7 @@ final class RemoteActionService
     }
 
     /** Actions that can be sent to many sites at once (the others name one site's plugin). */
-    public const BULK_ACTIONS = ['clear_cache', 'update_plugins', 'maintenance'];
+    public const BULK_ACTIONS = ['clear_cache', 'update_plugins', 'update_themes', 'maintenance', 'backup'];
 
     /**
      * Queue one action on many websites. Each site goes through request(), so a site that is not connected, runs an
@@ -133,12 +136,13 @@ final class RemoteActionService
             $name = (string) $website['name'];
             try {
                 $siteArgs = $args;
-                if ($action === 'update_plugins') {
+                if ($action === 'update_plugins' || $action === 'update_themes') {
                     $row = $this->repo->find($id);
                     $snapshot = $row !== null && !empty($row['snapshot']) ? json_decode((string) $row['snapshot'], true) : null;
-                    $siteArgs = ['plugins' => self::pendingUpdates(is_array($snapshot) ? $snapshot : [])];
-                    if ($siteArgs['plugins'] === [] && $row !== null && !empty($row['connected_at'])) {
-                        $result['skipped'][] = ['website_id' => $id, 'name' => $name, 'reason' => 'No plugin updates in the last health report.'];
+                    $snapshot = is_array($snapshot) ? $snapshot : [];
+                    $siteArgs = $action === 'update_plugins' ? ['plugins' => self::pendingUpdates($snapshot)] : ['themes' => self::pendingThemeUpdates($snapshot)];
+                    if (reset($siteArgs) === [] && $row !== null && !empty($row['connected_at'])) {
+                        $result['skipped'][] = ['website_id' => $id, 'name' => $name, 'reason' => 'No ' . ($action === 'update_plugins' ? 'plugin' : 'theme') . ' updates in the last health report.'];
                         continue;
                     }
                 }
@@ -166,6 +170,39 @@ final class RemoteActionService
             }
         }
         return array_slice($files, 0, 20);
+    }
+
+    /**
+     * Backup plugins in a health snapshot: a list from plugin 1.8.0, a single UpdraftPlus entry from 1.7.0.
+     *
+     * @param array<string, mixed> $snapshot
+     * @return array<int, array<string, mixed>>
+     */
+    public static function backupPlugins(array $snapshot): array
+    {
+        $backups = $snapshot['backups'] ?? null;
+        if (!is_array($backups)) {
+            return [];
+        }
+        $list = isset($backups['plugin']) ? [$backups] : array_values(array_filter($backups, 'is_array'));
+        return array_map(static fn (array $b): array => $b + ['key' => strtolower((string) ($b['plugin'] ?? ''))], $list);
+    }
+
+    /**
+     * Theme folders with an update in a health snapshot, at most 20.
+     *
+     * @param array<string, mixed> $snapshot
+     * @return array<int, string>
+     */
+    public static function pendingThemeUpdates(array $snapshot): array
+    {
+        $slugs = [];
+        foreach ((array) ($snapshot['themes'] ?? []) as $t) {
+            if (is_array($t) && !empty($t['update']) && isset($t['slug'])) {
+                $slugs[] = (string) $t['slug'];
+            }
+        }
+        return array_slice($slugs, 0, 20);
     }
 
     /**
@@ -233,6 +270,48 @@ final class RemoteActionService
                     throw new RuntimeException('This plugin can only be rolled back to ' . $previous . ', the version before its last update.');
                 }
                 return ['plugin' => $file, 'version' => $previous];
+            case 'update_themes':
+                $themes = [];
+                foreach ((array) ($snapshot['themes'] ?? []) as $t) {
+                    if (is_array($t) && isset($t['slug'])) {
+                        $themes[(string) $t['slug']] = $t;
+                    }
+                }
+                $requested = is_array($args['themes'] ?? null) ? array_values(array_unique(array_map('strval', $args['themes']))) : [];
+                foreach ($requested as $slug) {
+                    if (!isset($themes[$slug])) {
+                        throw new RuntimeException('That theme is not in the site\'s last health report. Refresh the health report and try again.');
+                    }
+                    if (empty($themes[$slug]['update'])) {
+                        throw new RuntimeException(($themes[$slug]['name'] ?? $slug) . ' has no update in the last health report.');
+                    }
+                }
+                if ($requested === [] || count($requested) > 20) {
+                    throw new RuntimeException('Choose between 1 and 20 themes to update.');
+                }
+                return ['themes' => $requested];
+            case 'update_core':
+                $latest = (string) ($snapshot['updates']['core']['latest'] ?? '');
+                if ($latest === '') {
+                    throw new RuntimeException('The last health report shows no WordPress update for this site.');
+                }
+                if (($args['version'] ?? null) !== $latest) {
+                    throw new RuntimeException('WordPress can only be updated to ' . $latest . ', the version in the last health report.');
+                }
+                return ['version' => $latest];
+            case 'backup':
+                $plugins = self::backupPlugins($snapshot);
+                if ($plugins === []) {
+                    throw new RuntimeException('The last health report shows no supported backup plugin (UpdraftPlus or BackWPup) on this site.');
+                }
+                $want = (string) ($args['plugin'] ?? '');
+                if ($want === '') {
+                    return []; // the site uses the plugin it has (UpdraftPlus first)
+                }
+                if (!in_array($want, array_column($plugins, 'key'), true)) {
+                    throw new RuntimeException('That backup plugin is not active on this site.');
+                }
+                return ['plugin' => $want];
             case 'maintenance':
                 $mode = ($args['mode'] ?? '') === 'off' ? 'off' : 'on';
                 if ($mode === 'off') {

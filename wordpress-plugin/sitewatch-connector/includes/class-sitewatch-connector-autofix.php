@@ -1,7 +1,7 @@
 <?php
 /**
  * Auto-fix: deactivate a plugin that keeps crashing the site (off until an administrator switches it on under
- * Settings → SiteWatch), and remember the version each plugin had before its last update so SiteWatch can offer a
+ * SiteWatch in the WordPress admin menu), and remember the version each plugin had before its last update so SiteWatch can offer a
  * rollback. Design and limits: docs/sitewatch-connector.md, section 7 (v4).
  *
  * Two steps, because a fatal error is a bad moment to change anything:
