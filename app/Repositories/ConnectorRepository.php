@@ -228,6 +228,70 @@ final class ConnectorRepository extends BaseRepository
         );
     }
 
+    // ------------------------------------------------------------------
+    // Remote action commands
+    // ------------------------------------------------------------------
+
+    /** @param array<string, mixed> $data */
+    public function createCommand(array $data): int
+    {
+        return $this->db->insert('connector_commands', $data);
+    }
+
+    /** @return array<string, mixed>|null */
+    public function command(int $id): ?array
+    {
+        return $this->db->fetch('SELECT * FROM connector_commands WHERE id = :id', ['id' => $id]);
+    }
+
+    /**
+     * Commands the site has not answered yet and that have not expired, oldest first.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function openCommands(int $websiteId, string $nowUtc): array
+    {
+        return $this->db->fetchAll(
+            "SELECT * FROM connector_commands WHERE website_id = :w AND status IN ('pending', 'sent') AND expires_at > :now ORDER BY id ASC LIMIT 10",
+            ['w' => $websiteId, 'now' => $nowUtc]
+        );
+    }
+
+    /** @param array<int, int> $ids */
+    public function markCommandsSent(array $ids): void
+    {
+        [$ph, $params] = $this->in($ids, 'c');
+        $this->db->query("UPDATE connector_commands SET status = 'sent', sent_at = :now WHERE status = 'pending' AND id IN ($ph)", $params + ['now' => $this->now()]);
+    }
+
+    public function finishCommand(int $id, string $status, string $resultJson): void
+    {
+        $this->db->update('connector_commands', ['status' => $status, 'result' => $resultJson, 'finished_at' => $this->now()], 'id = :id', ['id' => $id]);
+    }
+
+    public function expireCommands(string $nowUtc): int
+    {
+        return $this->db->query(
+            "UPDATE connector_commands SET status = 'expired', finished_at = :now1 WHERE status IN ('pending', 'sent') AND expires_at <= :now2",
+            ['now1' => $nowUtc, 'now2' => $nowUtc]
+        )->rowCount();
+    }
+
+    /** @return array<int, array<string, mixed>> */
+    public function recentCommands(int $websiteId, int $limit): array
+    {
+        return $this->db->fetchAll(
+            'SELECT c.*, u.name AS requested_by_name FROM connector_commands c LEFT JOIN users u ON u.id = c.requested_by
+             WHERE c.website_id = :w ORDER BY c.id DESC LIMIT ' . max(1, $limit),
+            ['w' => $websiteId]
+        );
+    }
+
+    public function purgeCommandsOlderThan(string $cutoffUtc): int
+    {
+        return $this->db->delete('connector_commands', 'created_at < :c', ['c' => $cutoffUtc]);
+    }
+
     public function purgeFeedOlderThan(string $cutoffUtc): int
     {
         return $this->db->delete('vulnerability_feed', 'fetched_at < :c', ['c' => $cutoffUtc]);

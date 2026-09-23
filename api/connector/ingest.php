@@ -32,6 +32,14 @@ $body = (string) file_get_contents('php://input', false, null, 0, ConnectorServi
 if ($body === '' || strlen($body) > ConnectorService::MAX_BODY) {
     Response::error('Empty or oversized report.', [], 400);
 }
+// Plugin 1.6.0+ gzips large reports (the signature covers the uncompressed JSON). A server that already
+// decompressed the request leaves plain JSON, which is used as it is.
+if (stripos((string) ($_SERVER['HTTP_CONTENT_ENCODING'] ?? ''), 'gzip') !== false && !str_starts_with(ltrim($body), '{')) {
+    $body = ConnectorService::gunzipReport($body);
+    if ($body === null) {
+        Response::error('The compressed report could not be read or is too large.', [], 400);
+    }
+}
 
 $service = ConnectorService::create();
 $websiteId = (int) ($_SERVER['HTTP_X_SITEWATCH_SITE'] ?? 0);

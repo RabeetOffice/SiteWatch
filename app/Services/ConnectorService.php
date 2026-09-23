@@ -74,6 +74,8 @@ final class ConnectorService
         'connector_update_failed' => 'Plugin self-update failed',
         'vulnerability'      => 'Known vulnerability',
         'file_changed'       => 'Protected file changed',
+        'command_result'     => 'Remote action',
+        'plugin_auto_deactivated' => 'Plugin deactivated automatically',
     ];
 
     public function __construct(
@@ -254,6 +256,20 @@ final class ConnectorService
                 . (!empty($lastUpdate['message']) ? ': ' . (string) $lastUpdate['message'] : ''), 0, 255);
             $update['update_at'] = self::unixToDb($lastUpdate['at']);
         }
+        // Plugin 1.4.0+: which remote actions WordPress allows, and the maintenance page it is showing.
+        if (is_array($status['remote'] ?? null)) {
+            $allowed = !empty($status['remote']['enabled']) && is_array($status['remote']['actions'] ?? null)
+                ? array_values(array_intersect(array_keys(RemoteActionService::ACTIONS), $status['remote']['actions'])) : [];
+            $update['remote_actions'] = (string) json_encode($allowed);
+        }
+        if (is_array($status['autofix'] ?? null)) {
+            $protected = is_array($status['autofix']['protected'] ?? null) ? array_values(array_filter(array_map('strval', $status['autofix']['protected']))) : [];
+            $update['autofix'] = mb_substr((string) json_encode(['enabled' => !empty($status['autofix']['enabled']), 'protected' => array_slice($protected, 0, 50)], JSON_UNESCAPED_SLASHES), 0, 2000);
+        }
+        if (array_key_exists('maintenance_until', $status) && array_key_exists('remote', $status)) {
+            $until = is_numeric($status['maintenance_until']) ? (int) $status['maintenance_until'] : 0;
+            $update['maintenance_until'] = $until > time() && $until < time() + 2 * 86400 ? gmdate('Y-m-d H:i:s', $until) : null;
+        }
         $bundled = $this->bundledPluginVersion();
         $outdated = $update['plugin_version'] !== null && $bundled !== null && version_compare($update['plugin_version'], $bundled, '<');
         if (!$outdated) {
@@ -297,12 +313,19 @@ final class ConnectorService
             }
             $stored = $this->repo->storeEvent($websiteId, $event);
             $received++;
+            if ($event['type'] === 'plugin_auto_deactivated') {
+                $wantSnapshotNow = true; // the plugin list changed; ask for a fresh report straight away
+            }
+            if ($event['type'] === 'command_result') {
+                $this->remote()->recordResult($websiteId, (array) json_decode((string) $event['data'], true));
+                continue;
+            }
             if ($stored['is_new']) {
                 $this->alertFor($website, $event, $stored['id']);
             }
         }
 
-        $wantSnapshot = !$snapshotStored && ((int) ($connector['want_snapshot'] ?? 0) === 1 || empty($connector['snapshot_at']));
+        $wantSnapshot = !$snapshotStored && (!empty($wantSnapshotNow) || (int) ($connector['want_snapshot'] ?? 0) === 1 || empty($connector['snapshot_at']));
         $reply = [
             'website'       => (string) $website['name'],
             'want_snapshot' => $wantSnapshot,
@@ -310,12 +333,17 @@ final class ConnectorService
             'interval'      => 300,
             'server_time'   => time(),
             'auto_update'   => App::settings()->getBool('connector_auto_update', true),
+            'accepts_gzip'  => function_exists('gzdecode'),
             // Read by plugin 1.3.0+ (ignored by older versions).
             'collect_warnings' => App::settings()->getBool('connector_php_warnings', false),
             'perf_sample'      => App::settings()->getInt('connector_perf_sample', 20),
             'plugin_update' => null,
             'update_now'    => false,
         ];
+        // Remote actions ride on the heartbeat reply only, signed with the site's secret (the plugin checks them).
+        if ($reason === 'heartbeat' && self::allowedRemote($connector) !== []) {
+            $reply['commands'] = $this->remote()->forReply($websiteId, $this->crypto->decrypt((string) $connector['secret']));
+        }
         if ($outdated) {
             $secret = $this->crypto->decrypt((string) $connector['secret']);
             $reply['plugin_update'] = [
@@ -330,6 +358,15 @@ final class ConnectorService
             $reply['update_now'] = (int) ($connector['want_update'] ?? 0) === 1;
         }
         return $reply;
+    }
+
+    /**
+     * Decompress a gzipped report, refusing anything that expands beyond MAX_BODY (a "zip bomb" stops there).
+     */
+    public static function gunzipReport(string $compressed): ?string
+    {
+        $plain = @gzdecode($compressed, self::MAX_BODY + 1);
+        return is_string($plain) && $plain !== '' && strlen($plain) <= self::MAX_BODY ? $plain : null;
     }
 
     private static function unixToDb(mixed $value): ?string
@@ -403,8 +440,71 @@ final class ConnectorService
         if ($row === null || empty($row['connected_at'])) {
             return null;
         }
+        $maintenance = self::plannedMaintenance($row, time());
+        if ($maintenance !== null) {
+            return $maintenance;
+        }
         $recentFatal = $this->repo->latestFatal($websiteId, utc_now()->modify('-' . self::EVIDENCE_FRESH . ' seconds')->format('Y-m-d H:i:s')) !== null;
         return self::judgeEvidence($row, time(), $recentFatal);
+    }
+
+    /**
+     * Maintenance switched on from SiteWatch (remote action) that has not ended yet, as inside evidence that holds
+     * maintenance and 503 alerts. Null when none is planned.
+     *
+     * @param array<string, mixed> $row connector_sites row
+     * @return array{healthy: bool, reason: string, ok_ago: ?int, probe_seen_ago: ?int, probe_status: ?int, maintenance: bool}|null
+     */
+    public static function plannedMaintenance(array $row, int $now): ?array
+    {
+        $until = !empty($row['maintenance_until']) ? (int) strtotime($row['maintenance_until'] . ' UTC') : 0;
+        if ($until === 0 || $now > $until + RemoteActionService::MAINTENANCE_GRACE) {
+            return null;
+        }
+        return [
+            'healthy'        => true,
+            'reason'         => 'Planned maintenance switched on from SiteWatch, until ' . gmdate('H:i', $until) . ' UTC.',
+            'ok_ago'         => null,
+            'probe_seen_ago' => null,
+            'probe_status'   => null,
+            'maintenance'    => true,
+        ];
+    }
+
+    /** @param array<string, mixed>|null $row */
+    private static function allowedRemote(?array $row): array
+    {
+        return RemoteActionService::allowed($row) ?? [];
+    }
+
+    private ?RemoteActionService $remoteService = null;
+
+    private function remote(): RemoteActionService
+    {
+        return $this->remoteService ??= new RemoteActionService($this->repo);
+    }
+
+    /**
+     * What WordPress answered SiteWatch's own check, for the incident when an outage is confirmed: a 5xx seen inside
+     * WordPress means the failure comes from the site (PHP, database, a plugin), not from the network or a firewall.
+     *
+     * @param array<string, mixed>|null $evidence insideEvidence() result
+     */
+    public static function probeNote(?array $evidence): ?string
+    {
+        if ($evidence === null || !empty($evidence['maintenance'])) {
+            return null;
+        }
+        $ago = $evidence['probe_seen_ago'] ?? null;
+        $status = (int) ($evidence['probe_status'] ?? 0);
+        if ($ago === null || $ago > self::EVIDENCE_FRESH || $status < 500) {
+            return null;
+        }
+        return sprintf(
+            'Inside WordPress, SiteWatch\'s check %s was answered with HTTP %d: the error comes from the site itself (PHP, database or a plugin), not from the network or a firewall.',
+            $ago < 60 ? 'less than a minute ago' : intdiv((int) $ago, 60) . ' min ago',
+            $status
+        );
     }
 
     /**
@@ -590,6 +690,10 @@ final class ConnectorService
                 if ($this->notifications()->wordpressError($website, $event)) {
                     $this->repo->markNotified($eventId);
                 }
+            } elseif ($event['type'] === 'plugin_auto_deactivated') {
+                if ($this->notifications()->wordpressAutoFix($website, $event)) {
+                    $this->repo->markNotified($eventId);
+                }
             } elseif ($event['severity'] === 'critical') {
                 if ($this->notifications()->wordpressSecurity($website, $event)) {
                     $this->repo->markNotified($eventId);
@@ -747,6 +851,15 @@ final class ConnectorService
                 'probe_ip'     => $row['probe_ip'] ?? null,
             ],
             'reachability'    => $row === null ? null : self::reachability($row, $this->websites->find($websiteId), time(), self::probeAgentToken()),
+            'autofix'         => $row !== null && !empty($row['autofix']) ? json_decode((string) $row['autofix'], true) : null,
+            'auto_deactivated' => $row !== null ? array_map([self::class, 'presentEvent'], $this->repo->events($websiteId, ['plugin_auto_deactivated'], 5)) : [],
+            'remote'          => $row === null ? null : [
+                'allowed'           => RemoteActionService::allowed($row),
+                'actions'           => RemoteActionService::ACTIONS,
+                'maintenance_until' => $row['maintenance_until'] ?? null,
+                'maintenance_label' => !empty($row['maintenance_until']) ? format_datetime($row['maintenance_until']) : null,
+                'commands'          => $this->remote()->recent($websiteId),
+            ],
             'insights'        => [
                 'php_warnings' => App::settings()->getBool('connector_php_warnings', false),
                 'perf_sample'  => App::settings()->getInt('connector_perf_sample', 20),
@@ -862,6 +975,7 @@ final class ConnectorService
     public function purge(): int
     {
         $this->repo->purgeFeedOlderThan(utc_now()->modify('-' . VulnerabilityScanner::FEED_RETENTION_DAYS . ' days')->format('Y-m-d H:i:s'));
+        $this->repo->purgeCommandsOlderThan(utc_now()->modify('-' . self::RETENTION_DAYS . ' days')->format('Y-m-d H:i:s'));
         return $this->repo->purgeOlderThan(utc_now()->modify('-' . self::RETENTION_DAYS . ' days')->format('Y-m-d H:i:s'));
     }
 

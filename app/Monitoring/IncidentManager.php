@@ -72,7 +72,8 @@ final class IncidentManager
      */
     private function insideVerdict(array $website, CheckResult $result): array
     {
-        if ($this->insideEvidence === null || !in_array($result->status, self::BLOCKABLE, true)) {
+        $maintenanceStatus = in_array($result->status, [Status::MAINTENANCE, Status::HTTP_503], true);
+        if ($this->insideEvidence === null || (!in_array($result->status, self::BLOCKABLE, true) && !$maintenanceStatus)) {
             return [false, null];
         }
         try {
@@ -81,8 +82,12 @@ final class IncidentManager
             $this->log->warning('Inside evidence lookup failed', ['website_id' => $website['id'], 'error' => $e->getMessage()]);
             return [false, null];
         }
-        if ($evidence === null || !$evidence['healthy']) {
-            return [false, null];
+        if ($evidence !== null && !empty($evidence['maintenance'])) {
+            // Maintenance switched on from SiteWatch: hold maintenance and 503 alerts until it ends.
+            return $maintenanceStatus ? [true, 'Alert held: ' . $evidence['reason']] : [false, null];
+        }
+        if ($evidence === null || !$evidence['healthy'] || !in_array($result->status, self::BLOCKABLE, true)) {
+            return [false, ConnectorService::probeNote($evidence)];
         }
         $lastOnline = !empty($website['last_online_at']) ? strtotime($website['last_online_at'] . ' UTC') : false;
         if ($lastOnline !== false && time() - $lastOnline < ConnectorService::HOLD_MAX) {

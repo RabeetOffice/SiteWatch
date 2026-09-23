@@ -78,6 +78,8 @@ if (!class_exists('SiteWatch_Connector_Errors')) {
                 $entry = isset($store[$fp]) ? $store[$fp] : array('first_at' => $now, 'count' => 0, 'sent_count' => 0, 'last_sent' => 0);
                 $entry['count']++;
                 $entry['last_at'] = $now;
+                // Recent occurrence times, for auto-fix's "3 times in 10 minutes" rule.
+                $entry['recent'] = array_slice(array_merge(isset($entry['recent']) ? (array) $entry['recent'] : array(), array($now)), -10);
                 $entry['event'] = $event;
                 $store[$fp] = $entry;
 
@@ -89,6 +91,16 @@ if (!class_exists('SiteWatch_Connector_Errors')) {
                 self::write($store);
                 if (class_exists('SiteWatch_Connector_Pulse')) {
                     SiteWatch_Connector_Pulse::mark_error();
+                }
+                if (class_exists('SiteWatch_Connector_Autofix') && !(defined('WP_CLI') && WP_CLI)) {
+                    $d = $event['data'];
+                    SiteWatch_Connector_Autofix::consider($d['component'], $entry['recent'], array(
+                        'fingerprint' => $fp,
+                        'error_type'  => $d['error_type'],
+                        'message'     => substr((string) preg_replace('/\s*Stack trace:.*$/s', '', $d['message']), 0, 300),
+                        'file'        => $d['file'],
+                        'line'        => $d['line'],
+                    ));
                 }
 
                 if ($send_now && class_exists('SiteWatch_Connector_Client') && SiteWatch_Connector_Client::config() !== null) {
@@ -327,12 +339,43 @@ if (!class_exists('SiteWatch_Connector_Errors')) {
         }
 
         // --------------------------------------------------------------
-        // Storage: a small JSON file, falling back to an option.
+        // Storage: small files in wp-content/sitewatch-connector, falling back to an option.
+        //
+        // Every data file is a .php file that starts with GUARD, so requesting it over the web returns nothing on
+        // any server that runs PHP. The .htaccess in the folder only protects Apache and LiteSpeed; nginx ignores it.
         // --------------------------------------------------------------
+
+        const GUARD = "<?php exit; ?>\n";
+        /** Data files before plugin 1.6.0 (readable over the web on nginx), converted by ensure_dir(). */
+        const LEGACY = array('errors.json' => 'errors', 'warnings.json' => 'warnings', 'perf.json' => 'perf', 'autofix.json' => 'autofix',
+            'ok.stamp' => 'ok.stamp', 'error.stamp' => 'error.stamp', 'probe.stamp' => 'probe.stamp');
 
         public static function dir()
         {
             return (defined('WP_CONTENT_DIR') ? WP_CONTENT_DIR : ABSPATH . 'wp-content') . '/sitewatch-connector';
+        }
+
+        /** Path of a guarded data file, e.g. data_path('errors') → …/errors.php. */
+        public static function data_path($name)
+        {
+            return self::dir() . '/' . $name . '.php';
+        }
+
+        /** Contents without the guard line, or null when the file does not exist. */
+        public static function read_data($name)
+        {
+            $raw = @file_get_contents(self::data_path($name));
+            return $raw === false ? null : self::unguard($raw);
+        }
+
+        public static function write_data($name, $content)
+        {
+            return @file_put_contents(self::data_path($name), self::GUARD . $content, LOCK_EX) !== false;
+        }
+
+        public static function unguard($raw)
+        {
+            return strpos($raw, self::GUARD) === 0 ? (string) substr($raw, strlen(self::GUARD)) : (string) $raw;
         }
 
         /** Create wp-content/sitewatch-connector (closed to web access) and return its path. */
@@ -344,14 +387,23 @@ if (!class_exists('SiteWatch_Connector_Errors')) {
                 @file_put_contents($dir . '/index.php', "<?php\n// Silence is golden.\n");
                 @file_put_contents($dir . '/.htaccess', "<IfModule mod_authz_core.c>\n    Require all denied\n</IfModule>\n<IfModule !mod_authz_core.c>\n    Order allow,deny\n    Deny from all\n</IfModule>\n");
             }
+            foreach (self::LEGACY as $old => $name) {
+                if (is_file($dir . '/' . $old)) {
+                    $mtime = @filemtime($dir . '/' . $old);
+                    if (!is_file(self::data_path($name)) && self::write_data($name, (string) @file_get_contents($dir . '/' . $old)) && $mtime) {
+                        @touch(self::data_path($name), $mtime); // stamps are read by their modification time
+                    }
+                    @unlink($dir . '/' . $old);
+                }
+            }
             return $dir;
         }
 
         private static function read()
         {
-            $file = self::dir() . '/errors.json';
-            if (is_readable($file)) {
-                $data = json_decode((string) @file_get_contents($file), true);
+            $raw = self::read_data('errors');
+            if ($raw !== null) {
+                $data = json_decode($raw, true);
                 return is_array($data) ? $data : array();
             }
             if (function_exists('get_option')) {
@@ -376,7 +428,7 @@ if (!class_exists('SiteWatch_Connector_Errors')) {
             }
             $dir = self::ensure_dir();
             $json = json_encode($store);
-            if (is_dir($dir) && is_writable($dir) && @file_put_contents($dir . '/errors.json', $json, LOCK_EX) !== false) {
+            if (is_dir($dir) && is_writable($dir) && self::write_data('errors', $json)) {
                 return;
             }
             if (function_exists('update_option')) {

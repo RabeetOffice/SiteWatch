@@ -209,6 +209,22 @@ final class NotificationManager
     }
 
     /**
+     * A plugin the SiteWatch Connector deactivated by itself because it kept crashing the site (auto-fix). Uses the
+     * "WordPress fatal error" alert rule.
+     *
+     * @param array<string, mixed> $website
+     * @param array<string, mixed> $event
+     */
+    public function wordpressAutoFix(array $website, array $event): bool
+    {
+        if (!$this->isAlertEnabled($website, 'wp_error')) {
+            $this->log->log('none', AlertMessage::EVENT_WP_AUTOFIX, 'skipped', (int) $website['id'], null, null, null, 'WordPress error alerts are disabled.');
+            return false;
+        }
+        return $this->dispatch($this->buildWordpressAutoFixMessage($website, $event), (int) $website['id'], null);
+    }
+
+    /**
      * Known vulnerabilities newly found in a site's plugins, themes or WordPress version (one alert per scan).
      *
      * @param array<string, mixed> $website
@@ -569,6 +585,40 @@ Open website details: " . $this->detailsUrl((int) $website['id']);
 ", $lines), 1500), 'warning', array_slice($rows, 0, 10), (string) $website['url'], (int) $website['id']);
 
         return new AlertMessage(AlertMessage::EVENT_WP_VULNERABILITY, $subject, $text, $html, $telegram, (int) $website['id'], null, $whatsapp, $discord);
+    }
+
+    /**
+     * @param array<string, mixed> $website
+     * @param array<string, mixed> $event
+     */
+    public function buildWordpressAutoFixMessage(array $website, array $event): AlertMessage
+    {
+        $name = (string) $website['name'];
+        $data = json_decode((string) ($event['data'] ?? ''), true) ?: [];
+        $error = is_array($data['error'] ?? null) ? $data['error'] : [];
+        $plugin = trim((string) ($data['name'] ?? $data['file'] ?? 'A plugin') . ' ' . (string) ($data['version'] ?? ''));
+        $subject = 'Plugin deactivated automatically — ' . $name . ': ' . $plugin;
+        $where = ($error['file'] ?? '') !== '' ? $error['file'] . ':' . (int) ($error['line'] ?? 0) : '—';
+        $rows = [
+            ['Website', $name],
+            ['Client', (string) ($website['client_name'] ?: '—')],
+            ['Plugin', $plugin],
+            ['Error', (string) ($error['error_type'] ?? 'Fatal error') . ': ' . str_limit((string) ($error['message'] ?? ''), 400)],
+            ['File', $where],
+            ['Crashes', (int) ($data['count'] ?? 0) . ' within 10 minutes'],
+            ['When', format_datetime($event['last_occurred_at'] ?? null)],
+        ];
+        $intro = 'The SiteWatch Connector auto-fix switched this plugin off so visitors get a working site. Its settings and data are kept. '
+            . 'Check the error, update or replace the plugin, then activate it again (website page → Remote actions, or the Plugins screen in WordPress).';
+        $text = "{$subject}\n\n" . $this->textRows($rows) . "\n\n{$intro}\n\nOpen website details: " . $this->detailsUrl((int) $website['id']);
+        $html = $this->htmlLayout($subject, 'Auto-fix', 'warning', $rows, $this->detailsUrl((int) $website['id']), 'Open Website Details', e($intro));
+        $telegram = "🩹 <b>Plugin deactivated automatically</b>\n\n<b>" . self::tg($name) . "</b>\n" . self::tg($plugin)
+            . "\n\n<code>" . self::tg(str_limit((string) ($error['message'] ?? ''), 300)) . "</code>\n" . self::tg($where) . "\n\n" . self::tg($intro);
+        $whatsapp = "🩹 *Plugin deactivated automatically*\n\n*" . self::wa($name) . "*\n" . self::wa($plugin)
+            . "\n\n" . self::wa(str_limit((string) ($error['message'] ?? ''), 300)) . "\n" . self::wa($where) . "\n\n" . self::wa($intro);
+        $discord = $this->discordPayload($subject, '🩹 ' . $plugin . ' was deactivated after repeated fatal errors', 'warning', $rows, (string) $website['url'], (int) $website['id']);
+
+        return new AlertMessage(AlertMessage::EVENT_WP_AUTOFIX, $subject, $text, $html, $telegram, (int) $website['id'], null, $whatsapp, $discord);
     }
 
     public function buildTestMessage(string $channel): AlertMessage

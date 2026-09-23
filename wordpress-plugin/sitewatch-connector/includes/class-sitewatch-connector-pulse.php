@@ -64,7 +64,7 @@ if (!class_exists('SiteWatch_Connector_Pulse')) {
 
         private static function write($name, $content, $always)
         {
-            $file = self::dir() . '/' . $name . '.stamp';
+            $file = self::path($name);
             $mtime = @filemtime($file);
             if (!$always && $mtime !== false && time() - $mtime < self::MIN_GAP) {
                 return;
@@ -73,7 +73,8 @@ if (!class_exists('SiteWatch_Connector_Pulse')) {
                 // SiteWatch_Connector_Errors creates the folder with its access rules; nothing to record until then.
                 return;
             }
-            @file_put_contents($file, $content, LOCK_EX);
+            // Guarded like the other data files: it holds the address SiteWatch checks come from.
+            @file_put_contents($file, "<?php exit; ?>\n" . $content, LOCK_EX);
         }
 
         /**
@@ -84,7 +85,11 @@ if (!class_exists('SiteWatch_Connector_Pulse')) {
             $read = function ($name) {
                 $file = SiteWatch_Connector_Pulse::path($name);
                 $mtime = @filemtime($file);
-                return $mtime === false ? array(null, '') : array((int) $mtime, trim((string) @file_get_contents($file)));
+                $raw = (string) @file_get_contents($file);
+                if (strpos($raw, "<?php exit; ?>\n") === 0) {
+                    $raw = (string) substr($raw, strlen("<?php exit; ?>\n"));
+                }
+                return $mtime === false ? array(null, '') : array((int) $mtime, trim($raw));
             };
             list($ok) = $read('ok');
             list($error) = $read('error');
@@ -101,7 +106,7 @@ if (!class_exists('SiteWatch_Connector_Pulse')) {
 
         public static function path($name)
         {
-            return self::dir() . '/' . $name . '.stamp';
+            return self::dir() . '/' . $name . '.stamp.php';
         }
     }
 }

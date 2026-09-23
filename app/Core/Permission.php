@@ -21,6 +21,7 @@ final class Permission
             'websites.manage' => ['Add & edit websites', 'Add, edit and import websites, pause or resume monitoring and change intervals'],
             'websites.check'  => ['Run manual checks', 'Use "Check Now" on one or many websites'],
             'websites.delete' => ['Delete websites', 'Permanently remove websites and all of their monitoring history'],
+            'websites.remote' => ['Run remote actions', 'Clear caches, deactivate, activate or update plugins and switch the maintenance page on WordPress sites that allow it (SiteWatch Connector)'],
         ],
         'Monitoring data' => [
             'incidents.view' => ['View incidents', 'Incident history, the dashboard incident panel and incident exports'],

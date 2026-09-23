@@ -13,7 +13,7 @@
     const VULN_TONES = { critical: 'danger', high: 'danger', medium: 'warning', low: 'neutral', none: 'neutral' };
     const TABS = [
         ['errors', 'Errors'], ['security', 'Security'], ['updates', 'Updates'], ['plugins', 'Plugins & themes'],
-        ['performance', 'Performance'], ['activity', 'Activity'], ['environment', 'Environment'],
+        ['performance', 'Performance'], ['remote', 'Remote actions'], ['activity', 'Activity'], ['environment', 'Environment'],
     ];
 
     const id = SW.page.id;
@@ -155,6 +155,37 @@
             }).join('') + '</tbody></table></div>';
     }
 
+    /** Snapshot plugin for a plugin folder slug (fatal errors know the folder, not the main file). */
+    function pluginBySlug(slug) {
+        return ((data.snapshot && data.snapshot.plugins) || []).find(function (p) {
+            return p.file && (p.file.indexOf(slug + '/') === 0 || p.file === slug + '.php');
+        }) || null;
+    }
+    function allows(action) {
+        return conf.canRemote && data.remote && (data.remote.allowed || []).indexOf(action) !== -1;
+    }
+    /** One-click remote action button; the click handler confirms and sends it. */
+    function goButton(action, args, label, cls, confirmText) {
+        return '<button type="button" class="btn btn-sm ' + (cls || 'btn-light') + '" data-remote-go="' + esc(action) + '" data-remote-args="' + esc(JSON.stringify(args)) + '"' +
+            (confirmText ? ' data-remote-confirm="' + esc(confirmText) + '"' : '') + '>' + label + '</button>';
+    }
+    /** Deactivate / roll back buttons for a plugin named by a fatal error or an auto-fix. */
+    function pluginFixButtons(p, withDeactivate) {
+        if (!p) return '';
+        let html = '';
+        if (withDeactivate && p.active && allows('deactivate_plugin')) {
+            html += goButton('deactivate_plugin', { plugin: p.file }, 'Deactivate ' + esc(p.name), 'btn-light', 'Deactivate ' + p.name + '? Features that depend on it stop working until it is activated again.');
+        }
+        if (!p.active && allows('activate_plugin')) {
+            html += goButton('activate_plugin', { plugin: p.file }, 'Activate again', 'btn-light', 'Activate ' + p.name + ' again? If it still crashes, the error comes back (auto-fix does not switch it off again for 24 hours).');
+        }
+        if (p.previous_version && allows('rollback_plugin') && p.updated_at && Date.now() / 1000 - p.updated_at < 7 * 86400) {
+            html += goButton('rollback_plugin', { plugin: p.file, version: p.previous_version }, 'Roll back to ' + esc(p.previous_version), 'btn-light',
+                'Install ' + p.name + ' ' + p.previous_version + ' from WordPress.org again, replacing ' + p.version + '? Check the Security tab: an older version can have known vulnerabilities.');
+        }
+        return html;
+    }
+
     function tabErrors() {
         if (!data.errors.length) {
             return SW.emptyState('bi-emoji-smile', 'No fatal errors reported.', 'When PHP crashes on this site, the file, line and plugin or theme responsible appear here.') + phpWarnings();
@@ -171,7 +202,9 @@
                 '<pre class="wp-error-msg">' + esc(d.message) + '</pre>' +
                 '<div class="fs-12 text-muted"><span class="mono">' + esc(d.file) + ':' + esc(d.line) + '</span>' +
                 (req.path ? ' · ' + esc((req.method || '') + ' ' + req.path) + ' (' + esc(req.context || 'front') + ')' : '') +
-                ' · first ' + esc(e.first_label) + (e.notified ? ' · alert sent' : '') + '</div></article>';
+                ' · first ' + esc(e.first_label) + (e.notified ? ' · alert sent' : '') + '</div>' +
+                (comp.type === 'plugin' && comp.slug ? (function (b) { return b ? '<div class="d-flex flex-wrap gap-2 mt-2">' + b + '</div>' : ''; })(pluginFixButtons(pluginBySlug(comp.slug), true)) : '') +
+                '</article>';
         }).join('') + '</div>' + phpWarnings();
     }
 
@@ -312,12 +345,133 @@
         return html;
     }
 
+    const COMMAND_TONES = { pending: 'info', sent: 'info', done: 'success', failed: 'danger', expired: 'warning' };
+
+    /** Remote actions (plugin 1.4.0+): only what the site's WordPress administrator allowed. */
+    function tabRemote() {
+        const r = data.remote;
+        if (!r) return SW.emptyState('bi-sliders', 'Not connected.', '');
+        const allowed = r.allowed;
+        let html = '';
+        if (allowed === null) {
+            html += '<p class="fs-13 text-muted">Remote actions need SiteWatch Connector 1.4.0 or later on this site' + (data.plugin_outdated ? ' (the update to ' + esc(data.bundled_version) + ' is on its way).' : '.') + '</p>';
+        } else if (!allowed.length) {
+            html += '<p class="fs-13 text-muted">This site allows no remote actions. A WordPress administrator can allow them one by one under <b>Settings → SiteWatch → Remote actions</b>.</p>';
+        } else if (!conf.canRemote) {
+            html += '<p class="fs-13 text-muted">This site allows: ' + esc(allowed.map(function (a) { return r.actions[a]; }).join(', ')) + '. Your role does not include "Run remote actions".</p>';
+        } else {
+            html += '<p class="fs-12 text-muted mb-3">The site runs a request after its next report (usually within 5 minutes). Allowed on this site: ' + esc(allowed.map(function (a) { return r.actions[a]; }).join(', ')) + '.</p>';
+            const plugins = ((data.snapshot && data.snapshot.plugins) || []).filter(function (p) { return p.file && p.file.indexOf('sitewatch-connector/') !== 0; });
+            const option = function (p) { return '<option value="' + esc(p.file) + '">' + esc(p.name + ' ' + p.version) + '</option>'; };
+            const row = function (title, help, controls) {
+                return '<div class="wp-remote-row"><div class="min-w-0"><div class="fw-600">' + title + '</div><div class="fs-12 text-muted">' + help + '</div></div><div class="d-flex flex-wrap gap-2 align-items-center">' + controls + '</div></div>';
+            };
+            if (allowed.indexOf('clear_cache') !== -1) {
+                html += row('Clear caches', 'Page cache plugins (LiteSpeed, WP Rocket, W3 Total Cache, WP Super Cache and others) and the object cache.',
+                    '<button type="button" class="btn btn-sm btn-light" data-remote="clear_cache"><i class="bi bi-trash3" aria-hidden="true"></i> Clear caches</button>');
+            }
+            if (allowed.indexOf('maintenance') !== -1) {
+                html += row('Maintenance page', r.maintenance_until ? '<span class="text-warning">On until ' + esc(r.maintenance_label) + '.</span> Visitors see a 503 maintenance page; signed-in editors see the site. Alerts are held.'
+                        : 'Visitors see "Briefly unavailable for scheduled maintenance"; signed-in editors keep working. SiteWatch holds maintenance alerts meanwhile.',
+                    (r.maintenance_until ? '<button type="button" class="btn btn-sm btn-primary" data-remote="maintenance_off">End maintenance</button>' : '') +
+                    '<select class="form-select form-select-sm w-auto" data-remote-minutes aria-label="Duration">' + [[15, '15 min'], [30, '30 min'], [60, '1 hour'], [120, '2 hours'], [240, '4 hours'], [1440, '24 hours']].map(function (o) { return '<option value="' + o[0] + '"' + (o[0] === 60 ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select>' +
+                    '<input type="text" class="form-control form-control-sm w-auto" maxlength="200" placeholder="Message (optional)" data-remote-message aria-label="Maintenance message">' +
+                    '<button type="button" class="btn btn-sm btn-light" data-remote="maintenance_on">' + (r.maintenance_until ? 'Restart' : 'Switch on') + '</button>');
+            }
+            if (allowed.indexOf('update_plugins') !== -1) {
+                const updates = plugins.filter(function (p) { return p.update; });
+                html += row('Update plugins', updates.length ? updates.length + ' update(s) in the last health report, installed with WordPress\u2019s own updater (a broken update is rolled back on WordPress 6.6+).' : 'No plugin updates in the last health report.',
+                    updates.length ? '<div class="wp-remote-list">' + updates.map(function (p) {
+                        return '<label class="form-check fs-13"><input class="form-check-input" type="checkbox" data-remote-update value="' + esc(p.file) + '" checked> ' + esc(p.name) + ' <span class="mono text-muted">' + esc(p.version) + ' \u2192 ' + esc(p.update) + '</span></label>';
+                    }).join('') + '</div><button type="button" class="btn btn-sm btn-light" data-remote="update_plugins"><i class="bi bi-arrow-up-circle" aria-hidden="true"></i> Update selected</button>' : '');
+            }
+            if (allowed.indexOf('deactivate_plugin') !== -1) {
+                const active = plugins.filter(function (p) { return p.active; });
+                html += row('Deactivate a plugin', 'For example the plugin behind a fatal error. It stays installed and can be activated again.',
+                    active.length ? '<select class="form-select form-select-sm w-auto" data-remote-deactivate aria-label="Plugin to deactivate">' + active.map(option).join('') + '</select><button type="button" class="btn btn-sm btn-light" data-remote="deactivate_plugin">Deactivate</button>' : '<span class="fs-13 text-muted">No active plugins.</span>');
+            }
+            if (allowed.indexOf('activate_plugin') !== -1) {
+                const inactive = plugins.filter(function (p) { return !p.active; });
+                html += row('Activate a plugin', 'WordPress refuses a plugin that fails while loading, so a broken plugin is not switched on.',
+                    inactive.length ? '<select class="form-select form-select-sm w-auto" data-remote-activate aria-label="Plugin to activate">' + inactive.map(option).join('') + '</select><button type="button" class="btn btn-sm btn-light" data-remote="activate_plugin">Activate</button>' : '<span class="fs-13 text-muted">No inactive plugins.</span>');
+            }
+        }
+
+        const af = data.autofix;
+        html += '<h4 class="wp-subhead mb-2 mt-4">Auto-fix</h4><p class="fs-13 ' + (af && af.enabled ? '' : 'text-muted') + ' mb-2">' + (af === null || af === undefined
+            ? 'Needs SiteWatch Connector 1.5.0 or later.'
+            : af.enabled
+                ? '<i class="bi bi-bandaid text-success" aria-hidden="true"></i> On: a plugin whose fatal error repeats 3 times in 10 minutes is deactivated and you get an alert.' +
+                    (af.protected.length ? ' Never touched: ' + esc(af.protected.join(', ')) + '.' : '')
+                : 'Off. A WordPress administrator can switch it on under Settings → SiteWatch → Auto-fix.') + '</p>';
+        if (allows('rollback_plugin')) {
+            const rollbacks = ((data.snapshot && data.snapshot.plugins) || []).filter(function (p) { return p.previous_version; });
+            html += '<div class="wp-remote-row"><div class="min-w-0"><div class="fw-600">Roll back a plugin update</div><div class="fs-12 text-muted">Installs the version a plugin had before its last update, from WordPress.org. Versions are recorded at each update from plugin 1.5.0 on.</div></div>' +
+                '<div class="d-flex flex-wrap gap-2 align-items-center">' + (rollbacks.length ? rollbacks.map(function (p) {
+                    return goButton('rollback_plugin', { plugin: p.file, version: p.previous_version }, esc(p.name) + ': ' + esc(p.version) + ' \u2192 ' + esc(p.previous_version), 'btn-light',
+                        'Install ' + p.name + ' ' + p.previous_version + ' from WordPress.org again, replacing ' + p.version + '? Check the Security tab: an older version can have known vulnerabilities.');
+                }).join('') : '<span class="fs-13 text-muted">No update recorded yet.</span>') + '</div></div>';
+        }
+        html += '<h4 class="wp-subhead mb-2 mt-4">Recent requests</h4>';
+        if (!r.commands.length) return html + '<p class="fs-13 text-muted mb-0">None yet.</p>';
+        return html + '<ul class="wp-activity">' + r.commands.map(function (c) {
+            const d = c.details || {};
+            let what = c.label;
+            if (c.args.plugin) what += ': ' + c.args.plugin;
+            if (c.args.plugins) what += ': ' + c.args.plugins.length + ' plugin(s)';
+            if (c.action === 'maintenance') what += c.args.mode === 'on' ? ' on for ' + c.args.minutes + ' min' : ' off';
+            if (c.action === 'rollback_plugin') what += ' to ' + c.args.version;
+            const lines = (d.plugins || []).map(function (p) { return esc(p.name) + ': ' + esc(p.message) + (p.to ? ' (' + esc(p.from) + ' \u2192 ' + esc(p.to) + ')' : ''); });
+            return '<li><span class="sw-pill tone-' + (COMMAND_TONES[c.status] || 'neutral') + '">' + esc(c.status_label) + '</span><div class="min-w-0">' +
+                '<div>' + esc(what) + '</div><div class="fs-12 text-muted">' + esc(c.created_ago) + (c.requested_by ? ' · by ' + esc(c.requested_by) : '') + (c.message ? ' · ' + esc(c.message) : '') + '</div>' +
+                (lines.length ? '<div class="fs-12 text-muted">' + lines.join('<br>') + '</div>' : '') + '</div></li>';
+        }).join('') + '</ul>';
+    }
+
+    async function remote(action, args, confirmOpts) {
+        if (confirmOpts && !(await SW.confirm(confirmOpts))) return;
+        try {
+            const res = await SW.api('api/connector/command.php', { method: 'POST', body: { website_id: id, action: action, args: args || {} } });
+            if (res.data.connector) data = res.data.connector;
+            SW.toast(res.message, 'success');
+            render();
+        } catch (e) { SW.toast(e.message, 'danger'); }
+    }
+
+    function remoteClick(button) {
+        const panel = button.closest('[data-wp-panel]');
+        const pick = function (sel) { const el = panel.querySelector(sel); return el ? el.value : ''; };
+        const name = function (sel) { const el = panel.querySelector(sel); return el && el.selectedOptions[0] ? el.selectedOptions[0].textContent : ''; };
+        switch (button.getAttribute('data-remote')) {
+            case 'clear_cache':
+                return remote('clear_cache', {});
+            case 'maintenance_on':
+                return remote('maintenance', { mode: 'on', minutes: parseInt(pick('[data-remote-minutes]'), 10), message: pick('[data-remote-message]') }, {
+                    title: 'Switch the maintenance page on?', confirmText: 'Switch on',
+                    message: 'Visitors will see a maintenance page for ' + name('[data-remote-minutes]') + ' (signed-in editors see the site). It ends by itself.',
+                });
+            case 'maintenance_off':
+                return remote('maintenance', { mode: 'off' });
+            case 'update_plugins': {
+                const files = SW.qsa('[data-remote-update]:checked', panel).map(function (c) { return c.value; });
+                if (!files.length) return SW.toast('Select at least one plugin.', 'warning');
+                return remote('update_plugins', { plugins: files }, { title: 'Update ' + files.length + ' plugin(s)?', confirmText: 'Update', danger: false, icon: 'bi-arrow-up-circle', message: 'WordPress installs the updates from WordPress.org after the site\u2019s next report.' });
+            }
+            case 'deactivate_plugin':
+                return remote('deactivate_plugin', { plugin: pick('[data-remote-deactivate]') }, { title: 'Deactivate ' + name('[data-remote-deactivate]') + '?', danger: true, confirmText: 'Deactivate', message: 'Features that depend on this plugin stop working until it is activated again.' });
+            case 'activate_plugin':
+                return remote('activate_plugin', { plugin: pick('[data-remote-activate]') }, { title: 'Activate ' + name('[data-remote-activate]') + '?', confirmText: 'Activate', danger: false, message: 'The plugin runs on every page again.' });
+        }
+    }
+
     function tabActivity() {
         if (!data.activity.length) return SW.emptyState('bi-clock-history', 'No activity reported yet.', 'Plugin and theme changes, WordPress updates and administrator sign-ins appear here.');
         return '<ul class="wp-activity">' + data.activity.map(function (a) {
             const d = a.data || {};
             let extra = '';
-            if (a.type === 'login_failures' && d.ips) {
+            if (a.type === 'plugin_auto_deactivated' && d.error) {
+                extra = esc(d.count) + ' crashes in 10 min · ' + esc(d.error.message || '');
+            } else if (a.type === 'login_failures' && d.ips) {
                 extra = Object.keys(d.ips).slice(0, 5).map(function (ip) { return esc(ip) + ' (' + esc(d.ips[ip]) + ')'; }).join(', ');
             } else if (a.type === 'file_changed') {
                 extra = esc(d.change) + (d.size_before !== null && d.size_after !== null ? ', ' + esc(d.size_before) + ' → ' + esc(d.size_after) + ' bytes' : '');
@@ -383,6 +537,21 @@
             }[data.state] || '';
             html += '<div class="alert alert-warning py-2 fs-13">' + esc(why) + '</div>';
         }
+        const bannerShown = {};
+        (data.auto_deactivated || []).forEach(function (ev) {
+            const d = ev.data || {};
+            if (bannerShown[d.file]) return; // newest first: one banner per plugin
+            bannerShown[d.file] = true;
+            const p = ((data.snapshot && data.snapshot.plugins) || []).find(function (x) { return x.file === d.file; }) || null;
+            if (Date.now() - new Date(ev.last_occurred_at.replace(' ', 'T') + 'Z').getTime() > 86400000 || (p && p.active)) return;
+            const err = d.error || {};
+            html += '<div class="alert alert-warning py-2 fs-13"><div><i class="bi bi-bandaid" aria-hidden="true"></i> <b>' + esc(d.name || d.file) + '</b> was deactivated automatically ' + esc(ev.last_ago) +
+                ' after ' + esc(d.count) + ' fatal errors in 10 minutes: <span class="mono">' + esc(err.message || '') + '</span> <span class="text-muted">(' + esc(err.file || '') + ':' + esc(err.line || '') + ')</span></div>' +
+                (p ? '<div class="d-flex flex-wrap gap-2 mt-2">' + pluginFixButtons(p, false) + '</div>' : '') + '</div>';
+        });
+        if (data.remote && data.remote.maintenance_until) {
+            html += '<div class="alert alert-warning py-2 fs-13"><i class="bi bi-cone-striped" aria-hidden="true"></i> Maintenance page switched on from SiteWatch until ' + esc(data.remote.maintenance_label) + '. Maintenance alerts are held until then.</div>';
+        }
         const r = data.reachability;
         if (r) {
             const since = r.probe_ago ? 'for ' + Math.round(r.probe_ago / 3600) + ' h' : 'since the plugin was connected';
@@ -415,6 +584,7 @@
             errors: data.errors.length,
             security: (data.security_issues || 0) + (data.vulnerabilities ? data.vulnerabilities.count : 0),
             updates: data.updates_pending || 0,
+            remote: data.remote ? data.remote.commands.filter(function (c) { return c.status === 'pending' || c.status === 'sent'; }).length : 0,
         };
         html += '<div class="segmented mb-3 wp-tabs" role="tablist" aria-label="WordPress details">' + TABS.map(function (t) {
             const n = counts[t[0]];
@@ -428,7 +598,7 @@
     function renderTab() {
         const panel = el.body.querySelector('[data-wp-panel]');
         if (!panel) return;
-        const renderers = { errors: tabErrors, security: tabSecurity, updates: tabUpdates, plugins: tabPlugins, performance: tabPerformance, activity: tabActivity, environment: tabEnvironment };
+        const renderers = { errors: tabErrors, security: tabSecurity, updates: tabUpdates, plugins: tabPlugins, performance: tabPerformance, remote: tabRemote, activity: tabActivity, environment: tabEnvironment };
         panel.innerHTML = (renderers[tab] || tabErrors)();
     }
 
@@ -450,6 +620,21 @@
                     b.setAttribute('aria-selected', String(on));
                 });
                 renderTab();
+                return;
+            }
+            const go = ev.target.closest('[data-remote-go]');
+            if (go) {
+                ev.preventDefault();
+                let args = {};
+                try { args = JSON.parse(go.getAttribute('data-remote-args') || '{}'); } catch (e) { /* keep empty */ }
+                const text = go.getAttribute('data-remote-confirm');
+                remote(go.getAttribute('data-remote-go'), args, text ? { title: go.textContent.trim() + '?', message: text, confirmText: go.textContent.trim(), danger: go.getAttribute('data-remote-go') === 'deactivate_plugin' } : null);
+                return;
+            }
+            const rb = ev.target.closest('[data-remote]');
+            if (rb) {
+                ev.preventDefault();
+                remoteClick(rb);
                 return;
             }
             const a = ev.target.closest('[data-wp]');

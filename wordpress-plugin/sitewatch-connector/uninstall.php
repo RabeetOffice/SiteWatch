@@ -5,7 +5,7 @@
 
 defined('WP_UNINSTALL_PLUGIN') || exit;
 
-foreach (array('sitewatch_connector', 'sitewatch_connector_state', 'sitewatch_connector_queue', 'sitewatch_connector_logins', 'sitewatch_connector_errors', 'sitewatch_connector_files', 'sitewatch_connector_insights') as $option) {
+foreach (array('sitewatch_connector', 'sitewatch_connector_state', 'sitewatch_connector_queue', 'sitewatch_connector_logins', 'sitewatch_connector_errors', 'sitewatch_connector_files', 'sitewatch_connector_insights', 'sitewatch_connector_remote', 'sitewatch_connector_commands', 'sitewatch_connector_maintenance', 'sitewatch_connector_autofix', 'sitewatch_connector_autofix_log', 'sitewatch_connector_versions') as $option) {
     delete_option($option);
 }
 delete_metadata('user', 0, 'sitewatch_last_login', '', true);
@@ -17,7 +17,8 @@ if (defined('WPMU_PLUGIN_DIR') && is_file(WPMU_PLUGIN_DIR . '/sitewatch-connecto
 
 $dir = WP_CONTENT_DIR . '/sitewatch-connector';
 if (is_dir($dir)) {
-    foreach (array('errors.json', 'warnings.json', 'perf.json', 'ok.stamp', 'error.stamp', 'probe.stamp', 'index.php', '.htaccess') as $file) {
+    foreach (array('errors.php', 'autofix.php', 'warnings.php', 'perf.php', 'ok.stamp.php', 'error.stamp.php', 'probe.stamp.php',
+        'errors.json', 'autofix.json', 'warnings.json', 'perf.json', 'ok.stamp', 'error.stamp', 'probe.stamp', 'index.php', '.htaccess') as $file) {
         if (is_file($dir . '/' . $file)) {
             @unlink($dir . '/' . $file);
         }

@@ -24,7 +24,7 @@ use RuntimeException;
  */
 final class Migrator
 {
-    public const VERSION = 9;
+    public const VERSION = 11;
     /** Version of databases created before schema versions were recorded. */
     public const BASELINE = 1;
     public const SETTING = 'schema_version';
@@ -97,6 +97,21 @@ final class Migrator
             'title'   => 'Page speed and PHP warnings from inside WordPress',
             'changes' => [
                 'Adds connector_sites.probe_ip, the address SiteWatch\'s checks reach WordPress from, shown as allow-listing help when checks are blocked.',
+            ],
+        ],
+        10 => [
+            'release' => '1.10.0',
+            'title'   => 'Remote actions for WordPress sites',
+            'changes' => [
+                'Creates the connector_commands table for remote actions (clear caches, deactivate, activate or update plugins, maintenance page) and their results.',
+                'Adds connector_sites columns for the remote actions each site allows and for planned maintenance, during which alerts are held.',
+            ],
+        ],
+        11 => [
+            'release' => '1.11.0',
+            'title'   => 'Auto-fix for WordPress plugins',
+            'changes' => [
+                'Adds connector_sites.autofix: whether a site deactivates crashing plugins by itself, and which plugins it protects.',
             ],
         ],
     ];
@@ -211,7 +226,36 @@ final class Migrator
             7 => fn () => $this->connectorPulseAndUpdates(),
             8 => fn () => $this->connectorVulnerabilities(),
             9 => fn () => $this->connectorProbeIp(),
+            10 => fn () => $this->connectorRemoteActions(),
+            11 => fn () => $this->connectorAutofix(),
         ];
+    }
+
+    /**
+     * v11 (1.11.0): auto-fix settings reported by the plugin.
+     */
+    private function connectorAutofix(): void
+    {
+        if (!$this->columnExists('connector_sites', 'autofix')) {
+            $this->db->pdo()->exec("ALTER TABLE `connector_sites` ADD COLUMN `autofix` VARCHAR(2000) NULL COMMENT 'auto-fix settings reported by the plugin (JSON {enabled, protected}); NULL before plugin 1.5.0' AFTER `maintenance_until`");
+        }
+    }
+
+    /**
+     * v10 (1.10.0): remote actions and planned maintenance.
+     */
+    private function connectorRemoteActions(): void
+    {
+        $this->createTable('connector_commands');
+        $columns = [
+            'remote_actions'    => "VARCHAR(255) NULL COMMENT 'remote actions allowed in WordPress (JSON list); NULL before plugin 1.4.0' AFTER `vuln_incomplete`",
+            'maintenance_until' => "DATETIME NULL COMMENT 'maintenance page switched on from SiteWatch; alerts are held until then' AFTER `remote_actions`",
+        ];
+        foreach ($columns as $column => $definition) {
+            if (!$this->columnExists('connector_sites', $column)) {
+                $this->db->pdo()->exec("ALTER TABLE `connector_sites` ADD COLUMN `{$column}` {$definition}");
+            }
+        }
     }
 
     /**

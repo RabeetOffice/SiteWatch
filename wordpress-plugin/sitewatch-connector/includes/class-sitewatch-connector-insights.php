@@ -329,12 +329,12 @@ if (!class_exists('SiteWatch_Connector_Insights')) {
 
         public static function path($name)
         {
-            return SiteWatch_Connector_Errors::dir() . '/' . $name . '.json';
+            return SiteWatch_Connector_Errors::data_path($name);
         }
 
         private static function read($file)
         {
-            $data = is_readable($file) ? json_decode((string) @file_get_contents($file), true) : null;
+            $data = is_readable($file) ? json_decode(SiteWatch_Connector_Errors::unguard((string) @file_get_contents($file)), true) : null;
             return is_array($data) ? $data : array();
         }
 
@@ -354,12 +354,12 @@ if (!class_exists('SiteWatch_Connector_Insights')) {
             }
             if (flock($handle, LOCK_EX | LOCK_NB)) {
                 $raw = stream_get_contents($handle);
-                $data = is_string($raw) && $raw !== '' ? json_decode($raw, true) : array();
+                $data = is_string($raw) && $raw !== '' ? json_decode(SiteWatch_Connector_Errors::unguard($raw), true) : array();
                 $result = call_user_func($change, is_array($data) ? $data : array());
                 if (is_array($result)) {
                     ftruncate($handle, 0);
                     rewind($handle);
-                    fwrite($handle, (string) json_encode($result));
+                    fwrite($handle, SiteWatch_Connector_Errors::GUARD . (string) json_encode($result));
                     fflush($handle);
                 }
                 flock($handle, LOCK_UN);

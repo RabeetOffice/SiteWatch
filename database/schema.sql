@@ -392,6 +392,9 @@ CREATE TABLE IF NOT EXISTS `connector_sites` (
   `vuln_report`     MEDIUMTEXT   NULL COMMENT 'latest vulnerability report (JSON)',
   `vuln_checked_at` DATETIME     NULL,
   `vuln_incomplete` TINYINT(1)   NOT NULL DEFAULT 0 COMMENT 'some components could not be looked up',
+  `remote_actions`  VARCHAR(255) NULL COMMENT 'remote actions allowed in WordPress (JSON list); NULL before plugin 1.4.0',
+  `maintenance_until` DATETIME   NULL COMMENT 'maintenance page switched on from SiteWatch; alerts are held until then',
+  `autofix`         VARCHAR(2000) NULL COMMENT 'auto-fix settings reported by the plugin (JSON {enabled, protected}); NULL before plugin 1.5.0',
   PRIMARY KEY (`website_id`),
   KEY `idx_connector_seen` (`last_seen_at`),
   CONSTRAINT `fk_connector_website` FOREIGN KEY (`website_id`) REFERENCES `websites` (`id`) ON DELETE CASCADE
@@ -429,4 +432,22 @@ CREATE TABLE IF NOT EXISTS `vulnerability_feed` (
   `fetched_at` DATETIME     NOT NULL,
   PRIMARY KEY (`component`, `slug`),
   KEY `idx_vulnerability_feed_fetched` (`fetched_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Remote actions queued for WordPress sites (SiteWatch Connector 1.4.0+), delivered with the heartbeat reply.
+CREATE TABLE IF NOT EXISTS `connector_commands` (
+  `id`           BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `website_id`   INT UNSIGNED NOT NULL,
+  `action`       VARCHAR(40)  NOT NULL,
+  `args`         TEXT         NOT NULL COMMENT 'JSON, signed exactly as stored',
+  `status`       VARCHAR(12)  NOT NULL DEFAULT 'pending' COMMENT 'pending | sent | done | failed | expired',
+  `requested_by` INT UNSIGNED NULL COMMENT 'user who asked for it',
+  `created_at`   DATETIME     NOT NULL,
+  `expires_at`   DATETIME     NOT NULL,
+  `sent_at`      DATETIME     NULL,
+  `finished_at`  DATETIME     NULL,
+  `result`       TEXT         NULL COMMENT 'JSON {message, details} reported by the plugin',
+  PRIMARY KEY (`id`),
+  KEY `idx_connector_commands_site` (`website_id`, `status`),
+  CONSTRAINT `fk_connector_commands_website` FOREIGN KEY (`website_id`) REFERENCES `websites` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

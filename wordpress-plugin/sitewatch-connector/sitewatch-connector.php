@@ -3,7 +3,7 @@
  * Plugin Name:       SiteWatch Connector
  * Plugin URI:        https://github.com/RabeetOffice/SiteWatch
  * Description:       Connects this WordPress site to SiteWatch monitoring: real causes of fatal errors (without turning on debug), a daily health and security report, and a log of plugin, theme and admin changes.
- * Version:           1.3.0
+ * Version:           1.6.0
  * Requires at least: 5.2
  * Requires PHP:      7.2
  * Author:            SiteWatch
@@ -16,7 +16,7 @@
 
 defined('ABSPATH') || exit;
 
-define('SITEWATCH_CONNECTOR_VERSION', '1.3.0');
+define('SITEWATCH_CONNECTOR_VERSION', '1.6.0');
 define('SITEWATCH_CONNECTOR_FILE', __FILE__);
 define('SITEWATCH_CONNECTOR_DIR', __DIR__);
 define('SITEWATCH_CONNECTOR_BASENAME', plugin_basename(__FILE__));
@@ -29,6 +29,8 @@ require_once __DIR__ . '/includes/class-sitewatch-connector-updater.php';
 require_once __DIR__ . '/includes/class-sitewatch-connector-health.php';
 require_once __DIR__ . '/includes/class-sitewatch-connector-activity.php';
 require_once __DIR__ . '/includes/class-sitewatch-connector-files.php';
+require_once __DIR__ . '/includes/class-sitewatch-connector-remote.php';
+require_once __DIR__ . '/includes/class-sitewatch-connector-autofix.php';
 require_once __DIR__ . '/includes/class-sitewatch-connector-admin.php';
 
 /**
@@ -55,6 +57,8 @@ final class SiteWatch_Connector
 
         SiteWatch_Connector_Activity::init();
         SiteWatch_Connector_Files::init();
+        SiteWatch_Connector_Remote::init();
+        SiteWatch_Connector_Autofix::init();
         if (is_admin()) {
             SiteWatch_Connector_Admin::init();
         }
@@ -112,6 +116,10 @@ final class SiteWatch_Connector
             if ($snapshot_due) {
                 SiteWatch_Connector_Client::update_state(array('last_snapshot' => time(), 'want_snapshot' => false));
                 SiteWatch_Connector_Insights::reset();
+            }
+            // Remote actions SiteWatch queued for this site (each is checked before it runs; see the Remote class).
+            if (!empty($result['data']['commands']) && is_array($result['data']['commands'])) {
+                SiteWatch_Connector_Remote::handle($result['data']['commands']);
             }
         }
         return $result;

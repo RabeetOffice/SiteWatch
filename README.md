@@ -55,7 +55,7 @@ Manage Administrator, Manager, Viewer, and custom roles with server-side permiss
 | **Website portfolio** | Add and edit websites, CSV import/export, client labels, search, filters, sorting, pause/resume, and manual checks. |
 | **Availability** | Scheduled HTTP/HTTPS checks; DNS, connection, timeout, redirect, HTTP, and SSL failure classification. |
 | **WordPress diagnostics** | Detect critical errors, database connection failures, maintenance pages, and exposed PHP fatal errors. |
-| **WordPress plugin** | Optional SiteWatch Connector: fatal errors with file, line and responsible plugin (no debug mode needed), daily health and security report, known vulnerabilities in plugins and themes, `wp-config.php`/`.htaccess` change alerts, page speed and PHP warnings from inside, and a WordPress change log. |
+| **WordPress plugin** | Optional SiteWatch Connector: fatal errors with file, line and responsible plugin (no debug mode needed), daily health and security report, known vulnerabilities in plugins and themes, `wp-config.php`/`.htaccess` change alerts, page speed and PHP warnings from inside, remote actions (caches, plugins, rollback, maintenance page), auto-fix for crashing plugins, and a WordPress change log. |
 | **Incident tracking** | Configurable consecutive-failure confirmation, recovery thresholds, incident history, and supporting diagnostics. |
 | **Alerts** | Email through SMTP, Telegram, WhatsApp (free through GREEN-API or CallMeBot, or Meta’s Cloud API) and Discord webhooks; global and per-website alert controls, recovery notifications, and delivery logs. |
 | **Performance & Core Web Vitals** | TTFB measured on every check; LCP, CLS, INP and Lighthouse scores for mobile and desktop through Google PageSpeed Insights, with historical trends. |
@@ -173,6 +173,14 @@ WordPress and pushes signed reports to SiteWatch.
   with `SAVEQUERIES`), and an optional daily summary of PHP warnings and deprecations. Both are set under Monitoring
   Settings → WordPress plugin. The website page also says when SiteWatch's checks stop reaching WordPress (page cache,
   CDN or a firewall blocking SiteWatch).
+- **Remote actions**: clear caches, deactivate, activate or update plugins, and a maintenance page (alerts are held
+  while it shows), from the website page. Each action must be allowed by the site's WordPress administrator first,
+  commands are signed with the site's secret, and the "Run remote actions" permission is needed in SiteWatch.
+  Clearing caches, plugin updates and the maintenance page also work on many selected sites at once from the
+  website list. A plugin update can be rolled back to the version it replaced.
+- **Auto-fix** (opt-in in WordPress): a plugin whose fatal error repeats 3 times within 10 minutes is deactivated
+  before the next page loads, so visitors get a working site, and SiteWatch alerts you with a one-click "Activate
+  again".
 
 Set up per website: open the website → **WordPress** → **Download plugin**, install and activate it in WordPress,
 click **Create connection key** in SiteWatch and paste the key under **Settings → SiteWatch** in WordPress.

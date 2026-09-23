@@ -46,7 +46,7 @@ $pageData = [
         'canRun'             => $canRunChecks,
         'canManageSettings'  => can('settings.manage'),
     ],
-    'connector' => ['canManage' => can('websites.manage')],
+    'connector' => ['canManage' => can('websites.manage'), 'canRemote' => can('websites.remote')],
 ];
 
 require dirname(__DIR__) . '/includes/header.php';

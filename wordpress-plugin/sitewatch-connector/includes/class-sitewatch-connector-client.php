@@ -21,6 +21,8 @@ if (!class_exists('SiteWatch_Connector_Client')) {
         const STATE_OPTION = 'sitewatch_connector_state';
         const KEY_PREFIX = 'swc1_';
         const PROTOCOL = 1;
+        /** Reports larger than this (bytes of JSON) are sent gzipped when SiteWatch accepts it. */
+        const GZIP_OVER = 65536;
 
         /**
          * Connection settings, or null when this site is not connected.
@@ -96,6 +98,9 @@ if (!class_exists('SiteWatch_Connector_Client')) {
                 'loader'         => class_exists('SiteWatch_Connector') ? SiteWatch_Connector::loader_installed() : true,
                 'pulse'          => class_exists('SiteWatch_Connector_Pulse') ? SiteWatch_Connector_Pulse::read() : null,
                 'last_update'    => isset(self::state()['last_update']) ? self::state()['last_update'] : null,
+                'remote'         => class_exists('SiteWatch_Connector_Remote') ? SiteWatch_Connector_Remote::status() : null,
+                'maintenance_until' => class_exists('SiteWatch_Connector_Remote') ? SiteWatch_Connector_Remote::maintenance_until() : null,
+                'autofix'        => class_exists('SiteWatch_Connector_Autofix') ? SiteWatch_Connector_Autofix::status() : null,
             );
         }
 
@@ -127,6 +132,16 @@ if (!class_exists('SiteWatch_Connector_Client')) {
                 return array('ok' => false, 'code' => 0, 'error' => 'The report could not be encoded.', 'data' => array());
             }
 
+            // The signature always covers the uncompressed JSON. Large reports (big plugin lists) are gzipped, but only
+            // after SiteWatch said it accepts that (older SiteWatch versions would reject the request).
+            $wire = $body;
+            $gzip = strlen($body) > self::GZIP_OVER && function_exists('gzencode') && !empty(self::state()['accepts_gzip']);
+            if ($gzip) {
+                $packed = gzencode($body, 6);
+                $gzip = is_string($packed);
+                $wire = $gzip ? $packed : $body;
+            }
+
             $timestamp = (string) time();
             $headers = array(
                 'Content-Type'          => 'application/json',
@@ -136,8 +151,11 @@ if (!class_exists('SiteWatch_Connector_Client')) {
                 'X-SiteWatch-Timestamp' => $timestamp,
                 'X-SiteWatch-Signature' => hash_hmac('sha256', $timestamp . '.' . $body, (string) $config['secret']),
             );
+            if ($gzip) {
+                $headers['Content-Encoding'] = 'gzip';
+            }
 
-            list($code, $response, $error) = self::post((string) $config['endpoint'], $body, $headers, (int) $timeout);
+            list($code, $response, $error) = self::post((string) $config['endpoint'], $wire, $headers, (int) $timeout);
             $decoded = is_string($response) ? json_decode($response, true) : null;
             $data = is_array($decoded) && isset($decoded['data']) && is_array($decoded['data']) ? $decoded['data'] : array();
             $ok = $code >= 200 && $code < 300 && is_array($decoded) && !empty($decoded['success']);
@@ -150,6 +168,9 @@ if (!class_exists('SiteWatch_Connector_Client')) {
             // Keep a short record for the settings screen. Skipped during a fatal error to avoid touching the database.
             if ($reason !== 'fatal' && function_exists('update_option')) {
                 $changes = array('last_contact' => time(), 'last_code' => $code, 'last_error' => $ok ? '' : $error);
+                if ($ok) {
+                    $changes['accepts_gzip'] = !empty($data['accepts_gzip']);
+                }
                 if ($ok) {
                     $changes['last_ok'] = time();
                     if (!empty($data['want_snapshot'])) {

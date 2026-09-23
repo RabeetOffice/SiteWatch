@@ -38,8 +38,8 @@
             title: 'Websites', subtitle: '', compact: false, footerLink: null, showClientFilter: true,
         }, options || {});
         // Row and bulk actions follow the user's role (the server enforces the same rules).
-        this.can = { check: SW.can('websites.check'), manage: SW.can('websites.manage'), remove: SW.can('websites.delete') };
-        this.opts.bulk = this.opts.bulk && (this.can.check || this.can.manage || this.can.remove);
+        this.can = { check: SW.can('websites.check'), manage: SW.can('websites.manage'), remove: SW.can('websites.delete'), remote: SW.can('websites.remote') };
+        this.opts.bulk = this.opts.bulk && (this.can.check || this.can.manage || this.can.remove || this.can.remote);
         const saved = SW.storage.get(this.opts.storageKey, {});
         this.state = {
             q: saved.q || '', filter: saved.filter || 'all', sort: saved.sort || 'status',
@@ -103,6 +103,12 @@
                       '<select class="form-select form-select-sm" data-bulk-interval aria-label="Change monitoring interval for selected websites" style="width:auto">' +
                       '<option value="">Change interval…</option><option value="1">1 minute</option><option value="2">2 minutes</option><option value="5">5 minutes</option>' +
                       '<option value="10">10 minutes</option><option value="15">15 minutes</option><option value="30">30 minutes</option></select>'
+                    : '') +
+                (this.can.remote
+                    ? '<select class="form-select form-select-sm" data-bulk-remote aria-label="WordPress remote action for selected websites" style="width:auto">' +
+                      '<option value="">WordPress…</option><option value="clear_cache">Clear caches</option><option value="update_plugins">Install plugin updates</option>' +
+                      '<option value="maintenance:30">Maintenance page on (30 min)</option><option value="maintenance:60">Maintenance page on (1 hour)</option>' +
+                      '<option value="maintenance:240">Maintenance page on (4 hours)</option><option value="maintenance:off">Maintenance page off</option></select>'
                     : '') +
                 (this.can.remove ? '<button type="button" class="btn btn-sm btn-outline-danger ms-auto" data-bulk-action="delete"><i class="bi bi-trash"></i> Delete</button>' : '') +
                 '<button type="button" class="btn btn-sm btn-ghost' + (this.can.remove ? '' : ' ms-auto') + '" data-bulk-action="clear">Clear selection</button></div>';
@@ -215,6 +221,14 @@
         SW.qsa('[data-bulk-action]', el).forEach(function (b) {
             b.addEventListener('click', function () { self.bulk(b.getAttribute('data-bulk-action')); });
         });
+        const bulkRemote = el.querySelector('[data-bulk-remote]');
+        if (bulkRemote) {
+            bulkRemote.addEventListener('change', function () {
+                const value = bulkRemote.value;
+                bulkRemote.value = '';
+                if (value) self.bulkRemote(value, bulkRemote);
+            });
+        }
         const bulkInterval = el.querySelector('[data-bulk-interval]');
         if (bulkInterval) {
             bulkInterval.addEventListener('change', function () {
@@ -856,6 +870,49 @@
             SW.toast(e.message, 'danger');
         } finally {
             buttons.forEach(function (b) { b.disabled = false; });
+        }
+    };
+
+    /**
+     * Remote action on every selected WordPress site (SiteWatch Connector 1.4.0+). Sites that do not allow it are
+     * skipped by the server and named in the result.
+     */
+    WebsiteTable.prototype.bulkRemote = async function (value, control) {
+        const ids = Array.from(this.selected);
+        if (!ids.length) { SW.toast('Select at least one website first.', 'warning'); return; }
+        const n = ids.length + ' website' + (ids.length === 1 ? '' : 's');
+        const parts = value.split(':');
+        const action = parts[0];
+        let args = {};
+        let confirmOpts;
+        if (action === 'maintenance' && parts[1] === 'off') {
+            args = { mode: 'off' };
+            confirmOpts = { title: 'Switch the maintenance page off on ' + n + '?', confirmText: 'Switch off', danger: false };
+        } else if (action === 'maintenance') {
+            args = { mode: 'on', minutes: parseInt(parts[1], 10) };
+            confirmOpts = { title: 'Show a maintenance page on ' + n + '?', confirmText: 'Switch on',
+                message: 'Visitors see "Briefly unavailable for scheduled maintenance" for ' + (args.minutes >= 60 ? args.minutes / 60 + ' hour(s)' : args.minutes + ' minutes') + '; signed-in editors see the site. SiteWatch holds maintenance alerts meanwhile. It ends by itself.' };
+        } else if (action === 'update_plugins') {
+            confirmOpts = { title: 'Install plugin updates on ' + n + '?', confirmText: 'Update plugins', danger: false, icon: 'bi-arrow-up-circle',
+                message: 'Each site installs the plugin updates listed in its last health report (up to 20) from WordPress.org, with WordPress’s own updater. A broken update is rolled back on WordPress 6.6+.' };
+        } else {
+            confirmOpts = { title: 'Clear caches on ' + n + '?', confirmText: 'Clear caches', danger: false, icon: 'bi-trash3',
+                message: 'Page cache plugins and the object cache are cleared. Pages are slower for a short while as the caches refill.' };
+        }
+        if (!(await SW.confirm(Object.assign({ message: 'Only sites whose WordPress administrator allowed this action take part; the others are listed afterwards.' }, confirmOpts)))) return;
+        control.disabled = true;
+        try {
+            const res = await SW.api('api/connector/bulk.php', { method: 'POST', body: { ids: ids, action: action, args: args } });
+            SW.toast(res.message, res.data.queued.length ? 'success' : 'warning');
+            const skipped = res.data.skipped || [];
+            if (skipped.length) {
+                SW.toast('Skipped: ' + skipped.slice(0, 5).map(function (s) { return s.name + ' (' + s.reason + ')'; }).join('; ') +
+                    (skipped.length > 5 ? '; and ' + (skipped.length - 5) + ' more' : '') + '.', 'warning', { delay: 15000 });
+            }
+        } catch (e) {
+            SW.toast(e.message, 'danger');
+        } finally {
+            control.disabled = false;
         }
     };
 

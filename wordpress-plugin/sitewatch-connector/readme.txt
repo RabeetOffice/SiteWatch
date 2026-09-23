@@ -4,7 +4,7 @@ Tags: monitoring, uptime, errors, security, health
 Requires at least: 5.2
 Tested up to: 6.8
 Requires PHP: 7.2
-Stable tag: 1.3.0
+Stable tag: 1.6.0
 License: GPLv2 or later
 
 Connects a WordPress site to SiteWatch monitoring: the real cause of fatal errors, a daily health and security report, and a change log.
@@ -19,6 +19,8 @@ SiteWatch checks your sites from the outside. This plugin adds the inside view:
 * **Change log**: plugins and themes installed, updated, activated or switched, WordPress updates, administrator sign-ins, new administrators, failed sign-in counts and changes to the site address.
 * **Page speed from inside**: page generation time percentiles from a sample of requests, and slow database queries when SAVEQUERIES is on.
 * **PHP warnings** (optional): warnings and deprecation notices counted per file, so you know what will break on the next PHP version.
+* **Auto-fix** (off until you switch it on): a plugin that crashes the site 3 times in 10 minutes is deactivated so visitors get a working site, and SiteWatch alerts you. Plugins you mark as protected are never touched.
+* **Remote actions** (off until you allow them under Settings → SiteWatch): clear caches, deactivate or re-activate a plugin, install plugin updates from WordPress.org, and a maintenance page, requested from SiteWatch.
 * **File watch**: an alert when wp-config.php or .htaccess changes outside WordPress (FTP, hosting panel, malware). Only a fingerprint is kept; the contents never leave the site.
 
 Everything is pushed from this site to your SiteWatch server over HTTPS and signed with a secret unique to this site. The plugin opens no public endpoints.
@@ -31,6 +33,18 @@ Everything is pushed from this site to your SiteWatch server over HTTPS and sign
 4. In WordPress, go to Settings → SiteWatch, paste the key and click **Connect**.
 
 == Changelog ==
+
+= 1.6.0 =
+* Data files in wp-content/sitewatch-connector are now PHP files that print nothing when requested over the web, so they stay private on nginx too (the folder's .htaccess only protects Apache and LiteSpeed). Existing files are converted with the next report.
+* Large reports (long plugin lists) are sent gzip-compressed when your SiteWatch server supports it.
+* Fixed: self-updates and rollbacks failed with "Could not access filesystem" when WordPress's list of available updates was missing.
+
+= 1.5.0 =
+* Auto-fix: deactivates a plugin whose fatal error repeats 3 times within 10 minutes (at most once a day per plugin, never protected plugins), before the next page loads, and alerts SiteWatch. Off by default.
+* Records the version each plugin had before its last update, and a new remote action rolls a WordPress.org plugin back to it.
+
+= 1.4.0 =
+* Remote actions, each switched off until an administrator allows it: clear caches (LiteSpeed Cache, WP Rocket, W3 Total Cache, WP Super Cache, WP Fastest Cache, SiteGround Optimizer, Autoptimize, object cache), deactivate or activate a plugin, install plugin updates offered by WordPress.org, and a maintenance page for 5 minutes to 24 hours. Commands come with the reply to the signed report, are verified with this site's secret and are listed with their results on the settings screen.
 
 = 1.3.0 =
 * Page speed from inside: page generation time, query count and memory of 1 in 20 requests (rate set in SiteWatch), reported daily as percentiles; slow queries when SAVEQUERIES is on.

@@ -95,6 +95,12 @@ final class SiteWatch_Connector_Health
                 'update'      => $update,
                 'auto_update' => in_array($file, $auto, true),
             );
+            // The version before the last update, for rollback (recorded since plugin 1.5.0).
+            $previous = class_exists('SiteWatch_Connector_Autofix') ? SiteWatch_Connector_Autofix::previous($file) : null;
+            if ($previous !== null) {
+                $list[count($list) - 1]['previous_version'] = (string) $previous['previous'];
+                $list[count($list) - 1]['updated_at'] = (int) $previous['updated_at'];
+            }
             if (count($list) >= 300) {
                 break;
             }

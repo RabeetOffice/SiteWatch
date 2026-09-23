@@ -17,6 +17,9 @@ final class SiteWatch_Connector_Admin
         add_action('admin_post_sitewatch_connector_send', array(__CLASS__, 'handle_send'));
         add_action('admin_post_sitewatch_connector_disconnect', array(__CLASS__, 'handle_disconnect'));
         add_action('admin_post_sitewatch_connector_clear_errors', array(__CLASS__, 'handle_clear_errors'));
+        add_action('admin_post_sitewatch_connector_remote', array(__CLASS__, 'handle_remote'));
+        add_action('admin_post_sitewatch_connector_maintenance_off', array(__CLASS__, 'handle_maintenance_off'));
+        add_action('admin_post_sitewatch_connector_autofix', array(__CLASS__, 'handle_autofix'));
         add_action('admin_notices', array(__CLASS__, 'notice'));
         add_filter('plugin_action_links_' . SITEWATCH_CONNECTOR_BASENAME, array(__CLASS__, 'action_links'));
     }
@@ -37,9 +40,15 @@ final class SiteWatch_Connector_Admin
         return $links;
     }
 
-    /** Remind administrators to finish the setup. */
+    /** Remind administrators to finish the setup, and show when the SiteWatch maintenance page is on. */
     public static function notice()
     {
+        $until = SiteWatch_Connector_Remote::maintenance_until();
+        if ($until !== null && current_user_can('manage_options')) {
+            echo '<div class="notice notice-warning"><p><strong>Maintenance page on</strong> (switched on from SiteWatch): visitors see "Briefly unavailable for scheduled maintenance" until '
+                . esc_html(wp_date(get_option('time_format'), $until)) . '. Signed-in editors see the site normally. '
+                . '<a href="' . esc_url(self::url()) . '#sitewatch-remote">End it now</a></p></div>';
+        }
         if (!current_user_can('manage_options') || SiteWatch_Connector_Client::config() !== null) {
             return;
         }
@@ -121,6 +130,35 @@ final class SiteWatch_Connector_Admin
         self::back('success', 'The local error list was cleared.');
     }
 
+    public static function handle_remote()
+    {
+        self::check_request('sitewatch_connector_remote');
+        $actions = isset($_POST['remote_actions']) && is_array($_POST['remote_actions']) ? array_map('sanitize_key', wp_unslash($_POST['remote_actions'])) : array();
+        $enabled = !empty($_POST['remote_enabled']);
+        SiteWatch_Connector_Remote::save_settings($enabled, $actions);
+        // Tell SiteWatch straight away which actions it may offer.
+        SiteWatch_Connector_Client::send('heartbeat', array(), 10);
+        self::back('success', $enabled && $actions !== array() ? 'Remote actions saved. SiteWatch can now request: ' . implode(', ', array_intersect_key(SiteWatch_Connector_Remote::ACTIONS, array_flip(SiteWatch_Connector_Remote::settings()['actions']))) . '.' : 'Remote actions are off. SiteWatch cannot change anything on this site.');
+    }
+
+    public static function handle_autofix()
+    {
+        self::check_request('sitewatch_connector_autofix');
+        $protected = isset($_POST['autofix_protected']) && is_array($_POST['autofix_protected']) ? array_map('sanitize_text_field', wp_unslash($_POST['autofix_protected'])) : array();
+        $enabled = !empty($_POST['autofix_enabled']);
+        SiteWatch_Connector_Autofix::save_settings($enabled, $protected);
+        SiteWatch_Connector_Client::send('heartbeat', array(), 10);
+        self::back('success', $enabled ? 'Auto-fix is on. A plugin that crashes the site 3 times in 10 minutes is deactivated and SiteWatch alerts you.' : 'Auto-fix is off.');
+    }
+
+    public static function handle_maintenance_off()
+    {
+        self::check_request('sitewatch_connector_maintenance_off');
+        delete_option(SiteWatch_Connector_Remote::MAINTENANCE_OPTION);
+        SiteWatch_Connector_Client::send('heartbeat', array(), 10);
+        self::back('success', 'The maintenance page is off.');
+    }
+
     private static function time_ago($timestamp)
     {
         return $timestamp ? sprintf('%s ago', human_time_diff((int) $timestamp, time())) : 'never';
@@ -199,6 +237,72 @@ final class SiteWatch_Connector_Admin
                 </div>
             <?php endif; ?>
 
+            <?php if ($config !== null): $remote = SiteWatch_Connector_Remote::settings(); $recent = SiteWatch_Connector_Remote::recent(); $until = SiteWatch_Connector_Remote::maintenance_until(); ?>
+                <h2 id="sitewatch-remote" style="margin-top:32px">Remote actions</h2>
+                <p style="max-width:720px">Let SiteWatch users ask this site to do the things you tick below. Nothing else can be requested:
+                    no code, file or user changes. Requests arrive with the next report (every 5 minutes), are checked against this site's secret, and each one is listed below with its result.</p>
+                <?php if ($until !== null): ?>
+                    <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" style="margin-bottom:12px">
+                        <input type="hidden" name="action" value="sitewatch_connector_maintenance_off">
+                        <?php wp_nonce_field('sitewatch_connector_maintenance_off'); ?>
+                        <strong>The maintenance page is on until <?php echo esc_html(wp_date(get_option('date_format') . ' ' . get_option('time_format'), $until)); ?>.</strong>
+                        <?php submit_button('End maintenance now', 'secondary small', 'submit', false); ?>
+                    </form>
+                <?php endif; ?>
+                <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" class="card" style="max-width:720px">
+                    <input type="hidden" name="action" value="sitewatch_connector_remote">
+                    <?php wp_nonce_field('sitewatch_connector_remote'); ?>
+                    <p><label><input type="checkbox" name="remote_enabled" value="1"<?php checked($remote['enabled']); ?>> <strong>Allow remote actions from SiteWatch</strong></label></p>
+                    <fieldset style="margin-left:24px">
+                        <?php foreach (SiteWatch_Connector_Remote::ACTIONS as $key => $label): ?>
+                            <p style="margin:4px 0"><label><input type="checkbox" name="remote_actions[]" value="<?php echo esc_attr($key); ?>"<?php checked(in_array($key, $remote['actions'], true)); ?>> <?php echo esc_html($label); ?></label></p>
+                        <?php endforeach; ?>
+                    </fieldset>
+                    <p><?php submit_button('Save remote actions', 'secondary', 'submit', false); ?></p>
+                </form>
+                <?php if ($recent !== array()): ?>
+                    <table class="widefat striped" style="max-width:1000px;margin-top:12px">
+                        <thead><tr><th>When</th><th>Action</th><th>Result</th></tr></thead>
+                        <tbody>
+                        <?php foreach ($recent as $id => $r): ?>
+                            <tr>
+                                <td><?php echo esc_html(self::time_ago(isset($r['at']) ? $r['at'] : 0)); ?></td>
+                                <td><?php echo esc_html(isset($r['action']) ? $r['action'] : ''); ?> <span style="color:#646970">#<?php echo (int) $id; ?></span></td>
+                                <td><span style="color:<?php echo !empty($r['ok']) ? '#008a20' : '#b32d2e'; ?>">&#9679;</span> <?php echo esc_html(isset($r['message']) ? $r['message'] : ''); ?></td>
+                            </tr>
+                        <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                <?php endif; ?>
+            <?php endif; ?>
+
+            <?php if ($config !== null): $autofix = SiteWatch_Connector_Autofix::settings(); $fixed = SiteWatch_Connector_Autofix::recent();
+                if (!function_exists('get_plugins')) { require_once ABSPATH . 'wp-admin/includes/plugin.php'; }
+                $all_plugins = get_plugins(); ?>
+                <h2 id="sitewatch-autofix" style="margin-top:32px">Auto-fix</h2>
+                <p style="max-width:720px">When the same fatal error from one plugin happens 3 times within 10 minutes, deactivate that plugin so visitors get a working site,
+                    and alert SiteWatch. WordPress's own recovery mode only helps the administrator who opens its link. A plugin is deactivated automatically at most
+                    once a day: if you activate it again, it stays on. Its settings and data are kept; activate it again from the Plugins screen or from SiteWatch.</p>
+                <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" class="card" style="max-width:720px">
+                    <input type="hidden" name="action" value="sitewatch_connector_autofix">
+                    <?php wp_nonce_field('sitewatch_connector_autofix'); ?>
+                    <p><label><input type="checkbox" name="autofix_enabled" value="1"<?php checked($autofix['enabled']); ?>> <strong>Deactivate a plugin that keeps crashing the site</strong></label></p>
+                    <p style="margin-bottom:4px">Never deactivate automatically:</p>
+                    <fieldset style="margin-left:24px;max-height:220px;overflow:auto">
+                        <?php foreach ($all_plugins as $file => $p): if ($file === SITEWATCH_CONNECTOR_BASENAME || !is_plugin_active($file)) { continue; } ?>
+                            <p style="margin:2px 0"><label><input type="checkbox" name="autofix_protected[]" value="<?php echo esc_attr($file); ?>"<?php checked(in_array($file, $autofix['protected'], true)); ?>> <?php echo esc_html($p['Name']); ?></label></p>
+                        <?php endforeach; ?>
+                    </fieldset>
+                    <p><?php submit_button('Save auto-fix', 'secondary', 'submit', false); ?></p>
+                </form>
+                <?php if ($fixed !== array()): ?>
+                    <p><strong>Deactivated automatically in the last 7 days:</strong>
+                        <?php echo esc_html(implode(', ', array_map(function ($file) use ($fixed, $all_plugins) {
+                            return (isset($all_plugins[$file]['Name']) ? $all_plugins[$file]['Name'] : $file) . ' (' . human_time_diff((int) $fixed[$file], time()) . ' ago)';
+                        }, array_keys($fixed)))); ?></p>
+                <?php endif; ?>
+            <?php endif; ?>
+
             <h2 style="margin-top:32px">Captured errors</h2>
             <p>Fatal errors are recorded here and sent to SiteWatch. Visitors still see only the standard WordPress error page.</p>
             <?php if ($errors === array()): ?>
@@ -233,6 +337,8 @@ final class SiteWatch_Connector_Admin
                 <li>Whether wp-config.php or .htaccess changed: size, time and a short fingerprint, never the contents.</li>
                 <li>Page generation time, query count and memory of a sample of requests (page paths without query strings), and database queries slower than 50 ms with all values replaced by "?" (only when SAVEQUERIES is on).</li>
                 <li>If switched on in SiteWatch: PHP warnings, notices and deprecations with file, line and a count.</li>
+                <li>Which remote actions you allow, whether the maintenance page is on, and the results of remote actions.</li>
+                <li>Whether auto-fix is on, which plugins it must not touch, plugins it deactivated, and the version each plugin had before its last update.</li>
             </ul>
             <p>Never sent: passwords, content, orders, customer or visitor data.</p>
         </div>

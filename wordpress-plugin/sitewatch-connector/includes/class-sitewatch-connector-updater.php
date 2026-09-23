@@ -78,7 +78,12 @@ final class SiteWatch_Connector_Updater
     {
         $offer = self::offer();
         if (!is_object($transient)) {
-            return $transient;
+            if ($offer === null) {
+                return $transient;
+            }
+            // WordPress's update list can be missing (expired, or just deleted by another update). The upgrader reads
+            // the package from it, so without an entry it reports "Could not access filesystem" and nothing installs.
+            $transient = (object) array('last_checked' => 0, 'checked' => array(), 'response' => array()); // 0: WordPress still runs its own check
         }
         if ($offer === null) {
             if (isset($transient->response[SITEWATCH_CONNECTOR_BASENAME])) {

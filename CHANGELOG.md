@@ -7,6 +7,52 @@ The in-app copy of these notes (System → Updates) comes from `app/Core/Release
 both files. `tests/ReleaseTest.php` fails if they disagree. A release that changes the database also gets a
 `Migrator` step. Its schema number is listed below, so the code and database versions can be compared.
 
+## [1.12.0] - 2026-09-23
+
+Private plugin data on every server, compressed reports.
+
+### Improved
+- SiteWatch Connector 1.6.0 keeps its data files (captured errors, warnings, page timings, auto-fix flags) private on every web server: they are now PHP files that print nothing when requested, where the folder's .htaccess only protected Apache and LiteSpeed. Existing files are converted with the next report.
+- Large reports from sites with long plugin lists are sent gzip-compressed; SiteWatch refuses anything that expands beyond the 2 MB report limit.
+- When an outage is confirmed and WordPress itself answered SiteWatch's check with a 5xx, the incident says so: the error comes from the site (PHP, database or a plugin), not from the network or a firewall.
+
+### Fixed
+- Plugin self-updates (and rollbacks) failed with "Could not access filesystem" when the WordPress list of available updates was missing, for example right after another update; the update then waited 6 hours to retry. Fixed in plugin 1.6.0 (sites on older versions still retry by themselves).
+
+### Upgrading
+- No database update. Connected sites install plugin 1.6.0 by themselves.
+
+## [1.11.0] - 2026-09-23 · database schema 11
+
+Auto-fix for WordPress plugins.
+
+### Added
+- Auto-fix in SiteWatch Connector 1.5.0: when the same fatal error from one plugin happens 3 times within 10 minutes, the plugin is deactivated before the next page loads, so visitors get a working site, and SiteWatch alerts you ("WordPress fatal error" rule). Off until a WordPress administrator switches it on; protected plugins are never touched, and a plugin is switched off automatically at most once a day.
+- Roll back a plugin update: the plugin records the version each plugin had before its last update, and the new "Roll back plugin" remote action installs exactly that version from WordPress.org.
+- Fatal errors from a plugin on the Errors tab offer "Deactivate" and, after a recent update, "Roll back to x"; an automatically deactivated plugin shows "Activate again".
+
+### Upgrading
+- Apply the database update under System → Updates. Sites install plugin 1.5.0 by themselves; auto-fix and the rollback action stay off until a WordPress administrator switches them on.
+
+### Database (schema 11)
+- New `connector_sites` column `autofix`.
+
+## [1.10.0] - 2026-09-23 · database schema 10
+
+Remote actions for WordPress sites.
+
+### Added
+- Remote actions for WordPress sites with SiteWatch Connector 1.4.0: clear caches, deactivate or activate a plugin, install plugin updates from WordPress.org, and a maintenance page for 5 minutes to 24 hours, from the new "Remote actions" tab on the website page. Each action must first be allowed by the site's WordPress administrator under Settings → SiteWatch, and requests are signed with the site's secret.
+- Bulk remote actions: select websites in the website list and choose WordPress… → Clear caches, Install plugin updates (each site installs the updates in its own last health report) or Maintenance page on/off. Sites that are not connected, run an older plugin or do not allow the action are skipped and named.
+- New permission "Run remote actions" (Administrators have it; give it to other roles under Team → Roles). Every request and its result is logged.
+- While a maintenance page switched on from SiteWatch is showing, maintenance and 503 alerts for that site are held.
+
+### Upgrading
+- Apply the database update under System → Updates. Sites install plugin 1.4.0 by themselves; remote actions stay off until a WordPress administrator allows them.
+
+### Database (schema 10)
+- New table `connector_commands`; new `connector_sites` columns `remote_actions` and `maintenance_until`.
+
 ## [1.9.0] - 2026-09-23 · database schema 9
 
 Page speed and PHP warnings from inside WordPress.

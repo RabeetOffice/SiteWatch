@@ -20,6 +20,7 @@ final class AlertMessage
     public const EVENT_WP_ERROR = 'wp_error';
     public const EVENT_WP_SECURITY = 'wp_security';
     public const EVENT_WP_VULNERABILITY = 'wp_vulnerability';
+    public const EVENT_WP_AUTOFIX = 'wp_autofix';
 
     /**
      * @param string               $telegram Telegram HTML body.
