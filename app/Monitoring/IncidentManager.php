@@ -27,6 +27,12 @@ use Throwable;
  */
 final class IncidentManager
 {
+    /** Seconds after confirmation during which an unsent down alert is retried. */
+    private const ALERT_RETRY_WINDOW = 3600;
+
+    /** Delay before re-checking a website that just failed but is not confirmed down yet. */
+    private const SUSPECTED_RECHECK_SECONDS = 60;
+
     public function __construct(
         private readonly WebsiteRepository $websites,
         private readonly CheckRepository $checks,
@@ -188,6 +194,12 @@ final class IncidentManager
         ];
         if ($nextCheckAt !== null) {
             $update['next_check_at'] = $nextCheckAt;
+            if ($newStatus === Status::SUSPECTED_DOWN) {
+                // Confirm (or clear) a suspected outage on the next cron run instead of waiting a full
+                // interval, so a real outage is alerted within a few minutes.
+                $retryAt = utc_now()->modify('+' . self::SUSPECTED_RECHECK_SECONDS . ' seconds')->format('Y-m-d H:i:s');
+                $update['next_check_at'] = min($nextCheckAt, $retryAt);
+            }
         }
         if (!$result->isFailure) {
             $update['last_online_at'] = $now;
@@ -224,7 +236,12 @@ final class IncidentManager
 
         // 7. Notifications (never allowed to break monitoring) --------------------------
         try {
-            if ($confirmNow && $open !== null && empty($open['notified_at'])) {
+            // A down alert that could not be sent when the incident was confirmed (channel error, lost
+            // database connection) is retried on the following failed checks for up to an hour.
+            $retryAlert = !$confirmNow && $result->isFailure && $open !== null && empty($open['notified_at'])
+                && strtotime((string) ($open['confirmed_at'] ?? $open['started_at'] ?? '') . ' UTC') >= time() - self::ALERT_RETRY_WINDOW
+                && $this->notifications->hasEnabledChannel();
+            if (($confirmNow || $retryAlert) && $open !== null && empty($open['notified_at'])) {
                 if ($this->notifications->incidentOpened($website, $open, $result)) {
                     $this->incidents->update((int) $open['id'], ['notified_at' => utc_now()->format('Y-m-d H:i:s')]);
                     $events['notified'][] = 'down';

@@ -60,11 +60,63 @@ final class Database
         // All timestamps are stored and compared in UTC.
         $pdo->exec("SET time_zone = '+00:00'");
         $pdo->exec("SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci");
+        // Shared hosts (Hostinger) close idle connections after ~30 s, which kills a request that waits
+        // on slow website probes. Ask for a longer idle timeout; query() still reconnects if it is ignored.
+        try {
+            $pdo->exec('SET SESSION wait_timeout = 600');
+        } catch (PDOException) {
+            // not permitted on this server
+        }
         return $pdo;
+    }
+
+    /**
+     * Drop the current connection; the next query opens a fresh one.
+     */
+    public function disconnect(): void
+    {
+        $this->pdo = null;
+    }
+
+    /**
+     * True for "MySQL server has gone away" (2006) and "Lost connection to MySQL server" (2013).
+     */
+    public static function isConnectionLost(\Throwable $e): bool
+    {
+        if ($e instanceof PDOException && is_array($e->errorInfo ?? null) && in_array((int) ($e->errorInfo[1] ?? 0), [2006, 2013], true)) {
+            return true;
+        }
+        $message = $e->getMessage();
+        return str_contains($message, 'server has gone away') || str_contains($message, 'Lost connection to MySQL');
     }
 
     /** @param array<int|string, mixed> $params */
     public function query(string $sql, array $params = []): PDOStatement
+    {
+        try {
+            return $this->run($sql, $params);
+        } catch (PDOException $e) {
+            // The server closed an idle connection: reconnect once, unless a transaction was open
+            // (its earlier statements are lost with the connection, so retrying would be unsafe).
+            if (!self::isConnectionLost($e) || ($this->pdo !== null && $this->safeInTransaction())) {
+                throw $e;
+            }
+            $this->pdo = null;
+            return $this->run($sql, $params);
+        }
+    }
+
+    private function safeInTransaction(): bool
+    {
+        try {
+            return $this->pdo !== null && $this->pdo->inTransaction();
+        } catch (\Throwable) {
+            return false;
+        }
+    }
+
+    /** @param array<int|string, mixed> $params */
+    private function run(string $sql, array $params): PDOStatement
     {
         $stmt = $this->pdo()->prepare($sql);
         foreach ($params as $key => $value) {
@@ -167,7 +219,16 @@ final class Database
         $pdo = $this->pdo();
         $nested = $pdo->inTransaction();
         if (!$nested) {
-            $pdo->beginTransaction();
+            try {
+                $pdo->beginTransaction();
+            } catch (PDOException $e) {
+                if (!self::isConnectionLost($e)) {
+                    throw $e;
+                }
+                $this->pdo = null;
+                $pdo = $this->pdo();
+                $pdo->beginTransaction();
+            }
         }
         try {
             $result = $callback($this);

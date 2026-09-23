@@ -493,7 +493,10 @@
             this.busy.add(id);
             this.updateRow(row);
             try {
-                const res = await SW.api('api/websites/check.php', { method: 'POST', body: { id: id } });
+                // Each check holds a server process for up to the request timeout, so only a couple run at once.
+                const res = await this.throttled(function () {
+                    return SW.api('api/websites/check.php', { method: 'POST', body: { id: id } });
+                });
                 this.busy.delete(id);
                 this.updateRow(res.data.website);
                 const r = res.data.result;
@@ -537,6 +540,77 @@
         }
     };
 
+    // Maximum simultaneous single-website checks started from this table.
+    const CHECK_CONCURRENCY = 2;
+    // Websites per bulk "Check now" request (must not exceed the server's limit in api/websites/bulk.php).
+    const BULK_CHECK_CHUNK = 5;
+
+    WebsiteTable.prototype.throttled = function (task) {
+        const self = this;
+        this.queue = this.queue || [];
+        this.running = this.running || 0;
+        return new Promise(function (resolve, reject) {
+            self.queue.push({ task: task, resolve: resolve, reject: reject });
+            self.drainQueue();
+        });
+    };
+
+    WebsiteTable.prototype.drainQueue = function () {
+        const self = this;
+        while (this.running < CHECK_CONCURRENCY && this.queue.length) {
+            const job = this.queue.shift();
+            this.running++;
+            Promise.resolve().then(job.task).then(job.resolve, job.reject).finally(function () {
+                self.running--;
+                self.drainQueue();
+            });
+        }
+    };
+
+    WebsiteTable.prototype.bulkCheck = async function (ids, buttons) {
+        const self = this;
+        const button = this.el.querySelector('[data-bulk-action="check"]');
+        const label = button ? button.innerHTML : '';
+        const totals = { checked: 0, failing: 0, opened: 0, resolved: 0, errors: 0 };
+        ids.forEach(function (id) { self.busy.add(id); });
+        this.rows.forEach(function (r) { if (self.busy.has(r.id)) self.updateRow(r); });
+        try {
+            for (let i = 0; i < ids.length; i += BULK_CHECK_CHUNK) {
+                const chunk = ids.slice(i, i + BULK_CHECK_CHUNK);
+                if (button) button.innerHTML = '<span class="spinner-border spinner-border-sm" aria-hidden="true"></span> Checking ' + Math.min(i + chunk.length, ids.length) + ' / ' + ids.length;
+                try {
+                    const res = await SW.api('api/websites/bulk.php', { method: 'POST', body: { ids: chunk, action: 'check' } });
+                    const d = res.data || {};
+                    totals.checked += d.checked || 0;
+                    totals.failing += d.failing || 0;
+                    totals.opened += d.incidents_opened || 0;
+                    totals.resolved += d.incidents_resolved || 0;
+                    (d.websites || []).forEach(function (w) { self.busy.delete(w.id); self.updateRow(w); });
+                } catch (e) {
+                    totals.errors += chunk.length;
+                    if (e.status === 401 || e.status === 403) throw e;
+                } finally {
+                    chunk.forEach(function (id) {
+                        if (self.busy.delete(id)) {
+                            const r = self.rows.find(function (x) { return x.id === id; });
+                            if (r) self.updateRow(r);
+                        }
+                    });
+                }
+            }
+            const msg = 'Checked ' + totals.checked + ' website' + (totals.checked === 1 ? '' : 's') + ': ' + totals.failing + ' failing' +
+                (totals.opened ? ', ' + totals.opened + ' incident(s) opened' : '') + (totals.resolved ? ', ' + totals.resolved + ' recovered' : '') + '.' +
+                (totals.errors ? ' ' + totals.errors + ' could not be checked, try again shortly.' : '');
+            SW.toast(msg, totals.errors ? 'warning' : 'success');
+        } finally {
+            ids.forEach(function (id) { self.busy.delete(id); });
+            if (button) button.innerHTML = label;
+            buttons.forEach(function (b) { b.disabled = false; });
+            await this.load();
+            document.dispatchEvent(new CustomEvent('sw:website-changed', { detail: { bulk: true } }));
+        }
+    };
+
     WebsiteTable.prototype.bulk = async function (action, interval) {
         const ids = Array.from(this.selected);
         if (action === 'clear') { this.selected.clear(); this.syncSelection(); return; }
@@ -551,6 +625,14 @@
         }
         const buttons = SW.qsa('[data-bulk-action]', this.el);
         buttons.forEach(function (b) { b.disabled = true; });
+        if (action === 'check') {
+            try {
+                await this.bulkCheck(ids, buttons);
+            } catch (e) {
+                SW.toast(e.message, 'danger');
+            }
+            return;
+        }
         try {
             const res = await SW.api('api/websites/bulk.php', { method: 'POST', body: { ids: ids, action: action, interval: interval || null } });
             SW.toast(res.message, 'success');

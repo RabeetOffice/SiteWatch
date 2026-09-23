@@ -14,6 +14,8 @@ use App\Services\ActivityService;
 use App\Services\ServiceFactory;
 
 Api::boot(['POST'], permission: 'notifications.manage');
+// Outbound requests can take many seconds: unlock the session so the user's other requests are not queued behind this one.
+App::session()->release();
 
 set_time_limit(60);
 $settings = App::settings();

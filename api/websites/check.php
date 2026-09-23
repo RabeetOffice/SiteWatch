@@ -13,6 +13,8 @@ use App\Services\ActivityService;
 use App\Services\ServiceFactory;
 
 Api::boot(['POST'], permission: 'websites.check');
+// Outbound requests can take many seconds: unlock the session so the user's other requests are not queued behind this one.
+App::session()->release();
 
 $id = Request::int('id');
 $websites = ServiceFactory::websites();

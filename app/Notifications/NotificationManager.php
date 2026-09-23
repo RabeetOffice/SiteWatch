@@ -65,6 +65,19 @@ final class NotificationManager
         return $this->notifiers;
     }
 
+    /**
+     * True when at least one channel (email, Telegram, WhatsApp, Discord) is switched on.
+     */
+    public function hasEnabledChannel(): bool
+    {
+        foreach ($this->notifiers() as $notifier) {
+            if ($notifier->isEnabled()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public function notifier(string $name): ?NotifierInterface
     {
         foreach ($this->notifiers() as $notifier) {

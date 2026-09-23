@@ -14,11 +14,14 @@ define('SW_API', true);
 require dirname(__DIR__, 2) . '/bootstrap.php';
 
 use App\Core\Api;
+use App\Core\App;
 use App\Core\Request;
 use App\Core\Response;
 use App\Services\ServiceFactory;
 
 Api::boot(['GET']);
+// Outbound requests can take many seconds: unlock the session so the user's other requests are not queued behind this one.
+App::session()->release();
 
 $id = Request::int('id');
 $websiteId = Request::int('website_id');

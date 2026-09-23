@@ -26,11 +26,17 @@ if (count($ids) > 500) {
 if (!in_array($action, ['check', 'pause', 'resume', 'interval', 'delete'], true)) {
     Response::error('Invalid bulk action.', ['action' => 'Unknown action.'], 422);
 }
+// Live checks keep this request open until every website answers; the page sends them in small batches.
+if ($action === 'check' && count($ids) > 10) {
+    Response::error('Check at most 10 websites per request.', ['ids' => 'Too many websites for one check request.'], 422);
+}
 Api::authorize(match ($action) {
     'check'  => 'websites.check',
     'delete' => 'websites.delete',
     default  => 'websites.manage',
 });
+// Outbound requests can take many seconds: unlock the session so the user's other requests are not queued behind this one.
+App::session()->release();
 
 $websites = ServiceFactory::websites();
 $service = ServiceFactory::websiteService();
@@ -81,6 +87,20 @@ switch ($action) {
         set_time_limit(max(120, App::settings()->getInt('request_timeout', 30) * 3));
         $summary = ServiceFactory::monitor()->checkMany($rows, 'manual');
         $checked = $summary['checked'];
+        $uptime = ServiceFactory::uptime();
+        $incidents = ServiceFactory::incidents();
+        $extra = [
+            'checked'            => $checked,
+            'failing'            => $summary['failing'],
+            'incidents_opened'   => $summary['incidents_opened'],
+            'incidents_resolved' => $summary['incidents_resolved'],
+            'websites'           => [],
+        ];
+        foreach ($websites->findMany(array_map(static fn (array $r): int => (int) $r['id'], $rows)) as $row) {
+            $row['uptime_30d'] = $uptime->forWebsite((int) $row['id'])['uptime_30d'];
+            $row['open_incidents'] = $incidents->openFor((int) $row['id']) !== null ? 1 : 0;
+            $extra['websites'][] = $service->present($row);
+        }
         $message = "Checked {$checked} website" . ($checked === 1 ? '' : 's') . ": {$summary['failing']} failing"
             . ($summary['incidents_opened'] ? ", {$summary['incidents_opened']} incident(s) opened" : '')
             . ($summary['incidents_resolved'] ? ", {$summary['incidents_resolved']} recovered" : '') . '.';
@@ -89,4 +109,4 @@ switch ($action) {
 
 ActivityService::log('bulk.action', sprintf('Bulk action "%s" on %d website(s)', $action, $count), null, ['action' => $action, 'ids' => $ids]);
 
-Response::success($message, ['count' => $count, 'action' => $action]);
+Response::success($message, array_merge(['count' => $count, 'action' => $action], $extra ?? []));
