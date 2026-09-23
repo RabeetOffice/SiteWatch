@@ -54,6 +54,12 @@ if (!function_exists('asset')) {
     function asset(string $path): string
     {
         $version = (string) App::config()->get('app.version', '1');
+        // Add the file's modification time so browsers fetch a changed file after every deploy,
+        // even when the app version stays the same.
+        $mtime = @filemtime(dirname(__DIR__, 2) . '/assets/' . ltrim($path, '/'));
+        if ($mtime !== false) {
+            $version .= '.' . $mtime;
+        }
         return base_url('assets/' . ltrim($path, '/')) . '?v=' . rawurlencode($version);
     }
 }
