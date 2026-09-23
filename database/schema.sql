@@ -359,3 +359,51 @@ CREATE TABLE IF NOT EXISTS `domain_info` (
   KEY `idx_domain_info_checked` (`checked_at`),
   CONSTRAINT `fk_domain_info_website` FOREIGN KEY (`website_id`) REFERENCES `websites` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------------------
+-- SiteWatch Connector (WordPress plugin): one row per website with a connection key
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `connector_sites` (
+  `website_id`      INT UNSIGNED NOT NULL,
+  `secret`          TEXT         NOT NULL COMMENT 'HMAC secret, encrypted with APP_KEY',
+  `key_created_at`  DATETIME     NOT NULL,
+  `connected_at`    DATETIME     NULL COMMENT 'first signed request from the plugin',
+  `last_seen_at`    DATETIME     NULL,
+  `last_reason`     VARCHAR(20)  NULL COMMENT 'hello | heartbeat | fatal | event | deactivated | disconnect',
+  `last_ip`         VARCHAR(45)  NULL,
+  `site_url`        VARCHAR(255) NULL COMMENT 'home URL reported by WordPress',
+  `plugin_version`  VARCHAR(20)  NULL,
+  `wp_version`      VARCHAR(20)  NULL,
+  `php_version`     VARCHAR(20)  NULL,
+  `updates_pending` INT UNSIGNED NULL,
+  `security_issues` INT UNSIGNED NULL COMMENT 'security checks in warning or critical state',
+  `snapshot`        MEDIUMTEXT   NULL COMMENT 'latest health snapshot (JSON)',
+  `snapshot_at`     DATETIME     NULL,
+  `want_snapshot`   TINYINT(1)   NOT NULL DEFAULT 0,
+  PRIMARY KEY (`website_id`),
+  KEY `idx_connector_seen` (`last_seen_at`),
+  CONSTRAINT `fk_connector_website` FOREIGN KEY (`website_id`) REFERENCES `websites` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Errors and activity reported by the plugin. Fatal errors are merged by fingerprint (occurrences counts repeats).
+CREATE TABLE IF NOT EXISTS `connector_events` (
+  `id`               BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `website_id`       INT UNSIGNED NOT NULL,
+  `event_uid`        VARCHAR(64)  NOT NULL COMMENT 'sent by the plugin; makes re-delivery harmless',
+  `type`             VARCHAR(40)  NOT NULL,
+  `severity`         VARCHAR(10)  NOT NULL COMMENT 'info | warning | critical',
+  `title`            VARCHAR(255) NOT NULL,
+  `data`             TEXT         NULL COMMENT 'JSON',
+  `fingerprint`      CHAR(40)     NULL COMMENT 'fatal errors only',
+  `occurrences`      INT UNSIGNED NOT NULL DEFAULT 1,
+  `occurred_at`      DATETIME     NOT NULL,
+  `last_occurred_at` DATETIME     NOT NULL,
+  `received_at`      DATETIME     NOT NULL,
+  `notified_at`      DATETIME     NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_connector_event_uid` (`website_id`, `event_uid`),
+  KEY `idx_connector_events_site` (`website_id`, `last_occurred_at`),
+  KEY `idx_connector_events_fp` (`website_id`, `fingerprint`),
+  KEY `idx_connector_events_received` (`received_at`),
+  CONSTRAINT `fk_connector_events_website` FOREIGN KEY (`website_id`) REFERENCES `websites` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

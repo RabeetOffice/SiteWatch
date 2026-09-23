@@ -9,12 +9,14 @@ use App\Core\Lock;
 use App\Notifications\NotificationManager;
 use App\Repositories\ActivityRepository;
 use App\Repositories\CheckRepository;
+use App\Repositories\ConnectorRepository;
 use App\Repositories\DailyStatsRepository;
 use App\Repositories\HeartbeatRepository;
 use App\Repositories\IncidentRepository;
 use App\Repositories\NotificationRepository;
 use App\Repositories\SettingsRepository;
 use App\Repositories\WebsiteRepository;
+use App\Services\ConnectorService;
 use App\Services\MaintenanceService;
 use App\Services\PerformanceService;
 use Composer\CaBundle\CaBundle;
@@ -78,6 +80,12 @@ final class MonitorManager
         $activity = new ActivityRepository($db);
         $heartbeats = new HeartbeatRepository($db);
         $notifications = new NotificationManager($settings, new NotificationRepository($db), App::logger('notifications'));
+        // Down alerts name the cause when the WordPress plugin reported a fatal error shortly before.
+        $connector = new ConnectorRepository($db);
+        $notifications->setCauseResolver(static function (int $websiteId) use ($connector): ?string {
+            $row = $connector->latestFatal($websiteId, utc_now()->modify('-30 minutes')->format('Y-m-d H:i:s'));
+            return $row !== null ? ConnectorService::describeError($row) : null;
+        });
         $incidents = new IncidentManager($websites, $checks, $incidentRepo, $daily, $activity, $notifications, $settings, $log);
         $scheduler = new MonitoringScheduler($websites, $heartbeats, $settings);
         $ssl = new SSLChecker($guard, $caFile, min(15, $settings->getInt('connect_timeout', 10) + 5));

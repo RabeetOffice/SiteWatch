@@ -55,6 +55,7 @@ Manage Administrator, Manager, Viewer, and custom roles with server-side permiss
 | **Website portfolio** | Add and edit websites, CSV import/export, client labels, search, filters, sorting, pause/resume, and manual checks. |
 | **Availability** | Scheduled HTTP/HTTPS checks; DNS, connection, timeout, redirect, HTTP, and SSL failure classification. |
 | **WordPress diagnostics** | Detect critical errors, database connection failures, maintenance pages, and exposed PHP fatal errors. |
+| **WordPress plugin** | Optional SiteWatch Connector: fatal errors with file, line and responsible plugin (no debug mode needed), daily health and security report, and a WordPress change log. |
 | **Incident tracking** | Configurable consecutive-failure confirmation, recovery thresholds, incident history, and supporting diagnostics. |
 | **Alerts** | Email through SMTP, Telegram, WhatsApp (free through GREEN-API or CallMeBot, or Meta’s Cloud API) and Discord webhooks; global and per-website alert controls, recovery notifications, and delivery logs. |
 | **Performance & Core Web Vitals** | TTFB measured on every check; LCP, CLS, INP and Lighthouse scores for mobile and desktop through Google PageSpeed Insights, with historical trends. |
@@ -151,6 +152,26 @@ Observed uptime = up checks / total recorded checks × 100
 
 Checks in a confirmed failure streak count as down, including the initial failures once confirmation occurs. Paused periods and missing checks contribute no observations. **Missing data is neither uptime nor downtime.** Incident duration is reported separately from check-based uptime; these figures should not be treated as proof of continuous coverage.
 
+## WordPress plugin (SiteWatch Connector)
+
+External checks show *that* a site failed. The optional SiteWatch Connector plugin shows *why*: it runs inside
+WordPress and pushes signed reports to SiteWatch.
+
+- **Fatal errors with their cause**: message, file, line and the plugin or theme responsible, captured without
+  `WP_DEBUG`. A must-use loader catches crashes that happen while other plugins load. Down alerts include the cause.
+- **Daily health and security report**: versions, pending updates, plugins and themes, database size, scheduled
+  tasks, modified core files, PHP files in uploads and risky settings.
+- **Change log**: plugin/theme/core changes, administrator sign-ins, failed sign-in counts. New administrators and
+  site address changes are alerted immediately.
+
+Set up per website: open the website → **WordPress** → **Download plugin**, install and activate it in WordPress,
+click **Create connection key** in SiteWatch and paste the key under **Settings → SiteWatch** in WordPress.
+
+Reports go from WordPress to `api/connector/ingest.php` every 5 minutes (WP-Cron), signed with HMAC-SHA256 using a
+per-site secret stored encrypted with `APP_KEY`; SiteWatch never connects to the WordPress site. The plugin needs
+PHP 7.2+ and WordPress 5.2+. Its version is set in `wordpress-plugin/sitewatch-connector/sitewatch-connector.php`;
+SiteWatch shows an update notice when a site runs an older copy.
+
 ## Configuration and deployment
 
 The installer creates `.env`; [`.env.example`](.env.example) documents the available environment settings. Runtime monitoring, alert, and retention settings are managed in the application.
@@ -183,6 +204,7 @@ app/Notifications/   Email, Telegram, WhatsApp and Discord delivery
 app/Repositories/    Database access
 app/Services/        Application services
 assets/              Styles, JavaScript, and branding
+wordpress-plugin/    SiteWatch Connector WordPress plugin (served as a zip from each website page)
 cron/                Monitoring and housekeeping entry points
 database/            Schema and migration tools
 docs/                Installation guide and screenshots

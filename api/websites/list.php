@@ -56,7 +56,8 @@ if ($result['total'] > 0 && $pagination['offset'] >= $result['total']) {
 
 // Filter chip counts (cheap GROUP BY on the status index).
 $statusCounts = $websites->statusCounts();
-$counts = ['all' => array_sum($statusCounts), 'online' => 0, 'down' => 0, 'critical' => 0, 'warning' => 0, 'slow' => 0, 'ssl_expiring' => $websites->sslExpiringCount(30), 'paused' => $statusCounts[Status::PAUSED] ?? 0];
+$counts = ['all' => array_sum($statusCounts), 'online' => 0, 'down' => 0, 'critical' => 0, 'warning' => 0, 'slow' => 0, 'ssl_expiring' => $websites->sslExpiringCount(30), 'paused' => $statusCounts[Status::PAUSED] ?? 0,
+    'connector' => $websites->connectorCount()];
 foreach ($statusCounts as $status => $count) {
     if ($status === Status::PAUSED || $status === Status::PENDING) {
         continue;

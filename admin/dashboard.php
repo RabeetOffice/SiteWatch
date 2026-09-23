@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 require dirname(__DIR__) . '/bootstrap.php';
 
+use App\Services\ConnectorService;
 use App\Services\ServiceFactory;
 
 $pageTitle = 'Dashboard';
@@ -26,6 +27,8 @@ $initial = [
 $pageData = ['initial' => $initial, 'websiteCount' => ServiceFactory::websites()->count()];
 
 $kpi = $initial['stats']['kpi'];
+$fleet = ConnectorService::create()->fleet();
+$fleetTones = ['connected' => 'success', 'pending' => 'info', 'stale' => 'warning', 'deactivated' => 'warning', 'disconnected' => 'warning'];
 
 require dirname(__DIR__) . '/includes/header.php';
 ?>
@@ -76,6 +79,56 @@ require dirname(__DIR__) . '/includes/header.php';
     <div id="recentIncidents"></div>
 </section>
 <?php endif; ?>
+
+<section class="sw-card mb-4" aria-labelledby="wpFleetHeading">
+    <div class="sw-card-header">
+        <div>
+            <h3 id="wpFleetHeading"><i class="bi bi-plug-fill" aria-hidden="true"></i> WordPress plugin</h3>
+            <p class="sub">
+                <b><?= (int) $fleet['connected'] ?></b> of <?= (int) $fleet['total_websites'] ?> websites connected with SiteWatch Connector<?= $fleet['attention'] > 0 ? ' · <span class="text-warning">' . (int) $fleet['attention'] . ' not reporting</span>' : '' ?>
+            </p>
+        </div>
+        <?php if ($fleet['connected'] > 0): ?><button type="button" class="btn btn-sm btn-light" data-overview-filter="connector" aria-pressed="false">Show connected sites <i class="bi bi-arrow-down"></i></button><?php endif; ?>
+    </div>
+    <?php if ($fleet['sites'] === []): ?>
+        <div class="sw-card-body fs-13 text-muted">
+            No website has the plugin yet. Open a WordPress website, go to its <b>WordPress</b> section and click <b>Download plugin</b>:
+            SiteWatch will then show the real cause of fatal errors, pending updates and security problems.
+        </div>
+    <?php else: ?>
+        <div class="row g-0">
+            <div class="col-lg-6">
+                <ul class="wp-fleet-list" aria-label="Websites with the plugin">
+                    <?php foreach (array_slice($fleet['sites'], 0, 8) as $site): ?>
+                        <li>
+                            <span class="sw-pill tone-<?= e($fleetTones[$site['state']] ?? 'neutral') ?>"><?= e($site['state_label']) ?></span>
+                            <a class="n" href="<?= e($site['url']) ?>"><?= e($site['name']) ?></a>
+                            <span class="d ms-auto">
+                                <?= $site['wp_version'] ? 'WP ' . e($site['wp_version']) . ' · ' : '' ?><?= $site['updates'] ? (int) $site['updates'] . ' updates · ' : '' ?><?= $site['issues'] ? '<span class="text-danger">' . (int) $site['issues'] . ' security</span> · ' : '' ?><?= e($site['last_seen_ago']) ?>
+                            </span>
+                        </li>
+                    <?php endforeach; ?>
+                    <?php if (count($fleet['sites']) > 8): ?><li class="d">…and <?= count($fleet['sites']) - 8 ?> more</li><?php endif; ?>
+                </ul>
+            </div>
+            <div class="col-lg-6">
+                <ul class="wp-fleet-list" aria-label="Recent WordPress errors and security events">
+                    <?php if ($fleet['recent'] === []): ?>
+                        <li class="d"><i class="bi bi-check2-circle text-success" aria-hidden="true"></i> No fatal errors or security events in the last 7 days.</li>
+                    <?php endif; ?>
+                    <?php foreach ($fleet['recent'] as $event): ?>
+                        <li>
+                            <i class="bi <?= $event['type'] === 'fatal_error' ? 'bi-bug-fill text-danger' : 'bi-shield-exclamation text-warning' ?>" aria-hidden="true"></i>
+                            <a class="n" href="<?= e($event['url']) ?>"><?= e($event['website_name']) ?></a>
+                            <span class="d" title="<?= e($event['title']) ?>"><?= e($event['title']) ?></span>
+                            <span class="d ms-auto"><?= e($event['last_ago']) ?></span>
+                        </li>
+                    <?php endforeach; ?>
+                </ul>
+            </div>
+        </div>
+    <?php endif; ?>
+</section>
 
 <section class="sw-card mb-4" id="websiteTable" aria-label="Website inventory"></section>
 

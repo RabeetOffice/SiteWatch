@@ -527,6 +527,8 @@ final class WebsiteService
             'uptime_30d_label'   => format_uptime($w['uptime_30d'] ?? null),
             'open_incidents'     => (int) ($w['open_incidents'] ?? 0),
             'favicon_url'        => $w['favicon_url'] ?? null,
+            // Only list queries join the connector columns; other callers leave it out rather than report "none".
+            'connector'          => array_key_exists('connector_key_created_at', $w) ? ConnectorService::presentBadge($w) : null,
             'notes'              => $w['notes'] ?? null,
             'created_at'         => $w['created_at'] ?? null,
             'created_label'      => format_datetime($w['created_at'] ?? null),

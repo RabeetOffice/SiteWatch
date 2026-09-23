@@ -39,6 +39,9 @@ final class NotificationManager
     /** @var array<int, NotifierInterface>|null */
     private ?array $notifiers = null;
 
+    /** @var (callable(int): ?string)|null Explains a down alert, e.g. the fatal error the WordPress plugin reported. */
+    private $causeResolver = null;
+
     /**
      * @param array<int, NotifierInterface>|null $notifiers Override channels (tests).
      */
@@ -52,6 +55,29 @@ final class NotificationManager
     }
 
     /** @return array<int, NotifierInterface> */
+    /**
+     * Set how down alerts find their cause (see ConnectorService::causeFor).
+     *
+     * @param callable(int): ?string $resolver Website ID → one-line cause or null.
+     */
+    public function setCauseResolver(callable $resolver): void
+    {
+        $this->causeResolver = $resolver;
+    }
+
+    private function causeFor(int $websiteId): ?string
+    {
+        if ($this->causeResolver === null) {
+            return null;
+        }
+        try {
+            return ($this->causeResolver)($websiteId);
+        } catch (\Throwable $e) {
+            $this->logger->warning('Could not look up the cause of an incident', ['website_id' => $websiteId, 'error' => $e->getMessage()]);
+            return null;
+        }
+    }
+
     public function notifiers(): array
     {
         if ($this->notifiers === null) {
@@ -107,6 +133,8 @@ final class NotificationManager
             'slow'                 => 'slow',
             'ssl'                  => 'ssl',
             'recovery'             => 'recovery',
+            'wp_error'             => 'critical',
+            'security'             => 'security',
             default                => 'down',
         };
         $raw = $website['alerts_json'] ?? null;
@@ -148,6 +176,36 @@ final class NotificationManager
         }
         $message = $this->buildRecoveryMessage($website, $incident, $result);
         return $this->dispatch($message, (int) $website['id'], (int) $incident['id']);
+    }
+
+    /**
+     * A fatal PHP error reported by the SiteWatch Connector plugin (first report of that error).
+     *
+     * @param array<string, mixed> $website
+     * @param array<string, mixed> $event Normalised connector event (data is JSON).
+     */
+    public function wordpressError(array $website, array $event): bool
+    {
+        if (!$this->isAlertEnabled($website, 'wp_error')) {
+            $this->log->log('none', AlertMessage::EVENT_WP_ERROR, 'skipped', (int) $website['id'], null, null, null, 'WordPress error alerts are disabled.');
+            return false;
+        }
+        return $this->dispatch($this->buildWordpressErrorMessage($website, $event), (int) $website['id'], null);
+    }
+
+    /**
+     * A critical security event from the plugin, such as a new administrator account.
+     *
+     * @param array<string, mixed> $website
+     * @param array<string, mixed> $event
+     */
+    public function wordpressSecurity(array $website, array $event): bool
+    {
+        if (!$this->isAlertEnabled($website, 'security')) {
+            $this->log->log('none', AlertMessage::EVENT_WP_SECURITY, 'skipped', (int) $website['id'], null, null, null, 'WordPress security alerts are disabled.');
+            return false;
+        }
+        return $this->dispatch($this->buildWordpressSecurityMessage($website, $event), (int) $website['id'], null);
     }
 
     /**
@@ -268,6 +326,10 @@ final class NotificationManager
             ['Detected', $detected],
             ['Diagnostics', $diag !== '' ? $diag : '—'],
         ];
+        $cause = $this->causeFor((int) $website['id']);
+        if ($cause !== null) {
+            $rows[] = ['Cause (from WordPress)', $cause];
+        }
 
         $text = "{$subject}\n\n" . $this->textRows($rows) . "\n\nOpen website details: " . $this->detailsUrl((int) $website['id']);
         $html = $this->htmlLayout($subject, $issue, 'danger', $rows, $this->detailsUrl((int) $website['id']), 'Open Website Details');
@@ -275,10 +337,12 @@ final class NotificationManager
         $telegram = "🚨 <b>Website Down</b>\n\n<b>" . self::tg($name) . "</b>\n" . self::tg($issue)
             . "\n\nHTTP: " . self::tg($http) . "\nResponse: " . self::tg($response) . "\nDetected: " . self::tg($detectedAt)
             . ($diag !== '' ? "\n\n<i>" . self::tg(str_limit($diag, 300)) . "</i>" : '')
+            . ($cause !== null ? "\n\n<b>Cause:</b> " . self::tg(str_limit($cause, 500)) : '')
             . "\n\n" . self::tg((string) $website['url']);
         $whatsapp = "🚨 *Website Down*\n\n*" . self::wa($name) . "*\n" . self::wa($issue)
             . "\n\nHTTP: " . self::wa($http) . "\nResponse: " . self::wa($response) . "\nDetected: " . self::wa($detectedAt)
             . ($diag !== '' ? "\n\n_" . self::wa(str_limit($diag, 300)) . "_" : '')
+            . ($cause !== null ? "\n\n*Cause:* " . self::wa(str_limit($cause, 500)) : '')
             . "\n\n" . self::wa((string) $website['url']);
         $discord = $this->discordPayload($subject, '🚨 ' . $issue, 'danger', $rows, (string) $website['url'], (int) $website['id']);
 
@@ -351,6 +415,79 @@ final class NotificationManager
         $discord = $this->discordPayload($subject, $icon . ' ' . $headline . ' — ' . $remaining, $expired ? 'danger' : 'warning', $rows, (string) $website['url'], (int) $website['id']);
 
         return new AlertMessage(AlertMessage::EVENT_SSL, $subject, $text, $html, $telegram, (int) $website['id'], null, $whatsapp, $discord);
+    }
+
+    /**
+     * @param array<string, mixed> $website
+     * @param array<string, mixed> $event
+     */
+    public function buildWordpressErrorMessage(array $website, array $event): AlertMessage
+    {
+        $name = (string) $website['name'];
+        $data = json_decode((string) ($event['data'] ?? ''), true) ?: [];
+        $component = is_array($data['component'] ?? null) ? $data['component'] : [];
+        $source = trim((string) ($component['name'] ?? '') . ' ' . (string) ($component['version'] ?? ''));
+        $message = str_limit((string) ($data['message'] ?? ''), 600);
+        $where = ($data['file'] ?? '') !== '' ? $data['file'] . ':' . (int) ($data['line'] ?? 0) : '—';
+        $request = is_array($data['request'] ?? null) ? $data['request'] : [];
+        $page = trim(strtoupper((string) ($request['method'] ?? '')) . ' ' . (string) ($request['path'] ?? ''));
+        $subject = 'WordPress fatal error — ' . $name;
+
+        $rows = [
+            ['Website', $name],
+            ['Client', (string) ($website['client_name'] ?: '—')],
+            ['Source', $source !== '' ? $source : 'Unknown'],
+            ['Error', (string) ($data['error_type'] ?? 'Fatal error') . ': ' . $message],
+            ['File', $where],
+            ['Page', $page !== '' ? $page . ' (' . ($request['context'] ?? 'front') . ')' : '—'],
+            ['Seen', format_datetime($event['last_occurred_at'] ?? null)],
+        ];
+        $text = "{$subject}\n\n" . $this->textRows($rows) . "\n\nOpen website details: " . $this->detailsUrl((int) $website['id']);
+        $html = $this->htmlLayout($subject, 'WordPress error', 'danger', $rows, $this->detailsUrl((int) $website['id']), 'Open Website Details',
+            'Reported by the SiteWatch Connector plugin. Visitors saw the standard WordPress error page.');
+        $telegram = "🧨 <b>WordPress fatal error</b>\n\n<b>" . self::tg($name) . "</b>\n"
+            . ($source !== '' ? 'Source: ' . self::tg($source) . "\n" : '')
+            . "\n<code>" . self::tg(str_limit($message, 400)) . "</code>\n" . self::tg($where)
+            . ($page !== '' ? "\nPage: " . self::tg($page) : '');
+        $whatsapp = "🧨 *WordPress fatal error*\n\n*" . self::wa($name) . "*\n"
+            . ($source !== '' ? 'Source: ' . self::wa($source) . "\n" : '')
+            . "\n" . self::wa(str_limit($message, 400)) . "\n" . self::wa($where)
+            . ($page !== '' ? "\nPage: " . self::wa($page) : '');
+        $discord = $this->discordPayload($subject, '🧨 ' . ($source !== '' ? $source . ': ' : '') . str_limit($message, 200), 'danger', $rows, (string) $website['url'], (int) $website['id']);
+
+        return new AlertMessage(AlertMessage::EVENT_WP_ERROR, $subject, $text, $html, $telegram, (int) $website['id'], null, $whatsapp, $discord);
+    }
+
+    /**
+     * @param array<string, mixed> $website
+     * @param array<string, mixed> $event
+     */
+    public function buildWordpressSecurityMessage(array $website, array $event): AlertMessage
+    {
+        $name = (string) $website['name'];
+        $data = json_decode((string) ($event['data'] ?? ''), true) ?: [];
+        $title = (string) ($event['title'] ?? 'Security event');
+        $subject = 'Security alert — ' . $name . ': ' . $title;
+        $rows = [
+            ['Website', $name],
+            ['Client', (string) ($website['client_name'] ?: '—')],
+            ['Event', $title],
+            ['By', (string) ($data['by'] ?? '—')],
+            ['When', format_datetime($event['last_occurred_at'] ?? null)],
+        ];
+        if (isset($data['option'])) {
+            $rows[] = ['Changed', $data['option'] . ': "' . ($data['from'] ?? '') . '" → "' . ($data['to'] ?? '') . '"'];
+        }
+        $intro = 'If you did not expect this change, sign in to WordPress and check the site now: it can be a sign of a break-in.';
+        $text = "{$subject}\n\n" . $this->textRows($rows) . "\n\n{$intro}\n\nOpen website details: " . $this->detailsUrl((int) $website['id']);
+        $html = $this->htmlLayout($subject, 'Security', 'warning', $rows, $this->detailsUrl((int) $website['id']), 'Open Website Details', e($intro));
+        $telegram = "🛡️ <b>Security alert</b>\n\n<b>" . self::tg($name) . "</b>\n" . self::tg($title)
+            . (isset($data['by']) ? "\nBy: " . self::tg((string) $data['by']) : '') . "\n\n" . self::tg($intro);
+        $whatsapp = "🛡️ *Security alert*\n\n*" . self::wa($name) . "*\n" . self::wa($title)
+            . (isset($data['by']) ? "\nBy: " . self::wa((string) $data['by']) : '') . "\n\n" . self::wa($intro);
+        $discord = $this->discordPayload($subject, '🛡️ ' . $title, 'warning', $rows, (string) $website['url'], (int) $website['id']);
+
+        return new AlertMessage(AlertMessage::EVENT_WP_SECURITY, $subject, $text, $html, $telegram, (int) $website['id'], null, $whatsapp, $discord);
     }
 
     public function buildTestMessage(string $channel): AlertMessage

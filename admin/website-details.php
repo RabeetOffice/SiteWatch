@@ -34,6 +34,7 @@ if ($canViewDomains) {
 if ($canViewReports) {
     $pageScripts[] = 'website-performance.js';
 }
+$pageScripts[] = 'website-connector.js';
 $needsCharts = true;
 $hidePageHead = true;
 $pageData = [
@@ -45,6 +46,7 @@ $pageData = [
         'canRun'             => $canRunChecks,
         'canManageSettings'  => can('settings.manage'),
     ],
+    'connector' => ['canManage' => can('websites.manage')],
 ];
 
 require dirname(__DIR__) . '/includes/header.php';
@@ -245,6 +247,17 @@ require dirname(__DIR__) . '/includes/header.php';
         </div>
     </div>
 </div>
+
+<section class="sw-card mb-4" id="wordpressSection" aria-labelledby="wpTitle" style="scroll-margin-top:72px">
+    <div class="sw-card-header">
+        <div>
+            <h3 id="wpTitle"><i class="bi bi-wordpress" aria-hidden="true"></i> WordPress <span class="fs-13 fw-normal text-muted">· SiteWatch Connector</span></h3>
+            <p class="sub" data-wp-sub>Errors, health and changes reported from inside the site</p>
+        </div>
+        <div class="d-flex gap-2 align-items-center flex-wrap" data-wp-actions></div>
+    </div>
+    <div class="sw-card-body" data-wp-body><div class="skeleton skeleton-block"></div></div>
+</section>
 
 <?php if ($canViewReports): ?>
 <section class="row g-3 mb-4" id="performanceSection" aria-label="Core Web Vitals and screenshot" style="scroll-margin-top:72px">

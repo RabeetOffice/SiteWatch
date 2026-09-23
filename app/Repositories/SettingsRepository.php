@@ -68,6 +68,8 @@ final class SettingsRepository
         'alert_ssl'      => 1,
         'alert_slow'     => 1,
         'alert_recovery' => 1,
+        'alert_wp_error' => 1,
+        'alert_security' => 1,
 
         // Email
         'email_enabled'           => 0,

@@ -34,13 +34,13 @@ final class MaintenanceService
     }
 
     /**
-     * @return array{checks: int, activity: int, notifications: int, heartbeats: int, vitals: int, screenshots: int, login_attempts: int, remember_tokens: int, duration_ms: int}
+     * @return array{connector: int, checks: int, activity: int, notifications: int, heartbeats: int, vitals: int, screenshots: int, login_attempts: int, remember_tokens: int, duration_ms: int}
      */
     public function cleanup(): array
     {
         $started = microtime(true);
         $heartbeatId = $this->heartbeats->start('cleanup');
-        $result = ['checks' => 0, 'activity' => 0, 'notifications' => 0, 'heartbeats' => 0, 'vitals' => 0, 'screenshots' => 0, 'login_attempts' => 0, 'remember_tokens' => 0, 'duration_ms' => 0];
+        $result = ['connector' => 0, 'checks' => 0, 'activity' => 0, 'notifications' => 0, 'heartbeats' => 0, 'vitals' => 0, 'screenshots' => 0, 'login_attempts' => 0, 'remember_tokens' => 0, 'duration_ms' => 0];
 
         try {
             $checkDays = $this->clampRetention($this->settings->getInt('check_retention_days', 30), 7, 365);
@@ -59,6 +59,12 @@ final class MaintenanceService
 
             $notifications = new NotificationRepository($this->db);
             $result['notifications'] = $notifications->purgeOlderThan(utc_now()->modify("-{$notificationDays} days")->format('Y-m-d H:i:s'));
+
+            try {
+                $result['connector'] = ConnectorService::create()->purge();
+            } catch (Throwable $e) {
+                $this->log->warning('Connector event cleanup failed', ['error' => $e->getMessage()]);
+            }
 
             $vitalsDays = $this->clampRetention($this->settings->getInt('vitals_retention_days', 180), 7, 3650);
             $result['vitals'] = (new VitalsRepository($this->db))->purgeOlderThan(utc_now()->modify("-{$vitalsDays} days")->format('Y-m-d H:i:s'));

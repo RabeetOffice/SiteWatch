@@ -24,7 +24,7 @@ use RuntimeException;
  */
 final class Migrator
 {
-    public const VERSION = 5;
+    public const VERSION = 6;
     /** Version of databases created before schema versions were recorded. */
     public const BASELINE = 1;
     public const SETTING = 'schema_version';
@@ -66,6 +66,14 @@ final class Migrator
             'title'   => 'Profile pictures',
             'changes' => [
                 'Adds users.avatar, the file name of the profile picture kept in storage/avatars.',
+            ],
+        ],
+        6 => [
+            'release' => '1.6.0',
+            'title'   => 'SiteWatch Connector for WordPress',
+            'changes' => [
+                'Creates the connector_sites table: one row per website connected with the WordPress plugin (encrypted secret, last report, health snapshot).',
+                'Creates the connector_events table for fatal errors and activity reported by the plugin.',
             ],
         ],
     ];
@@ -176,7 +184,17 @@ final class Migrator
             3 => fn () => $this->vitalsAndScreenshots(),
             4 => fn () => $this->activityRetention(),
             5 => fn () => $this->userAvatars(),
+            6 => fn () => $this->connectorTables(),
         ];
+    }
+
+    /**
+     * v6 (1.6.0): SiteWatch Connector (WordPress plugin).
+     */
+    private function connectorTables(): void
+    {
+        $this->createTable('connector_sites');
+        $this->createTable('connector_events');
     }
 
     /**

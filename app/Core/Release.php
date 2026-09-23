@@ -18,7 +18,7 @@ namespace App\Core;
  */
 final class Release
 {
-    public const VERSION = '1.5.0';
+    public const VERSION = '1.6.0';
 
     /**
      * Newest first. 'schema' is the database schema version the release requires (null: unchanged).
@@ -26,6 +26,19 @@ final class Release
      * @var array<string, array{date: string, title: string, schema: ?int, added?: array<int, string>, improved?: array<int, string>, fixed?: array<int, string>}>
      */
     public const NOTES = [
+        '1.6.0' => [
+            'date'     => '2026-09-23',
+            'title'    => 'SiteWatch Connector for WordPress',
+            'schema'   => 6,
+            'added'    => [
+                'SiteWatch Connector, a WordPress plugin downloadable from each website page. It reports fatal errors with the file, line and plugin or theme responsible, without turning on debug.',
+                'Down alerts include the cause when the plugin reported a fatal error, e.g. "Elementor Pro: Call to undefined function … line 142".',
+                'Daily health report per site: WordPress/PHP/database versions, pending updates, plugins and themes, database size and scheduled tasks.',
+                'Security checks: modified WordPress core files, PHP files in uploads, risky registration settings, the "admin" username and more. New administrator accounts and site address changes are alerted immediately.',
+                'WordPress change log: plugin and theme installs, updates and switches, WordPress updates, administrator sign-ins and failed sign-in counts.',
+                'Websites with the plugin are marked in the website list, with a filter, and the dashboard shows how many sites are connected.',
+            ],
+        ],
         '1.5.0' => [
             'date'     => '2026-09-23',
             'title'    => 'Profile pictures',

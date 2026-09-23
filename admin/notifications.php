@@ -26,6 +26,8 @@ $alertRules = [
     'alert_ssl'      => ['SSL certificate', 'Certificate errors and expiry warnings (30, 14 and 7 days, and expired)'],
     'alert_slow'     => ['Critically slow', 'Responses over the critical performance threshold'],
     'alert_recovery' => ['Recovery', 'One notification when a website comes back online'],
+    'alert_wp_error' => ['WordPress fatal error (plugin)', 'The file, line and plugin or theme behind a fatal error, reported by the SiteWatch Connector plugin'],
+    'alert_security' => ['WordPress security (plugin)', 'New administrator accounts, administrator role changes and site address changes reported by the plugin'],
 ];
 ?>
 

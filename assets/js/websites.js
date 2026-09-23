@@ -11,6 +11,7 @@
         { key: 'slow', label: 'Slow' },
         { key: 'ssl_expiring', label: 'SSL expiring' },
         { key: 'paused', label: 'Paused' },
+        { key: 'connector', label: 'WordPress plugin' },
     ];
     const SORTS = [
         { key: 'status', label: 'Severity' },
@@ -384,6 +385,20 @@
             '<i class="bi ' + (ssl.tone === 'neutral' ? 'bi-shield' : 'bi-shield-exclamation') + '" aria-hidden="true"></i>' + SW.escape(ssl.label) + '</span>';
     }
 
+    const PLUGIN_TONES = { connected: 'success', pending: 'muted', stale: 'warning', deactivated: 'warning', disconnected: 'warning' };
+
+    /** Small plug icon next to the name when the SiteWatch Connector plugin is set up on the site. */
+    function pluginBadge(c) {
+        if (!c || c.state === 'none') return '';
+        let tip = 'SiteWatch Connector: ' + c.label;
+        if (c.last_seen_at) tip += ' · last report ' + c.last_seen_ago;
+        if (c.wp_version) tip += ' · WordPress ' + c.wp_version;
+        if (c.updates) tip += ' · ' + c.updates + ' update(s) pending';
+        if (c.issues) tip += ' · ' + c.issues + ' security check(s) need attention';
+        return ' <span class="plugin-badge tone-' + (PLUGIN_TONES[c.state] || 'muted') + '" data-bs-toggle="tooltip" title="' + SW.escape(tip) + '">' +
+            '<i class="bi bi-plug-fill" aria-hidden="true"></i><span class="visually-hidden">' + SW.escape(tip) + '</span></span>';
+    }
+
     WebsiteTable.prototype.rowHtml = function (w) {
         const o = this.opts;
         const busy = this.busy.has(w.id);
@@ -418,7 +433,7 @@
         return '<tr data-row="' + w.id + '"' + (selected ? ' class="selected"' : '') + '>' +
             (o.bulk ? '<td class="w-min"><input type="checkbox" class="form-check-input" data-select="' + w.id + '"' + (selected ? ' checked' : '') + ' aria-label="Select ' + SW.escape(w.name) + '"></td>' : '') +
             '<td><div class="site-cell">' + SW.favicon(w.favicon_url, w.domain) +
-            '<div class="site-text"><a class="site-name" href="' + SW.escape(w.urls.details) + '" title="' + SW.escape(w.name) + '">' + SW.escape(w.name) + '</a>' +
+            '<div class="site-text"><span class="site-name-row"><a class="site-name" href="' + SW.escape(w.urls.details) + '" title="' + SW.escape(w.name) + '">' + SW.escape(w.name) + '</a>' + pluginBadge(w.connector) + '</span>' +
             '<a class="site-domain" href="' + SW.escape(w.url) + '" target="_blank" rel="noopener noreferrer" title="' + SW.escape(w.url) + '">' + SW.escape(w.domain) +
             ' <i class="bi bi-box-arrow-up-right" style="font-size:10px" aria-hidden="true"></i></a></div></div></td>' +
             '<td class="hide-mobile">' + (w.client_name ? '<span class="client-name" title="' + SW.escape(w.client_name) + '">' + SW.escape(w.client_name) + '</span>' : '<span class="text-faint">—</span>') + '</td>' +
@@ -462,6 +477,8 @@
     WebsiteTable.prototype.updateRow = function (w) {
         const idx = this.rows.findIndex(function (r) { return r.id === w.id; });
         if (idx === -1) return;
+        // Check results come without the connector columns; keep the badge from the list query.
+        if (!w.connector && this.rows[idx].connector) w.connector = this.rows[idx].connector;
         this.rows[idx] = w;
         const tr = this.el.querySelector('[data-row="' + w.id + '"]');
         if (tr) {

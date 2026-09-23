@@ -9,6 +9,7 @@ declare(strict_types=1);
  *   define('SW_INSTALLER', true);  // before including: skip the "is installed" guard
  *   define('SW_SKIP_MIGRATIONS', true); // before including: do not apply schema upgrades automatically
  *   define('SW_ALLOW_PENDING_SCHEMA', true); // before including: page still works while a database update is waiting
+ *   define('SW_STATELESS', true);  // before including: no session or browser headers (signed machine-to-machine endpoints)
  */
 
 use App\Core\App;
@@ -79,7 +80,7 @@ if (!defined('SW_INSTALLER') && !defined('SW_SKIP_MIGRATIONS') && App::schemaPen
 }
 
 // Web request setup ------------------------------------------------------------
-if (!App::isCli()) {
+if (!App::isCli() && !defined('SW_STATELESS')) {
     App::session()->start();
 
     if (!headers_sent()) {

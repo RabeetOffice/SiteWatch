@@ -7,6 +7,21 @@ The in-app copy of these notes (System → Updates) comes from `app/Core/Release
 both files. `tests/ReleaseTest.php` fails if they disagree. A release that changes the database also gets a
 `Migrator` step. Its schema number is listed below, so the code and database versions can be compared.
 
+## [1.6.0] - 2026-09-23 · database schema 6
+
+SiteWatch Connector for WordPress.
+
+### Added
+- SiteWatch Connector, a WordPress plugin you download from each website page. It reports fatal errors with the file, line and plugin or theme responsible, without turning on debug.
+- Down alerts include the cause when the plugin reported a fatal error, e.g. "Elementor Pro: Call to undefined function … line 142".
+- Daily health report per site: WordPress/PHP/database versions, pending updates, plugins and themes, database size and scheduled tasks.
+- Security checks: modified WordPress core files, PHP files in uploads, risky registration settings, the "admin" username and more. New administrator accounts and site address changes are alerted immediately.
+- WordPress change log: plugin and theme installs, updates and switches, WordPress updates, administrator sign-ins and failed sign-in counts.
+- Websites with the plugin are marked in the website list, with a filter, and the dashboard shows how many sites are connected.
+
+### Database (schema 6)
+- New tables `connector_sites` and `connector_events`.
+
 ## [1.5.0] - 2026-09-23 · database schema 5
 
 Profile pictures.

@@ -12,7 +12,7 @@ final class WebsiteRepository extends BaseRepository
     public const INTERVALS = [1, 2, 5, 10, 15, 30];
 
     public const SORTS = ['status', 'response', 'uptime', 'last_checked', 'client', 'name', 'newest', 'oldest'];
-    public const FILTERS = ['all', 'online', 'down', 'critical', 'warning', 'slow', 'ssl_expiring', 'paused'];
+    public const FILTERS = ['all', 'online', 'down', 'critical', 'warning', 'slow', 'ssl_expiring', 'paused', 'connector'];
 
     /** @return array<string, mixed>|null */
     public function find(int $id): ?array
@@ -156,8 +156,13 @@ final class WebsiteRepository extends BaseRepository
         $sql = "SELECT w.*,
                     (SELECT ROUND(SUM(ds.successful_checks) / NULLIF(SUM(ds.total_checks), 0) * 100, 3)
                        FROM daily_stats ds WHERE ds.website_id = w.id AND ds.stat_date >= :d30) AS uptime_30d,
-                    (SELECT COUNT(*) FROM incidents i WHERE i.website_id = w.id AND i.status = 'OPEN') AS open_incidents
+                    (SELECT COUNT(*) FROM incidents i WHERE i.website_id = w.id AND i.status = 'OPEN') AS open_incidents,
+                    c.key_created_at AS connector_key_created_at, c.connected_at AS connector_connected_at,
+                    c.last_seen_at AS connector_seen_at, c.last_reason AS connector_reason,
+                    c.plugin_version AS connector_plugin_version, c.wp_version AS connector_wp_version,
+                    c.updates_pending AS connector_updates, c.security_issues AS connector_issues
                 FROM websites w
+                LEFT JOIN connector_sites c ON c.website_id = w.id
                 WHERE {$where}
                 ORDER BY {$orderBy}
                 LIMIT " . max(1, $limit) . ' OFFSET ' . max(0, $offset);
@@ -167,6 +172,12 @@ final class WebsiteRepository extends BaseRepository
         $total = (int) $this->db->fetchColumn("SELECT COUNT(*) FROM websites w WHERE {$where}", $params);
 
         return ['rows' => $rows, 'total' => $total];
+    }
+
+    /** Websites where the SiteWatch Connector plugin has reported at least once. */
+    public function connectorCount(): int
+    {
+        return (int) $this->db->fetchColumn('SELECT COUNT(*) FROM connector_sites WHERE connected_at IS NOT NULL');
     }
 
     /**
@@ -232,6 +243,9 @@ final class WebsiteRepository extends BaseRepository
                 break;
             case 'paused':
                 $where[] = 'w.monitoring_enabled = 0';
+                break;
+            case 'connector':
+                $where[] = 'EXISTS (SELECT 1 FROM connector_sites cs WHERE cs.website_id = w.id AND cs.connected_at IS NOT NULL)';
                 break;
             default:
                 break;

@@ -17,6 +17,8 @@ final class AlertMessage
     public const EVENT_RECOVERY = 'recovery';
     public const EVENT_SSL = 'ssl_expiry';
     public const EVENT_TEST = 'test';
+    public const EVENT_WP_ERROR = 'wp_error';
+    public const EVENT_WP_SECURITY = 'wp_security';
 
     /**
      * @param string               $telegram Telegram HTML body.

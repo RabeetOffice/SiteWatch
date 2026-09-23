@@ -15,6 +15,10 @@ final class ActivityService
 {
     public const ACTION_LABELS = [
         'website.added'      => 'Website Added',
+        'connector.connected'    => 'Plugin Connected',
+        'connector.disconnected' => 'Plugin Disconnected',
+        'connector.key_created'  => 'Plugin Key Created',
+        'connector.revoked'      => 'Plugin Key Revoked',
         'website.edited'     => 'Website Edited',
         'website.deleted'    => 'Website Deleted',
         'website.imported'   => 'Websites Imported',
