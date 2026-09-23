@@ -7,6 +7,20 @@ The in-app copy of these notes (System → Updates) comes from `app/Core/Release
 both files. `tests/ReleaseTest.php` fails if they disagree. A release that changes the database also gets a
 `Migrator` step. Its schema number is listed below, so the code and database versions can be compared.
 
+## [1.5.0] - 2026-09-23 · database schema 5
+
+Profile pictures.
+
+### Added
+- Profile picture upload on the Profile page, with a square crop you can drag and zoom before saving.
+- Profile pictures in the top bar, the sidebar and the Users list; initials are shown when there is no picture.
+
+### Improved
+- Uploaded pictures are re-encoded on the server as 256 × 256 WebP images and kept outside the web root, so only signed-in users can load them.
+
+### Database (schema 5)
+- New column `users.avatar`.
+
 ## [1.4.0] - 2026-09-23 · database schema 4
 
 Fast bulk checks, activity log retention and release tracking.

@@ -32,7 +32,9 @@
             : '<span class="text-faint">Never</span>';
 
         return '<tr data-user="' + u.id + '"' + (u.is_active ? '' : ' class="is-inactive"') + '>' +
-            '<td><div class="user-cell"><span class="sw-avatar" aria-hidden="true">' + esc(u.initials) + '</span><div class="min-w-0">' +
+            '<td><div class="user-cell">' + (u.avatar_url
+                ? '<span class="sw-avatar has-img" aria-hidden="true"><img src="' + esc(u.avatar_url) + '" alt="" loading="lazy"></span>'
+                : '<span class="sw-avatar" aria-hidden="true">' + esc(u.initials) + '</span>') + '<div class="min-w-0">' +
             '<div class="n"><span class="truncate">' + esc(u.name) + '</span>' + (u.is_self ? SW.pill('You', 'primary') : '') + '</div>' +
             '<div class="e truncate">' + esc(u.email) + '</div></div></div></td>' +
             '<td>' + SW.pill(u.role_name, u.full_access ? 'primary' : 'neutral', u.full_access ? 'bi-shield-check' : null) + '</td>' +

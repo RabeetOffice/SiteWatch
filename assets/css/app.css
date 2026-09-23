@@ -382,6 +382,29 @@ a.sw-user:hover { background: var(--sw-hover); color: var(--sw-text); text-decor
     border: 1px solid var(--sw-border);
 }
 .sw-avatar.lg { width: 52px; height: 52px; flex-basis: 52px; font-size: 18px; }
+.sw-avatar.xl { width: 96px; height: 96px; flex-basis: 96px; font-size: 32px; }
+.sw-avatar.has-img { overflow: hidden; padding: 0; background: var(--sw-card); }
+.sw-avatar.has-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+/* Profile picture + square crop */
+.avatar-editor { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
+.avatar-editor .actions { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.avatar-editor .actions .btns { display: flex; gap: 8px; flex-wrap: wrap; }
+.avatar-drop { outline: 2px dashed transparent; outline-offset: 6px; border-radius: 50%; transition: outline-color .15s; }
+.avatar-drop.dragover { outline-color: var(--sw-primary); }
+.crop-stage { position: relative; width: min(100%, 320px); aspect-ratio: 1; margin: 0 auto; overflow: hidden; border-radius: var(--sw-radius-panel); background: repeating-conic-gradient(var(--sw-border) 0% 25%, transparent 0% 50%) 50% / 16px 16px; touch-action: none; cursor: grab; user-select: none; }
+.crop-stage:active { cursor: grabbing; }
+.crop-stage:focus-visible { outline: 2px solid var(--sw-primary); outline-offset: 2px; }
+.crop-stage img { position: absolute; top: 0; left: 0; max-width: none; transform-origin: 0 0; pointer-events: none; }
+.crop-stage .crop-frame { position: absolute; inset: 0; pointer-events: none; box-shadow: inset 0 0 0 2px rgba(255,255,255,.9); }
+.crop-stage .crop-frame::before, .crop-stage .crop-frame::after { content: ""; position: absolute; inset: 0; background-image: linear-gradient(rgba(255,255,255,.35), rgba(255,255,255,.35)), linear-gradient(rgba(255,255,255,.35), rgba(255,255,255,.35)); background-repeat: no-repeat; }
+.crop-stage .crop-frame::before { background-size: 1px 100%, 1px 100%; background-position: 33.33% 0, 66.66% 0; }
+.crop-stage .crop-frame::after { background-size: 100% 1px, 100% 1px; background-position: 0 33.33%, 0 66.66%; }
+.crop-controls { display: flex; align-items: center; gap: 10px; margin-top: 14px; }
+.crop-controls input[type=range] { flex: 1; }
+.crop-previews { display: flex; align-items: center; justify-content: center; gap: 14px; margin-top: 14px; }
+.crop-previews canvas { border-radius: 50%; border: 1px solid var(--sw-border); background: var(--sw-card); }
+.crop-previews canvas.sq { border-radius: 8px; }
 .sw-user-text { min-width: 0; display: block; flex: 1; }
 .sw-version { display: flex; align-items: center; gap: 6px; padding: 2px 8px 8px; font-size: 11.5px; color: var(--sw-muted); text-decoration: none; font-variant-numeric: tabular-nums; }
 a.sw-version:hover { color: var(--sw-primary); }

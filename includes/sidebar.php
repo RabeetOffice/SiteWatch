@@ -73,7 +73,7 @@ $nav = array_values(array_filter($nav, static fn (array $group): bool => $group[
         <div class="d-flex align-items-center gap-1">
             <a class="sw-user<?= $activeNav === 'profile' ? ' active' : '' ?>" href="<?= e(base_url('admin/profile.php')) ?>"
                data-bs-toggle="tooltip" data-bs-placement="right" title="Profile">
-                <span class="sw-avatar" aria-hidden="true"><?= e($initials) ?></span>
+                <?= user_avatar($currentUser) ?>
                 <span class="sw-user-text">
                     <span class="n"><?= e($currentUser['name']) ?></span>
                     <span class="e"><?= e(!empty($currentUser['role_name']) ? $currentUser['role_name'] : $currentUser['email']) ?></span>

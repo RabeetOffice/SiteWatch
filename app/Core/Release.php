@@ -18,7 +18,7 @@ namespace App\Core;
  */
 final class Release
 {
-    public const VERSION = '1.4.0';
+    public const VERSION = '1.5.0';
 
     /**
      * Newest first. 'schema' is the database schema version the release requires (null: unchanged).
@@ -26,6 +26,18 @@ final class Release
      * @var array<string, array{date: string, title: string, schema: ?int, added?: array<int, string>, improved?: array<int, string>, fixed?: array<int, string>}>
      */
     public const NOTES = [
+        '1.5.0' => [
+            'date'     => '2026-09-23',
+            'title'    => 'Profile pictures',
+            'schema'   => 5,
+            'added'    => [
+                'Profile picture upload on the Profile page, with a square crop you can drag and zoom before saving.',
+                'Profile pictures in the top bar, the sidebar and the Users list; initials are shown when there is no picture.',
+            ],
+            'improved' => [
+                'Uploaded pictures are re-encoded on the server as 256 × 256 WebP images and kept outside the web root, so only signed-in users can load them.',
+            ],
+        ],
         '1.4.0' => [
             'date'     => '2026-09-23',
             'title'    => 'Fast bulk checks, activity log retention and release tracking',

@@ -24,7 +24,7 @@ use RuntimeException;
  */
 final class Migrator
 {
-    public const VERSION = 4;
+    public const VERSION = 5;
     /** Version of databases created before schema versions were recorded. */
     public const BASELINE = 1;
     public const SETTING = 'schema_version';
@@ -59,6 +59,13 @@ final class Migrator
                 'Limits the activity log to 7, 15 or 30 days, or unlimited. A longer existing setting becomes 30 days; nothing is deleted until the next daily cleanup.',
                 'Adds an index on website_checks (website_id, is_failure, checked_at), used by incident confirmation and bulk checks.',
                 'Records the release number with every applied update.',
+            ],
+        ],
+        5 => [
+            'release' => '1.5.0',
+            'title'   => 'Profile pictures',
+            'changes' => [
+                'Adds users.avatar, the file name of the profile picture kept in storage/avatars.',
             ],
         ],
     ];
@@ -168,7 +175,18 @@ final class Migrator
             2 => fn () => $this->rolesAndDomainInfo(),
             3 => fn () => $this->vitalsAndScreenshots(),
             4 => fn () => $this->activityRetention(),
+            5 => fn () => $this->userAvatars(),
         ];
+    }
+
+    /**
+     * v5 (1.5.0): profile pictures.
+     */
+    private function userAvatars(): void
+    {
+        if (!$this->columnExists('users', 'avatar')) {
+            $this->db->pdo()->exec("ALTER TABLE `users` ADD COLUMN `avatar` VARCHAR(64) NULL COMMENT 'profile picture file name in storage/avatars' AFTER `session_version`");
+        }
     }
 
     /**

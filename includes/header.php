@@ -135,7 +135,7 @@ if (count($parts) > 1) {
                 <span class="refresh-indicator d-none d-lg-inline-flex" id="refreshIndicator" data-bs-toggle="tooltip" title="This page refreshes itself. It is separate from the monitoring engine."><span class="dot" aria-hidden="true"></span><span class="txt">Auto-refresh</span></span>
                 <button type="button" class="btn-icon" id="themeToggle" aria-label="Toggle dark mode" data-bs-toggle="tooltip" title="Toggle theme"><i class="bi bi-moon-stars" aria-hidden="true"></i></button>
                 <div class="dropdown">
-                    <button type="button" class="btn-icon" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Account menu"><span class="sw-avatar"><?= e($initials) ?></span></button>
+                    <button type="button" class="btn-icon" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Account menu"><?= user_avatar($currentUser) ?></button>
                     <ul class="dropdown-menu dropdown-menu-end">
                         <li><h6 class="dropdown-header"><?= e($currentUser['name']) ?><?php if (!empty($currentUser['role_name'])): ?><span class="d-block text-muted fw-normal" style="text-transform:none;letter-spacing:0"><?= e($currentUser['role_name']) ?></span><?php endif; ?></h6></li>
                         <li><a class="dropdown-item" href="<?= e(base_url('admin/profile.php')) ?>"><i class="bi bi-person" aria-hidden="true"></i> Profile</a></li>

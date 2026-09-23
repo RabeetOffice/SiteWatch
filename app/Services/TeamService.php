@@ -167,6 +167,9 @@ final class TeamService
     public function deleteUser(array $user): void
     {
         $this->users->delete((int) $user['id']);
+        if (!empty($user['avatar'])) {
+            AvatarService::create()->deleteFile((string) $user['avatar']);
+        }
         ActivityService::log('user.deleted', sprintf('User deleted: %s (%s)', $user['name'], $user['email']), null, ['email' => $user['email']]);
     }
 
@@ -184,6 +187,7 @@ final class TeamService
             'name'             => (string) $user['name'],
             'email'            => (string) $user['email'],
             'initials'         => self::initials((string) $user['name']),
+            'avatar_url'       => AvatarService::url($user),
             'role_id'          => (int) $user['role_id'],
             'role_name'        => (string) ($user['role_name'] ?? ''),
             'full_access'      => in_array(Permission::ALL, Permission::decode($user['role_permissions'] ?? null), true),

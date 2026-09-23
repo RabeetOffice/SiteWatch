@@ -5,6 +5,8 @@
 /storage/locks/*
 /storage/screenshots/*
 !/storage/screenshots/.htaccess
+/storage/avatars/*
+!/storage/avatars/.htaccess
 /storage/install.lock
 !/storage/**/.gitkeep
 /.phpunit.cache/

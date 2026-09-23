@@ -35,6 +35,7 @@ CREATE TABLE IF NOT EXISTS `users` (
   `role_id`         INT UNSIGNED  NOT NULL,
   `is_active`       TINYINT(1)    NOT NULL DEFAULT 1,
   `session_version` INT UNSIGNED  NOT NULL DEFAULT 1 COMMENT 'incremented to sign the user out everywhere',
+  `avatar`          VARCHAR(64)   NULL COMMENT 'profile picture file name in storage/avatars',
   `last_login_at`   DATETIME      NULL,
   `last_login_ip`   VARCHAR(45)   NULL,
   `created_at`      DATETIME      NOT NULL,

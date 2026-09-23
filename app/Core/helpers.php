@@ -243,6 +243,25 @@ if (!function_exists('json_out')) {
     }
 }
 
+if (!function_exists('user_avatar')) {
+    /**
+     * Round avatar for a user: their profile picture, or their initials when they have none.
+     *
+     * @param array<string, mixed> $user
+     * @param string $class Extra classes, e.g. 'lg'.
+     */
+    function user_avatar(array $user, string $class = '', bool $decorative = true): string
+    {
+        $classes = trim('sw-avatar ' . $class);
+        $label = $decorative ? ' aria-hidden="true"' : ' role="img" aria-label="' . e((string) ($user['name'] ?? '')) . '"';
+        $url = \App\Services\AvatarService::url($user);
+        if ($url !== null) {
+            return '<span class="' . e($classes) . ' has-img"' . $label . '><img src="' . e($url) . '" alt="" decoding="async"></span>';
+        }
+        return '<span class="' . e($classes) . '"' . $label . '>' . e(\App\Services\TeamService::initials((string) ($user['name'] ?? ''))) . '</span>';
+    }
+}
+
 if (!function_exists('can')) {
     /**
      * Whether the signed-in user's role grants a permission (see App\Core\Permission).
