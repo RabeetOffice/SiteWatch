@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Core;
 
 use App\Repositories\RoleRepository;
+use App\Repositories\SettingsRepository;
 use RuntimeException;
 
 /**
@@ -17,11 +18,13 @@ use RuntimeException;
  *
  * The applied version is stored in settings.schema_version and each run in settings.schema_history. Pending steps
  * are applied from admin/updates.php, by `php database/migrate.php`, or automatically when DB_AUTO_MIGRATE=true.
- * When adding a version, add both a step below and its description to STEPS.
+ * When adding a version, add both a step below and its description to STEPS, and set the schema number on the
+ * matching entry in Release::NOTES. Each schema version belongs to one release, so the Updates page can report the
+ * database version as a release number (schema 4 = SiteWatch 1.4.0).
  */
 final class Migrator
 {
-    public const VERSION = 3;
+    public const VERSION = 4;
     /** Version of databases created before schema versions were recorded. */
     public const BASELINE = 1;
     public const SETTING = 'schema_version';
@@ -30,6 +33,7 @@ final class Migrator
     /** What each version changes, shown on the Updates page before it is applied. */
     public const STEPS = [
         2 => [
+            'release' => '1.2.0',
             'title'   => 'User roles and domain & hosting details',
             'changes' => [
                 'Creates the roles table with the built-in Administrator, Manager and Viewer roles.',
@@ -39,6 +43,7 @@ final class Migrator
             ],
         ],
         3 => [
+            'release' => '1.3.0',
             'title'   => 'Core Web Vitals and website screenshots',
             'changes' => [
                 'Creates the website_vitals table for Core Web Vitals history (lab and field, mobile and desktop).',
@@ -47,7 +52,24 @@ final class Migrator
                 'Adds websites.vitals_checked_at and websites.screenshot_captured_at to schedule both jobs.',
             ],
         ],
+        4 => [
+            'release' => '1.4.0',
+            'title'   => 'Activity log retention and faster status queries',
+            'changes' => [
+                'Limits the activity log to 7, 15 or 30 days, or unlimited. A longer existing setting becomes 30 days; nothing is deleted until the next daily cleanup.',
+                'Adds an index on website_checks (website_id, is_failure, checked_at), used by incident confirmation and bulk checks.',
+                'Records the release number with every applied update.',
+            ],
+        ],
     ];
+
+    /**
+     * Release number for a schema version (the release whose update brought the database to it).
+     */
+    public static function releaseFor(int $version): string
+    {
+        return self::STEPS[$version]['release'] ?? ($version <= self::BASELINE ? '1.0.0' : 'schema ' . $version);
+    }
 
     public function __construct(
         private readonly Database $db,
@@ -145,7 +167,22 @@ final class Migrator
         return [
             2 => fn () => $this->rolesAndDomainInfo(),
             3 => fn () => $this->vitalsAndScreenshots(),
+            4 => fn () => $this->activityRetention(),
         ];
+    }
+
+    /**
+     * v4 (1.4.0): activity log retention choices and an index for recent-failure lookups.
+     */
+    private function activityRetention(): void
+    {
+        $days = $this->db->fetchColumn('SELECT `value` FROM settings WHERE `key` = :k', ['k' => 'activity_retention_days']);
+        if ($days !== null && !in_array((int) $days, SettingsRepository::ACTIVITY_RETENTION_CHOICES, true)) {
+            $this->db->query('UPDATE settings SET `value` = :v WHERE `key` = :k', ['v' => '30', 'k' => 'activity_retention_days']);
+        }
+        if (!$this->indexExists('website_checks', 'idx_checks_website_failure')) {
+            $this->db->pdo()->exec('ALTER TABLE `website_checks` ADD KEY `idx_checks_website_failure` (`website_id`, `is_failure`, `checked_at`)');
+        }
     }
 
     /**
@@ -224,7 +261,7 @@ final class Migrator
     {
         $now = utc_now()->format('Y-m-d H:i:s');
         $history = array_reverse($this->history());
-        $history[] = ['version' => $version, 'applied_at' => $now, 'duration_ms' => $durationMs];
+        $history[] = ['version' => $version, 'release' => self::releaseFor($version), 'applied_at' => $now, 'duration_ms' => $durationMs];
 
         foreach ([self::SETTING => (string) $version, self::HISTORY => (string) json_encode(array_slice($history, -50))] as $key => $value) {
             $this->db->query(
@@ -240,6 +277,14 @@ final class Migrator
         return (int) $this->db->fetchColumn(
             'SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :t AND COLUMN_NAME = :c',
             ['t' => $table, 'c' => $column]
+        ) > 0;
+    }
+
+    private function indexExists(string $table, string $index): bool
+    {
+        return (int) $this->db->fetchColumn(
+            'SELECT COUNT(*) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :t AND INDEX_NAME = :i',
+            ['t' => $table, 'i' => $index]
         ) > 0;
     }
 

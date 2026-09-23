@@ -34,6 +34,17 @@ $criteria = [
     'client' => mb_substr(Request::string('client'), 0, 150),
 ];
 
+// Every matching website in compact form, for "select all" across pages and the bulk-check time estimate.
+if (Request::string('select') === 'all') {
+    $items = array_map(static fn (array $w): array => [
+        'id'                 => (int) $w['id'],
+        'name'               => (string) $w['name'],
+        'monitoring_enabled' => (int) $w['monitoring_enabled'] === 1,
+        'last_response_time' => $w['last_response_time'] !== null ? (int) $w['last_response_time'] : null,
+    ], $websites->searchAll($criteria));
+    Response::success('', ['items' => $items, 'total' => count($items)]);
+}
+
 $result = $websites->search($criteria, $pagination['per_page'], $pagination['offset']);
 
 // Clamp the page when the result set shrank (e.g. after a delete).

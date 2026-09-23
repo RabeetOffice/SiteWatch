@@ -28,4 +28,4 @@ $applied = $migrator->migrate();
 
 echo $applied === []
     ? "Database schema is up to date (version {$before})." . PHP_EOL
-    : 'Applied schema version ' . implode(', ', $applied) . '. The database is now at version ' . Migrator::VERSION . '.' . PHP_EOL;
+    : 'Applied schema version ' . implode(', ', $applied) . '. The database is now at version ' . Migrator::VERSION . ' (SiteWatch ' . Migrator::releaseFor(Migrator::VERSION) . ').' . PHP_EOL;

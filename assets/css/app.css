@@ -383,6 +383,10 @@ a.sw-user:hover { background: var(--sw-hover); color: var(--sw-text); text-decor
 }
 .sw-avatar.lg { width: 52px; height: 52px; flex-basis: 52px; font-size: 18px; }
 .sw-user-text { min-width: 0; display: block; flex: 1; }
+.sw-version { display: flex; align-items: center; gap: 6px; padding: 2px 8px 8px; font-size: 11.5px; color: var(--sw-muted); text-decoration: none; font-variant-numeric: tabular-nums; }
+a.sw-version:hover { color: var(--sw-primary); }
+html.sidebar-collapsed .sw-version span { display: none; }
+html.sidebar-collapsed .sw-version { justify-content: center; padding: 2px 0 8px; }
 .sw-user-text .n { display: block; font-size: 13px; font-weight: 600; color: var(--sw-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sw-user-text .e { display: block; font-size: 12px; color: var(--sw-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
@@ -1097,6 +1101,22 @@ textarea.form-control { min-height: 72px; line-height: 1.55; }
 }
 .bulk-bar.show { display: flex; }
 .bulk-bar .count { font-weight: 600; color: var(--sw-primary-text); }
+.bulk-bar [data-select-matching] { font-size: 13px; font-weight: 600; text-decoration: underline; }
+
+/* Bulk check progress */
+.check-progress { padding: 12px 16px; border-bottom: 1px solid var(--sw-border); background: var(--sw-card); font-size: 13px; }
+.check-progress .cp-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.check-progress .cp-head > .bi { font-size: 18px; }
+.check-progress .cp-title { display: flex; flex-direction: column; min-width: 0; flex: 1 1 240px; }
+.check-progress .cp-meta { font-size: 12px; color: var(--sw-muted); font-variant-numeric: tabular-nums; }
+.check-progress .cp-stats { display: flex; gap: 14px; flex-wrap: wrap; font-variant-numeric: tabular-nums; }
+.check-progress .cp-bar { height: 6px; margin-top: 10px; background: var(--sw-border); }
+.check-progress .cp-bar .progress-bar { background: var(--sw-primary); transition: width .4s ease; }
+.check-progress .cp-log { list-style: none; margin: 10px 0 0; padding: 0; max-height: 132px; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 4px 16px; }
+.check-progress .cp-log li { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 12.5px; }
+.check-progress .cp-log .n { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 45%; }
+.check-progress .cp-log .d { color: var(--sw-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@media (prefers-reduced-motion: reduce) { .check-progress .cp-bar .progress-bar { transition: none; } }
 
 /* Pagination */
 .sw-pagination {
@@ -1678,6 +1698,8 @@ button.metric-item[aria-pressed="true"] { background: var(--sw-primary-soft); bo
     html.sidebar-collapsed .sw-nav-link span,
     html.sidebar-collapsed .sw-nav-count,
     html.sidebar-collapsed .sw-user-text { display: block; }
+    html.sidebar-collapsed .sw-version span { display: inline; }
+    html.sidebar-collapsed .sw-version { justify-content: flex-start; padding: 2px 8px 8px; }
     html.sidebar-collapsed .sw-brand { padding: 0 16px; justify-content: flex-start; }
     html.sidebar-collapsed .sw-brand .sw-logo { display: block; }
     html.sidebar-collapsed .sw-brand .sw-logo-mark { display: none; }
@@ -1969,6 +1991,21 @@ a.metric-item .metric-sub { color: var(--sw-muted); }
 .update-icon.tone-warning { background: var(--sw-warning-soft); color: var(--sw-warning-text); }
 .change-list { margin: 0; padding-left: 18px; font-size: 13.5px; color: var(--sw-text-secondary); }
 .change-list li + li { margin-top: 4px; }
+.version-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.version-tile { display: flex; flex-direction: column; gap: 4px; padding: 14px 16px; background: var(--sw-card); border: 1px solid var(--sw-border); border-radius: var(--sw-radius-panel); min-width: 0; }
+.version-tile .label { font-size: 11.5px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--sw-muted); }
+.version-tile .value { font-size: 20px; font-weight: 700; color: var(--sw-text); font-variant-numeric: tabular-nums; }
+.version-tile .value .sw-pill { font-size: 13px; }
+.version-tile .hint { font-size: 12.5px; color: var(--sw-text-secondary); overflow-wrap: anywhere; }
+@media (max-width: 640px) { .version-grid { grid-template-columns: 1fr; } }
+.release-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 2px; }
+.release-head h4 { font-size: 16px; margin: 0; font-variant-numeric: tabular-nums; }
+.release-group { display: grid; grid-template-columns: 76px 1fr; gap: 8px; margin-top: 8px; align-items: start; }
+.release-tag { display: inline-block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; padding: 2px 6px; border-radius: 4px; text-align: center; }
+.release-tag.tag-added { background: var(--sw-success-soft); color: var(--sw-success); }
+.release-tag.tag-improved { background: var(--sw-info-soft); color: var(--sw-info); }
+.release-tag.tag-fixed { background: var(--sw-warning-soft); color: var(--sw-warning-text); }
+@media (max-width: 480px) { .release-group { grid-template-columns: 1fr; gap: 4px; } .release-tag { justify-self: start; } }
 .divider-top { border-top: 1px solid var(--sw-border); margin-top: 16px; padding-top: 16px; }
 
 /* Core Web Vitals & screenshots */

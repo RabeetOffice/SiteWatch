@@ -189,6 +189,19 @@ docs/                Installation guide and screenshots
 tests/               Unit, scenario, and lifecycle tests
 ```
 
+### Versions and releases
+
+SiteWatch uses [semantic versioning](https://semver.org/) and records every release in [CHANGELOG.md](CHANGELOG.md).
+The running version and release notes appear under **System → Updates**, next to the database version.
+
+To ship a release:
+
+1. Add the release at the top of `Release::NOTES` in [`app/Core/Release.php`](app/Core/Release.php) and set `Release::VERSION`.
+2. If it changes the database, add a step to [`App\Core\Migrator`](app/Core/Migrator.php) (`steps()`, `STEPS` with
+   `'release' => 'x.y.z'`, and bump `VERSION`), update `database/schema.sql`, and set the release's `schema` number.
+3. Add the same notes to `CHANGELOG.md`. `composer test` fails if the version, notes, changelog and schema disagree.
+4. Deploy, then open **System → Updates** and click **Update database** if a schema change is pending.
+
 ## Product direction
 
 The proposed direction is a general-purpose platform for agencies, brands, and multi-site teams, with a useful self-hosted edition and an optional managed service. These items are **not implemented commitments or release dates**:

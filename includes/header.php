@@ -67,6 +67,9 @@ $swConfig = [
     'baseUrl'  => base_url(),
     'csrf'     => $csrfToken,
     'refresh'  => max(15, (int) setting('dashboard_refresh_seconds', 30)),
+    'version'  => (string) config('app.version', ''),
+    // Upper bound for one website check (seconds), used for the bulk-check time estimate.
+    'requestTimeout' => (int) setting('request_timeout', 30),
     'timezone' => app_timezone()->getName(),
     'page'     => $activeNav,
     'user'     => ['name' => (string) $currentUser['name'], 'email' => (string) $currentUser['email'], 'role' => (string) ($currentUser['role_name'] ?? '')],

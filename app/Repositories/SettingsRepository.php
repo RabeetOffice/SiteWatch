@@ -13,6 +13,9 @@ use App\Core\Database;
  */
 final class SettingsRepository
 {
+    /** Allowed activity log retention periods in days; 0 keeps entries forever. */
+    public const ACTIVITY_RETENTION_CHOICES = [7, 15, 30, 0];
+
     /**
      * Settings stored encrypted. Never returned to the browser.
      *
@@ -50,7 +53,7 @@ final class SettingsRepository
         'critical_performance_threshold' => 10000,  // ms  (>= critical -> CRITICAL_PERFORMANCE failure)
         'concurrency'                    => 15,     // websites per concurrent batch
         'check_retention_days'           => 30,
-        'activity_retention_days'        => 90,
+        'activity_retention_days'        => 30,     // days; 0 = keep forever (see ACTIVITY_RETENTION_CHOICES)
         'notification_retention_days'    => 90,
         'heartbeat_threshold_minutes'    => 3,      // engine considered stopped after this many minutes without a run
         'ssl_check_interval_hours'       => 12,

@@ -107,6 +107,12 @@ switch ($action) {
         break;
 }
 
-ActivityService::log('bulk.action', sprintf('Bulk action "%s" on %d website(s)', $action, $count), null, ['action' => $action, 'ids' => $ids]);
+// A large "Check now" arrives in several batches; the page sends the run size with the first one so the
+// activity log gets one entry per run instead of one per batch.
+$batch = Request::int('batch', 1);
+if ($action !== 'check' || $batch <= 1) {
+    $runTotal = max($count, Request::int('run_total', $count));
+    ActivityService::log('bulk.action', sprintf('Bulk action "%s" on %d website(s)', $action, $runTotal), null, ['action' => $action, 'ids' => $ids, 'run_total' => $runTotal]);
+}
 
 Response::success($message, array_merge(['count' => $count, 'action' => $action], $extra ?? []));

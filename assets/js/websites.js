@@ -47,6 +47,8 @@
         this.rows = [];
         this.selected = new Set();
         this.busy = new Set();
+        this.queued = new Set();
+        this.bulkRun = null;
         this.total = 0;
         this.counts = {};
         this.clients = [];
@@ -92,6 +94,7 @@
         if (o.bulk) {
             html += '<div class="bulk-bar" data-bulk role="region" aria-label="Bulk actions">' +
                 '<span class="count" data-bulk-count>0 selected</span>' +
+                '<button type="button" class="btn btn-sm btn-link px-1" data-select-matching hidden></button>' +
                 (this.can.check ? '<button type="button" class="btn btn-sm btn-light" data-bulk-action="check"><i class="bi bi-arrow-repeat"></i> Check now</button>' : '') +
                 (this.can.manage
                     ? '<button type="button" class="btn btn-sm btn-light" data-bulk-action="pause"><i class="bi bi-pause"></i> Pause</button>' +
@@ -204,6 +207,9 @@
                 self.syncSelection();
             });
         }
+
+        const selectMatching = el.querySelector('[data-select-matching]');
+        if (selectMatching) selectMatching.addEventListener('click', function () { self.selectAllMatching(); });
 
         SW.qsa('[data-bulk-action]', el).forEach(function (b) {
             b.addEventListener('click', function () { self.bulk(b.getAttribute('data-bulk-action')); });
@@ -381,6 +387,7 @@
     WebsiteTable.prototype.rowHtml = function (w) {
         const o = this.opts;
         const busy = this.busy.has(w.id);
+        const queued = !busy && this.queued.has(w.id);
         const selected = this.selected.has(w.id);
 
         let statusHtml = SW.badge(w.status, w.status_label, w.severity);
@@ -418,6 +425,7 @@
             '<td>' + statusHtml + '</td>' +
             '<td class="num">' + (busy
                 ? '<span class="spinner-border spinner-border-sm text-muted" role="status" aria-label="Checking"></span>'
+                : queued ? '<span class="fs-12 text-faint">Queued</span>'
                 : SW.responseTime(w.last_response_time) + (w.last_http_status ? '<div class="fs-12 text-muted">HTTP ' + SW.httpCode(w.last_http_status) + '</div>' : '')) + '</td>' +
             '<td class="hide-mobile">' + sslCell(w.ssl) + '</td>' +
             '<td class="num"><span class="fw-600">' + SW.escape(w.uptime_30d_label) + '</span></td>' +
@@ -425,7 +433,7 @@
             (w.monitoring_enabled ? '<div class="fs-12 text-muted">every ' + w.check_interval + ' min</div>' : '<div class="fs-12 text-muted">paused</div>') + '</td>' +
             '<td class="actions"><div class="row-actions">' +
             (this.can.check
-                ? '<button type="button" class="btn-icon btn-sm bordered" data-row-action="check" data-id="' + w.id + '"' + (busy ? ' disabled' : '') +
+                ? '<button type="button" class="btn-icon btn-sm bordered" data-row-action="check" data-id="' + w.id + '"' + (busy || queued ? ' disabled' : '') +
                   ' data-bs-toggle="tooltip" title="Check now" aria-label="Check ' + SW.escape(w.name) + ' now">' +
                   (busy ? '<span class="spinner-border spinner-border-sm" aria-hidden="true"></span>' : '<i class="bi bi-arrow-repeat" aria-hidden="true"></i>') +
                   '</button>'
@@ -471,6 +479,13 @@
             bar.classList.toggle('show', count > 0);
             const c = bar.querySelector('[data-bulk-count]');
             if (c) c.textContent = count + (count === 1 ? ' website selected' : ' websites selected');
+            const more = bar.querySelector('[data-select-matching]');
+            if (more) {
+                const pageSelected = this.rows.length > 0 && this.rows.every(function (r) { return this.selected.has(r.id); }, this);
+                const offer = pageSelected && this.total > this.rows.length && count < this.total;
+                more.hidden = !offer;
+                if (offer) more.textContent = 'Select all ' + this.total + ' matching websites';
+            }
         }
         SW.qsa('[data-row]', this.el).forEach(function (tr) {
             tr.classList.toggle('selected', this.selected.has(parseInt(tr.getAttribute('data-row'), 10)));
@@ -540,10 +555,15 @@
         }
     };
 
-    // Maximum simultaneous single-website checks started from this table.
+    // Maximum simultaneous single-website checks started from row buttons.
     const CHECK_CONCURRENCY = 2;
-    // Websites per bulk "Check now" request (must not exceed the server's limit in api/websites/bulk.php).
-    const BULK_CHECK_CHUNK = 5;
+    // Bulk "Check now": parallel requests x websites per request. Each request probes its websites concurrently on
+    // the server, so fast websites are never held back by one slow website for long. Keep BULK_CHUNK within the
+    // server limit in api/websites/bulk.php and BULK_WORKERS low enough for shared hosting.
+    const BULK_WORKERS = 5;
+    const BULK_CHUNK = 2;
+    // Per-request overhead added to the estimate (bootstrap, database writes, network round trip).
+    const REQUEST_OVERHEAD_MS = 700;
 
     WebsiteTable.prototype.throttled = function (task) {
         const self = this;
@@ -567,47 +587,219 @@
         }
     };
 
+    /** Expected duration of one check request, from the websites' last response times. */
+    function chunkEstimateMs(chunk, meta) {
+        const cap = Math.max(5, (SW.config.requestTimeout || 30)) * 1000;
+        let slowest = 0;
+        chunk.forEach(function (id) {
+            const m = meta.get(id);
+            const rt = m && m.last_response_time ? m.last_response_time : 3000;
+            slowest = Math.max(slowest, Math.min(cap, Math.max(300, rt)));
+        });
+        return slowest + REQUEST_OVERHEAD_MS;
+    }
+
+    /** Wall-clock time for a list of chunk durations shared by BULK_WORKERS parallel workers. */
+    function makespan(durations) {
+        const lanes = new Array(Math.min(BULK_WORKERS, Math.max(1, durations.length))).fill(0);
+        durations.forEach(function (d) {
+            let i = 0;
+            for (let k = 1; k < lanes.length; k++) if (lanes[k] < lanes[i]) i = k;
+            lanes[i] += d;
+        });
+        return Math.max.apply(null, lanes);
+    }
+
+    function fmtDuration(ms) {
+        const s = Math.max(0, Math.round(ms / 1000));
+        if (s < 60) return s + ' s';
+        return Math.floor(s / 60) + ' min ' + (s % 60 ? (s % 60) + ' s' : '');
+    }
+
+    WebsiteTable.prototype.progressPanel = function () {
+        let panel = this.el.querySelector('[data-check-progress]');
+        if (!panel) {
+            panel = document.createElement('div');
+            panel.className = 'check-progress';
+            panel.setAttribute('data-check-progress', '');
+            panel.setAttribute('role', 'region');
+            panel.setAttribute('aria-label', 'Check progress');
+            const bar = this.el.querySelector('[data-bulk]');
+            if (bar) bar.insertAdjacentElement('afterend', panel);
+            else this.el.insertBefore(panel, this.el.firstChild);
+            const self = this;
+            panel.addEventListener('click', function (ev) {
+                if (ev.target.closest('[data-progress-stop]')) { self.bulkRun && (self.bulkRun.cancelled = true); self.renderProgress(); }
+                if (ev.target.closest('[data-progress-close]')) { panel.remove(); }
+            });
+        }
+        return panel;
+    };
+
+    WebsiteTable.prototype.renderProgress = function () {
+        const run = this.bulkRun;
+        if (!run) return;
+        const panel = this.progressPanel();
+        const done = run.done;
+        const pct = run.total ? Math.round(done / run.total * 100) : 0;
+        const elapsed = (run.finishedAt || Date.now()) - run.startedAt;
+        let timeText;
+        if (run.finishedAt) {
+            timeText = 'Finished in ' + fmtDuration(elapsed);
+        } else if (run.cancelled) {
+            timeText = 'Stopping after the checks in progress…';
+        } else {
+            timeText = fmtDuration(elapsed) + ' elapsed · about ' + fmtDuration(this.remainingEstimate()) + ' left';
+        }
+        const title = run.finishedAt
+            ? (run.cancelled ? 'Stopped' : 'Check complete') + ': ' + done + ' of ' + run.total + ' websites checked'
+            : 'Checking ' + run.total + ' website' + (run.total === 1 ? '' : 's') + '…';
+        const failTone = run.failing ? 'text-danger' : 'text-muted';
+
+        panel.innerHTML =
+            '<div class="cp-head">' +
+                (run.finishedAt
+                    ? '<i class="bi ' + (run.errors || run.failing ? 'bi-exclamation-circle text-warning' : 'bi-check-circle-fill text-success') + '" aria-hidden="true"></i>'
+                    : '<span class="spinner-border spinner-border-sm text-primary" aria-hidden="true"></span>') +
+                '<div class="cp-title"><b>' + SW.escape(title) + '</b>' +
+                '<span class="cp-meta">' + SW.escape(timeText) +
+                    (run.estimateMs && !run.finishedAt ? ' · estimated total ' + fmtDuration(run.estimateMs) : '') + '</span></div>' +
+                '<div class="cp-stats">' +
+                    '<span><b>' + done + '</b> / ' + run.total + '</span>' +
+                    '<span class="' + failTone + '"><b>' + run.failing + '</b> failing</span>' +
+                    (run.opened ? '<span class="text-danger"><b>' + run.opened + '</b> incident' + (run.opened === 1 ? '' : 's') + '</span>' : '') +
+                    (run.resolved ? '<span class="text-success"><b>' + run.resolved + '</b> recovered</span>' : '') +
+                    (run.errors ? '<span class="text-warning"><b>' + run.errors + '</b> not checked</span>' : '') +
+                '</div>' +
+                (run.finishedAt
+                    ? '<button type="button" class="btn-icon btn-sm" data-progress-close aria-label="Close"><i class="bi bi-x-lg" aria-hidden="true"></i></button>'
+                    : '<button type="button" class="btn btn-sm btn-light" data-progress-stop' + (run.cancelled ? ' disabled' : '') + '><i class="bi bi-stop-circle" aria-hidden="true"></i> Stop</button>') +
+            '</div>' +
+            '<div class="progress cp-bar" role="progressbar" aria-label="Websites checked" aria-valuemin="0" aria-valuemax="' + run.total + '" aria-valuenow="' + done + '">' +
+                '<div class="progress-bar' + (run.finishedAt ? '' : ' progress-bar-striped progress-bar-animated') + '" style="width:' + pct + '%"></div></div>' +
+            (run.log.length
+                ? '<ul class="cp-log" aria-live="polite">' + run.log.slice(0, 40).map(function (entry) {
+                    return '<li><i class="bi ' + entry.icon + '" aria-hidden="true"></i><span class="n">' + SW.escape(entry.name) + '</span>' +
+                        '<span class="d">' + SW.escape(entry.detail) + '</span></li>';
+                }).join('') + '</ul>'
+                : '');
+    };
+
+    /** Remaining time: estimate for the unfinished chunks, scaled by how fast the finished ones really were. */
+    WebsiteTable.prototype.remainingEstimate = function () {
+        const run = this.bulkRun;
+        const pending = run.chunks.slice(run.next).map(function (c) { return c.estimate; });
+        const inFlight = run.inFlight.map(function (c) { return Math.max(0, c.estimate - (Date.now() - c.startedAt)); });
+        const ratio = run.estimatedDone > 0 ? Math.min(3, Math.max(0.3, run.actualDone / run.estimatedDone)) : 1;
+        return makespan(inFlight.concat(pending)) * ratio;
+    };
+
     WebsiteTable.prototype.bulkCheck = async function (ids, buttons) {
         const self = this;
-        const button = this.el.querySelector('[data-bulk-action="check"]');
-        const label = button ? button.innerHTML : '';
-        const totals = { checked: 0, failing: 0, opened: 0, resolved: 0, errors: 0 };
-        ids.forEach(function (id) { self.busy.add(id); });
-        this.rows.forEach(function (r) { if (self.busy.has(r.id)) self.updateRow(r); });
-        try {
-            for (let i = 0; i < ids.length; i += BULK_CHECK_CHUNK) {
-                const chunk = ids.slice(i, i + BULK_CHECK_CHUNK);
-                if (button) button.innerHTML = '<span class="spinner-border spinner-border-sm" aria-hidden="true"></span> Checking ' + Math.min(i + chunk.length, ids.length) + ' / ' + ids.length;
+        const meta = this.meta || new Map();
+        this.rows.forEach(function (r) { meta.set(r.id, { name: r.name, last_response_time: r.last_response_time }); });
+
+        // Slowest websites first so they overlap with the fast ones instead of finishing last.
+        const ordered = ids.slice().sort(function (a, b) {
+            return ((meta.get(b) || {}).last_response_time || 3000) - ((meta.get(a) || {}).last_response_time || 3000);
+        });
+        const chunks = [];
+        for (let i = 0; i < ordered.length; i += BULK_CHUNK) {
+            const part = ordered.slice(i, i + BULK_CHUNK);
+            chunks.push({ ids: part, estimate: chunkEstimateMs(part, meta) });
+        }
+
+        const run = this.bulkRun = {
+            total: ids.length, done: 0, failing: 0, opened: 0, resolved: 0, errors: 0,
+            chunks: chunks, next: 0, inFlight: [], log: [], cancelled: false,
+            startedAt: Date.now(), finishedAt: null, estimatedDone: 0, actualDone: 0,
+            estimateMs: makespan(chunks.map(function (c) { return c.estimate; })),
+        };
+        this.queued = new Set(ids);
+        this.rows.forEach(function (r) { if (self.queued.has(r.id)) self.updateRow(r); });
+        this.renderProgress();
+        const ticker = setInterval(function () { self.renderProgress(); }, 1000);
+
+        async function worker() {
+            while (!run.cancelled && run.next < run.chunks.length) {
+                const batch = ++run.next;
+                const chunk = run.chunks[batch - 1];
+                chunk.startedAt = Date.now();
+                run.inFlight.push(chunk);
+                chunk.ids.forEach(function (id) { self.queued.delete(id); self.busy.add(id); });
+                chunk.ids.forEach(function (id) { const r = self.rows.find(function (x) { return x.id === id; }); if (r) self.updateRow(r); });
                 try {
-                    const res = await SW.api('api/websites/bulk.php', { method: 'POST', body: { ids: chunk, action: 'check' } });
+                    const res = await SW.api('api/websites/bulk.php', { method: 'POST', body: { ids: chunk.ids, action: 'check', batch: batch, run_total: run.total } });
                     const d = res.data || {};
-                    totals.checked += d.checked || 0;
-                    totals.failing += d.failing || 0;
-                    totals.opened += d.incidents_opened || 0;
-                    totals.resolved += d.incidents_resolved || 0;
-                    (d.websites || []).forEach(function (w) { self.busy.delete(w.id); self.updateRow(w); });
+                    run.failing += d.failing || 0;
+                    run.opened += d.incidents_opened || 0;
+                    run.resolved += d.incidents_resolved || 0;
+                    (d.websites || []).forEach(function (w) {
+                        self.busy.delete(w.id);
+                        meta.set(w.id, { name: w.name, last_response_time: w.last_response_time });
+                        self.updateRow(w);
+                        run.log.unshift({
+                            icon: w.severity === 'down' ? 'bi-x-circle-fill text-danger' : w.severity === 'warning' ? 'bi-exclamation-triangle-fill text-warning' : 'bi-check-circle-fill text-success',
+                            name: w.name,
+                            detail: w.status_label + (w.last_http_status ? ' · HTTP ' + w.last_http_status : '') + (w.last_response_time !== null ? ' · ' + SW.fmt.ms(w.last_response_time) : ''),
+                        });
+                    });
+                    run.done += d.checked || chunk.ids.length;
                 } catch (e) {
-                    totals.errors += chunk.length;
-                    if (e.status === 401 || e.status === 403) throw e;
+                    if (e.status === 401 || e.status === 403) { run.cancelled = true; run.fatal = e; }
+                    run.errors += chunk.ids.length;
+                    run.done += chunk.ids.length;
+                    chunk.ids.forEach(function (id) {
+                        run.log.unshift({ icon: 'bi-dash-circle text-muted', name: (meta.get(id) || {}).name || ('#' + id), detail: 'Not checked: ' + e.message });
+                    });
                 } finally {
-                    chunk.forEach(function (id) {
+                    run.inFlight.splice(run.inFlight.indexOf(chunk), 1);
+                    run.estimatedDone += chunk.estimate;
+                    run.actualDone += Date.now() - chunk.startedAt;
+                    chunk.ids.forEach(function (id) {
                         if (self.busy.delete(id)) {
                             const r = self.rows.find(function (x) { return x.id === id; });
                             if (r) self.updateRow(r);
                         }
                     });
+                    self.renderProgress();
                 }
             }
-            const msg = 'Checked ' + totals.checked + ' website' + (totals.checked === 1 ? '' : 's') + ': ' + totals.failing + ' failing' +
-                (totals.opened ? ', ' + totals.opened + ' incident(s) opened' : '') + (totals.resolved ? ', ' + totals.resolved + ' recovered' : '') + '.' +
-                (totals.errors ? ' ' + totals.errors + ' could not be checked, try again shortly.' : '');
-            SW.toast(msg, totals.errors ? 'warning' : 'success');
+        }
+
+        try {
+            const workers = [];
+            for (let i = 0; i < Math.min(BULK_WORKERS, chunks.length); i++) workers.push(worker());
+            await Promise.all(workers);
         } finally {
+            clearInterval(ticker);
+            run.finishedAt = Date.now();
+            this.queued.clear();
             ids.forEach(function (id) { self.busy.delete(id); });
-            if (button) button.innerHTML = label;
             buttons.forEach(function (b) { b.disabled = false; });
+            this.renderProgress();
+            if (run.fatal) SW.toast(run.fatal.message, 'danger');
+            else SW.toast('Checked ' + (run.done - run.errors) + ' of ' + run.total + ' websites in ' + fmtDuration(run.finishedAt - run.startedAt) + ': ' + run.failing + ' failing.', run.errors || run.failing ? 'warning' : 'success');
+            this.bulkRun = null;
+            this.lastRun = run;
             await this.load();
             document.dispatchEvent(new CustomEvent('sw:website-changed', { detail: { bulk: true } }));
+        }
+    };
+
+    /** Extend the selection from this page to every website matching the current search and filters. */
+    WebsiteTable.prototype.selectAllMatching = async function () {
+        const self = this;
+        try {
+            const res = await SW.api('api/websites/list.php', { query: { select: 'all', q: this.state.q, filter: this.state.filter, client: this.state.client } });
+            this.meta = this.meta || new Map();
+            (res.data.items || []).forEach(function (w) {
+                self.selected.add(w.id);
+                self.meta.set(w.id, { name: w.name, last_response_time: w.last_response_time });
+            });
+            this.syncSelection();
+        } catch (e) {
+            SW.toast(e.message, 'danger');
         }
     };
 
@@ -626,6 +818,7 @@
         const buttons = SW.qsa('[data-bulk-action]', this.el);
         buttons.forEach(function (b) { b.disabled = true; });
         if (action === 'check') {
+            if (this.bulkRun) { buttons.forEach(function (b) { b.disabled = false; }); return; }
             try {
                 await this.bulkCheck(ids, buttons);
             } catch (e) {

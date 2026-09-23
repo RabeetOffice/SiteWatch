@@ -148,6 +148,7 @@ CREATE TABLE IF NOT EXISTS `website_checks` (
   `checked_at`         DATETIME NOT NULL,
   PRIMARY KEY (`id`),
   KEY `idx_checks_website_time` (`website_id`, `checked_at`),
+  KEY `idx_checks_website_failure` (`website_id`, `is_failure`, `checked_at`),
   KEY `idx_checks_time` (`checked_at`),
   CONSTRAINT `fk_checks_website` FOREIGN KEY (`website_id`) REFERENCES `websites` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

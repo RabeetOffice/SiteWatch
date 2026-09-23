@@ -15,6 +15,7 @@ use App\Notifications\EmailNotifier;
 use App\Notifications\NotificationManager;
 use App\Notifications\WhatsAppNotifier;
 use App\Performance\ScreenshotCapturer;
+use App\Repositories\ActivityRepository;
 use App\Repositories\SettingsRepository;
 use App\Repositories\WebsiteRepository;
 use App\Services\ActivityService;
@@ -64,7 +65,7 @@ switch ($section) {
         $v->integer('critical_performance_threshold', 500, 120000, 'Critical performance threshold');
         $v->integer('concurrency', 1, 50, 'Concurrency');
         $v->in('check_retention_days', [7, 30, 60, 90], 'Check retention');
-        $v->integer('activity_retention_days', 7, 3650, 'Activity retention');
+        $v->in('activity_retention_days', SettingsRepository::ACTIVITY_RETENTION_CHOICES, 'Activity retention');
         $v->integer('notification_retention_days', 7, 3650, 'Notification retention');
         $v->integer('heartbeat_threshold_minutes', 1, 60, 'Engine health threshold');
         $v->integer('ssl_check_interval_hours', 1, 168, 'SSL re-check interval');
@@ -275,8 +276,20 @@ if ($v->fails()) {
     Response::error('Please correct the highlighted fields.', $v->errors(), 422);
 }
 
+$previousActivityDays = $settings->getInt('activity_retention_days', 30);
 $settings->setMany($values);
 $settings->reload();
+
+// A shorter activity log period takes effect now instead of at the next daily cleanup.
+$purgedActivity = 0;
+$activityDays = $settings->getInt('activity_retention_days', 30);
+if ($section === 'monitoring' && $activityDays > 0 && ($previousActivityDays === 0 || $activityDays < $previousActivityDays)) {
+    try {
+        $purgedActivity = (new ActivityRepository(App::db()))->purgeOlderThan(utc_now()->modify("-{$activityDays} days")->format('Y-m-d H:i:s'));
+    } catch (Throwable $e) {
+        App::logger('app')->warning('Activity purge after settings change failed', ['error' => $e->getMessage()]);
+    }
+}
 App::resetTimezone();
 
 // Only the names of the changed settings are recorded, and never the encrypted ones.
@@ -284,4 +297,5 @@ $logged = array_diff_key($values, array_flip(SettingsRepository::SECRET_KEYS));
 $label = NotificationManager::CHANNEL_LABELS[$section] ?? ucfirst($section);
 ActivityService::log('settings.changed', $label . ' settings updated', null, ['section' => $section, 'keys' => array_keys($logged)]);
 
-Response::success($label . ' settings saved.', ['section' => $section, 'reload' => $reload, 'settings' => $settings->allForDisplay()]);
+$message = $label . ' settings saved.' . ($purgedActivity > 0 ? " {$purgedActivity} old activity " . ($purgedActivity === 1 ? 'entry was' : 'entries were') . ' removed.' : '');
+Response::success($message, ['section' => $section, 'reload' => $reload, 'settings' => $settings->allForDisplay(), 'activity_purged' => $purgedActivity]);

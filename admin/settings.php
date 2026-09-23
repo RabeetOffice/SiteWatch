@@ -274,10 +274,10 @@ $timezones = DateTimeZone::listIdentifiers();
                     </div>
                     <div class="col-md-4">
                         <label class="form-label" for="activity_retention_days">Keep activity log</label>
-                        <div class="input-group">
-                            <input type="number" class="form-control" id="activity_retention_days" name="activity_retention_days" min="7" max="3650" value="<?= (int) $s['activity_retention_days'] ?>">
-                            <span class="input-group-text">days</span>
-                        </div>
+                        <select class="form-select" id="activity_retention_days" name="activity_retention_days">
+                            <?php foreach (\App\Repositories\SettingsRepository::ACTIVITY_RETENTION_CHOICES as $d): ?><option value="<?= $d ?>"<?= (int) $s['activity_retention_days'] === $d ? ' selected' : '' ?>><?= $d === 0 ? 'Unlimited' : $d . ' days' ?></option><?php endforeach; ?>
+                        </select>
+                        <div class="form-text">Older entries are deleted every day, and right away when you shorten the period.</div>
                     </div>
                     <div class="col-md-4">
                         <label class="form-label" for="notification_retention_days">Keep delivery history</label>

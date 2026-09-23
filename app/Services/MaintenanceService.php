@@ -44,14 +44,18 @@ final class MaintenanceService
 
         try {
             $checkDays = $this->clampRetention($this->settings->getInt('check_retention_days', 30), 7, 365);
-            $activityDays = $this->clampRetention($this->settings->getInt('activity_retention_days', 90), 7, 3650);
+            // 0 keeps the activity log forever.
+            $activityDays = $this->settings->getInt('activity_retention_days', 30);
+            $activityDays = $activityDays <= 0 ? 0 : $this->clampRetention($activityDays, 7, 30);
             $notificationDays = $this->clampRetention($this->settings->getInt('notification_retention_days', 90), 7, 3650);
 
             $checks = new CheckRepository($this->db);
             $result['checks'] = $checks->purgeOlderThan(utc_now()->modify("-{$checkDays} days")->format('Y-m-d H:i:s'));
 
-            $activity = new ActivityRepository($this->db);
-            $result['activity'] = $activity->purgeOlderThan(utc_now()->modify("-{$activityDays} days")->format('Y-m-d H:i:s'));
+            if ($activityDays > 0) {
+                $activity = new ActivityRepository($this->db);
+                $result['activity'] = $activity->purgeOlderThan(utc_now()->modify("-{$activityDays} days")->format('Y-m-d H:i:s'));
+            }
 
             $notifications = new NotificationRepository($this->db);
             $result['notifications'] = $notifications->purgeOlderThan(utc_now()->modify("-{$notificationDays} days")->format('Y-m-d H:i:s'));

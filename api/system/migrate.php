@@ -35,8 +35,8 @@ if ($applied === []) {
     Response::success('The database was already up to date.', ['version' => $before, 'applied' => []]);
 }
 
-ActivityService::log('system.updated', sprintf('Database updated from version %d to %d', $before, Migrator::VERSION), null, [
+ActivityService::log('system.updated', sprintf('Database updated from %s (schema %d) to %s (schema %d)', Migrator::releaseFor($before), $before, Migrator::releaseFor(Migrator::VERSION), Migrator::VERSION), null, [
     'versions' => implode(', ', $applied),
 ]);
 
-Response::success('Database updated to version ' . Migrator::VERSION . '.', ['version' => Migrator::VERSION, 'applied' => $applied]);
+Response::success('Database updated to ' . Migrator::releaseFor(Migrator::VERSION) . ' (schema ' . Migrator::VERSION . ').', ['version' => Migrator::VERSION, 'release' => Migrator::releaseFor(Migrator::VERSION), 'applied' => $applied]);

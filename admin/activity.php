@@ -9,6 +9,13 @@ use App\Services\ActivityService;
 require_permission('activity.view');
 
 $pageTitle = 'Activity Log';
+$retentionDays = \App\Core\App::settings()->getInt('activity_retention_days', 30);
+$pageSubtitle = $retentionDays > 0
+    ? "Entries older than {$retentionDays} days are removed automatically."
+    : 'Entries are kept forever.';
+if (can('settings.manage')) {
+    $pageSubtitle .= ' Change this under Monitoring Settings → Data retention.';
+}
 $activeNav = 'activity';
 $pageScripts = ['activity.js'];
 $pageData = ['actions' => ActivityService::ACTION_LABELS];

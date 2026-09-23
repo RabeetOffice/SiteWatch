@@ -64,6 +64,12 @@ $nav = array_values(array_filter($nav, static fn (array $group): bool => $group[
         <?php endforeach; ?>
     </nav>
     <div class="sw-sidebar-footer">
+        <?php $swVersion = 'v' . (string) config('app.version', ''); ?>
+        <?php if (can('*')): ?>
+            <a class="sw-version" href="<?= e(base_url('admin/updates.php')) ?>" title="Release notes and database version"><i class="bi bi-tag" aria-hidden="true"></i><span>SiteWatch <?= e($swVersion) ?></span></a>
+        <?php else: ?>
+            <span class="sw-version"><i class="bi bi-tag" aria-hidden="true"></i><span>SiteWatch <?= e($swVersion) ?></span></span>
+        <?php endif; ?>
         <div class="d-flex align-items-center gap-1">
             <a class="sw-user<?= $activeNav === 'profile' ? ' active' : '' ?>" href="<?= e(base_url('admin/profile.php')) ?>"
                data-bs-toggle="tooltip" data-bs-placement="right" title="Profile">
