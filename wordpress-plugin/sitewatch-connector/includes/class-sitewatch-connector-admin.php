@@ -231,6 +231,8 @@ final class SiteWatch_Connector_Admin
                 <li>Changes: plugins and themes installed, updated or switched, WordPress updates, administrator sign-ins, new administrators and changes to the site address or registration settings.</li>
                 <li>The number of failed sign-ins and the IP addresses they came from.</li>
                 <li>Whether wp-config.php or .htaccess changed: size, time and a short fingerprint, never the contents.</li>
+                <li>Page generation time, query count and memory of a sample of requests (page paths without query strings), and database queries slower than 50 ms with all values replaced by "?" (only when SAVEQUERIES is on).</li>
+                <li>If switched on in SiteWatch: PHP warnings, notices and deprecations with file, line and a count.</li>
             </ul>
             <p>Never sent: passwords, content, orders, customer or visitor data.</p>
         </div>

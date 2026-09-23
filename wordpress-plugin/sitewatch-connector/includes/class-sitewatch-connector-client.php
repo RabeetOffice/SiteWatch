@@ -160,6 +160,9 @@ if (!class_exists('SiteWatch_Connector_Client')) {
                 if ($ok && class_exists('SiteWatch_Connector_Updater')) {
                     SiteWatch_Connector_Updater::handle_reply($data);
                 }
+                if ($ok && class_exists('SiteWatch_Connector_Insights')) {
+                    SiteWatch_Connector_Insights::apply_reply($data);
+                }
             }
 
             return array('ok' => $ok, 'code' => $code, 'error' => $ok ? '' : $error, 'data' => $data);

@@ -13,7 +13,7 @@
     const VULN_TONES = { critical: 'danger', high: 'danger', medium: 'warning', low: 'neutral', none: 'neutral' };
     const TABS = [
         ['errors', 'Errors'], ['security', 'Security'], ['updates', 'Updates'], ['plugins', 'Plugins & themes'],
-        ['activity', 'Activity'], ['environment', 'Environment'],
+        ['performance', 'Performance'], ['activity', 'Activity'], ['environment', 'Environment'],
     ];
 
     const id = SW.page.id;
@@ -131,9 +131,33 @@
             '<span><i class="bi bi-broadcast text-muted" aria-hidden="true"></i> Last SiteWatch check that reached WordPress: <b>' + probe + '</b></span></div>';
     }
 
+    /** Daily summary of PHP warnings, notices and deprecations (plugin 1.3.0+, switched on in Monitoring Settings). */
+    function phpWarnings() {
+        const w = data.snapshot && data.snapshot.php_warnings;
+        let html = '<h4 class="wp-subhead mb-2 mt-4">PHP warnings and deprecations</h4>';
+        if (!w || !w.enabled) {
+            return html + '<p class="fs-13 text-muted mb-0">' + (data.insights && data.insights.php_warnings
+                ? 'Switched on: the first summary arrives with the next daily health report (plugin 1.3.0 or later).'
+                : 'Off. Turn on "Collect PHP warnings and deprecations" under Monitoring Settings → WordPress plugin to see what will break on the next PHP version.') + '</p>';
+        }
+        if (!w.entries.length) {
+            return html + '<p class="fs-13 text-success mb-0"><i class="bi bi-check2-circle" aria-hidden="true"></i> No PHP warnings' + (w.since ? ' since ' + ago(w.since) : '') + '.</p>';
+        }
+        const tones = { Warning: 'warning', Notice: 'neutral', Deprecated: 'info' };
+        return html + '<p class="fs-12 text-muted mb-2">At least ' + esc(w.total.toLocaleString()) + ' in ' + esc(w.places) + ' places since ' + ago(w.since) + '. Deprecations become errors in a later PHP version.</p>' +
+            '<div class="sw-table-wrap"><table class="sw-table compact"><thead><tr><th>Type</th><th>Source</th><th>Message</th><th class="text-end">Count</th></tr></thead><tbody>' +
+            w.entries.map(function (e) {
+                const c = e.component || {};
+                return '<tr><td><span class="sw-pill tone-' + (tones[e.type] || 'neutral') + '">' + esc(e.type) + '</span></td>' +
+                    '<td><div class="fw-600">' + esc(c.name ? c.name + (c.version ? ' ' + c.version : '') : (c.type === 'core' ? 'WordPress core' : '—')) + '</div>' +
+                    '<div class="fs-12 text-muted mono">' + esc(e.file) + ':' + esc(e.line) + '</div></td>' +
+                    '<td class="fs-13">' + esc(e.message) + '</td><td class="text-end mono">' + esc(Number(e.count).toLocaleString()) + '</td></tr>';
+            }).join('') + '</tbody></table></div>';
+    }
+
     function tabErrors() {
         if (!data.errors.length) {
-            return SW.emptyState('bi-emoji-smile', 'No fatal errors reported.', 'When PHP crashes on this site, the file, line and plugin or theme responsible appear here.');
+            return SW.emptyState('bi-emoji-smile', 'No fatal errors reported.', 'When PHP crashes on this site, the file, line and plugin or theme responsible appear here.') + phpWarnings();
         }
         return '<div class="wp-errors">' + data.errors.map(function (e) {
             const d = e.data || {};
@@ -148,7 +172,7 @@
                 '<div class="fs-12 text-muted"><span class="mono">' + esc(d.file) + ':' + esc(d.line) + '</span>' +
                 (req.path ? ' · ' + esc((req.method || '') + ' ' + req.path) + ' (' + esc(req.context || 'front') + ')' : '') +
                 ' · first ' + esc(e.first_label) + (e.notified ? ' · alert sent' : '') + '</div></article>';
-        }).join('') + '</div>';
+        }).join('') + '</div>' + phpWarnings();
     }
 
     /** Known vulnerabilities from the latest scan (done by SiteWatch against the WPVulnerability database). */
@@ -243,6 +267,51 @@
             }).join('') + '</tbody></table></div>';
     }
 
+    /** Page generation time measured inside WordPress on sampled requests (plugin 1.3.0+). */
+    function tabPerformance() {
+        const perf = data.snapshot && data.snapshot.performance;
+        if (!perf) {
+            return SW.emptyState('bi-speedometer2', 'No page speed data yet.', data.insights && data.insights.perf_sample
+                ? 'Plugin 1.3.0 or later measures 1 in ' + data.insights.perf_sample + ' requests and reports with the daily health report.'
+                : 'Page speed sampling is off under Monitoring Settings → WordPress plugin.');
+        }
+        const labels = { front: 'Pages', admin: 'Admin', ajax: 'AJAX', rest: 'REST API' };
+        const ms = function (v) { return v === null || v === undefined ? '—' : Number(v).toLocaleString() + ' ms'; };
+        const keys = Object.keys(perf.contexts || {}).sort(function (a, b) { return (labels[a] ? Object.keys(labels).indexOf(a) : 9) - (labels[b] ? Object.keys(labels).indexOf(b) : 9); });
+        let html = '<p class="fs-12 text-muted mb-2">Time WordPress took to build the page (server side, before the network), from ' + esc((perf.requests || 0).toLocaleString()) +
+            ' sampled requests' + (perf.sample_rate ? ' (1 in ' + esc(perf.sample_rate) + ')' : '') + (perf.since ? ' since ' + ago(perf.since) : '') + '.</p>';
+        if (!keys.length) {
+            html += '<p class="fs-13 text-muted">No sampled requests in this period yet. Low-traffic sites need a day or two.</p>';
+        } else {
+            html += '<div class="sw-table-wrap mb-3"><table class="sw-table compact"><thead><tr><th>Requests</th><th class="text-end">Samples</th><th class="text-end">Median</th><th class="text-end">75%</th><th class="text-end">95%</th><th class="text-end">99%</th><th class="text-end">Slowest</th><th class="text-end">Queries</th><th class="text-end">Memory</th></tr></thead><tbody>' +
+                keys.map(function (k) {
+                    const c = perf.contexts[k];
+                    const tone = c.p95 > 3000 ? ' text-danger' : (c.p95 > 1000 ? ' text-warning' : '');
+                    return '<tr><td class="fw-600">' + esc(labels[k] || k) + '</td><td class="text-end mono">' + esc(c.samples) + '</td><td class="text-end mono">' + ms(c.p50) + '</td><td class="text-end mono">' + ms(c.p75) +
+                        '</td><td class="text-end mono' + tone + '">' + ms(c.p95) + '</td><td class="text-end mono">' + ms(c.p99) + '</td><td class="text-end mono">' + ms(c.max) +
+                        '</td><td class="text-end mono">' + esc(c.avg_queries) + '</td><td class="text-end mono">' + esc(c.avg_memory) + ' MB</td></tr>';
+                }).join('') + '</tbody></table></div>';
+        }
+        if (perf.slowest && perf.slowest.length) {
+            html += '<h4 class="wp-subhead mb-2">Slowest sampled requests</h4><ul class="wp-activity mb-3">' + perf.slowest.map(function (r) {
+                return '<li><i class="bi bi-hourglass-split text-muted" aria-hidden="true"></i><div class="min-w-0"><div class="mono fs-13 text-truncate">' + esc(r.p || '/') + '</div>' +
+                    '<div class="fs-12 text-muted">' + ms(r.ms) + ' · ' + esc(r.q) + ' queries · ' + esc(r.mem) + ' MB · ' + esc(labels[r.c] || r.c) + (r.s >= 500 ? ' · HTTP ' + esc(r.s) : '') + '</div></div></li>';
+            }).join('') + '</ul>';
+        }
+        html += '<h4 class="wp-subhead mb-2">Slow database queries</h4>';
+        if (!perf.savequeries) {
+            html += '<p class="fs-13 text-muted mb-0">Not recorded. Add <code>define("SAVEQUERIES", true);</code> to wp-config.php for a day to see queries slower than 50 ms (it costs some memory on every request, so remove it afterwards).</p>';
+        } else if (!perf.slow_queries.length) {
+            html += '<p class="fs-13 text-success mb-0"><i class="bi bi-check2-circle" aria-hidden="true"></i> No query over 50 ms in the sampled requests.</p>';
+        } else {
+            html += '<div class="sw-table-wrap"><table class="sw-table compact"><thead><tr><th>Query (values replaced by ?)</th><th>Called from</th><th class="text-end">Times</th><th class="text-end">Slowest</th><th class="text-end">Total</th></tr></thead><tbody>' +
+                perf.slow_queries.map(function (q) {
+                    return '<tr><td class="mono fs-12">' + esc(q.sql) + '</td><td class="fs-12">' + esc(q.caller) + '</td><td class="text-end mono">' + esc(q.count) + '</td><td class="text-end mono">' + ms(q.max_ms) + '</td><td class="text-end mono">' + ms(q.total_ms) + '</td></tr>';
+                }).join('') + '</tbody></table></div>';
+        }
+        return html;
+    }
+
     function tabActivity() {
         if (!data.activity.length) return SW.emptyState('bi-clock-history', 'No activity reported yet.', 'Plugin and theme changes, WordPress updates and administrator sign-ins appear here.');
         return '<ul class="wp-activity">' + data.activity.map(function (a) {
@@ -314,6 +383,17 @@
             }[data.state] || '';
             html += '<div class="alert alert-warning py-2 fs-13">' + esc(why) + '</div>';
         }
+        const r = data.reachability;
+        if (r) {
+            const since = r.probe_ago ? 'for ' + Math.round(r.probe_ago / 3600) + ' h' : 'since the plugin was connected';
+            html += r.state === 'blocked'
+                ? '<div class="alert alert-danger py-2 fs-13"><b>SiteWatch is probably blocked on this site.</b> Checks are failing, yet WordPress keeps serving pages to visitors and has not seen a SiteWatch check ' + esc(since) + '. ' +
+                    'A firewall, security plugin or CDN is likely stopping the checks. Allow-list requests whose User-Agent contains <code>' + esc(r.user_agent) + '</code>' +
+                    (r.server_ip ? ' and this SiteWatch server’s address <code>' + esc(r.server_ip) + '</code>' : '') +
+                    (r.probe_ip ? ' (checks last reached WordPress from <code>' + esc(r.probe_ip) + '</code>)' : '') + '.</div>'
+                : '<div class="alert alert-info py-2 fs-13">SiteWatch’s checks have not reached WordPress ' + esc(since) + ' while the site works. A page cache or CDN probably answers them, which is fine while checks pass. ' +
+                    'If checks start failing while visitors are fine, allow-list the User-Agent <code>' + esc(r.user_agent) + '</code>' + (r.server_ip ? ' and <code>' + esc(r.server_ip) + '</code>' : '') + ' in your firewall or CDN.</div>';
+        }
         if (data.plugin_outdated) {
             html += '<div class="alert alert-info py-2 fs-13">Plugin version ' + esc(data.bundled_version) + ' is available (this site runs ' + esc(data.plugin_version) + '). ' +
                 (!data.can_self_update ? 'This copy cannot update itself yet: click <b>Download plugin</b>, then in WordPress go to Plugins → Add New → Upload Plugin and choose <b>Replace current with uploaded</b>. Later versions install themselves.'
@@ -348,7 +428,7 @@
     function renderTab() {
         const panel = el.body.querySelector('[data-wp-panel]');
         if (!panel) return;
-        const renderers = { errors: tabErrors, security: tabSecurity, updates: tabUpdates, plugins: tabPlugins, activity: tabActivity, environment: tabEnvironment };
+        const renderers = { errors: tabErrors, security: tabSecurity, updates: tabUpdates, plugins: tabPlugins, performance: tabPerformance, activity: tabActivity, environment: tabEnvironment };
         panel.innerHTML = (renderers[tab] || tabErrors)();
     }
 

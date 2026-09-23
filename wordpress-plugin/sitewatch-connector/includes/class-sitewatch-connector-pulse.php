@@ -7,7 +7,8 @@
  * To tell the two apart, this records three timestamps, reported with every heartbeat:
  *   ok     the last page served without a server error
  *   error  the last page answered with a 5xx status (or a fatal error)
- *   probe  the last SiteWatch check that reached WordPress, with the status it got
+ *   probe  the last SiteWatch check that reached WordPress, with the status it got and the address it came from
+ *          (shown in SiteWatch as the address to allow-list when checks are blocked)
  *
  * Cost per request: one filemtime(); a file is touched at most once a minute (always for SiteWatch's own checks,
  * which come every few minutes).
@@ -49,7 +50,8 @@ if (!class_exists('SiteWatch_Connector_Pulse')) {
             }
             $agent = isset($_SERVER['HTTP_USER_AGENT']) ? (string) $_SERVER['HTTP_USER_AGENT'] : '';
             if (stripos($agent, 'SiteWatch/') !== false) {
-                self::write('probe', (string) $status, true);
+                $ip = isset($_SERVER['REMOTE_ADDR']) ? (string) filter_var($_SERVER['REMOTE_ADDR'], FILTER_VALIDATE_IP) : '';
+                self::write('probe', trim($status . ' ' . $ip), true);
             }
             self::write($status >= 500 ? 'error' : 'ok', (string) $status, false);
         }
@@ -75,19 +77,26 @@ if (!class_exists('SiteWatch_Connector_Pulse')) {
         }
 
         /**
-         * @return array{ok_at: int|null, error_at: int|null, probe_at: int|null, probe_status: int|null}
+         * @return array{ok_at: int|null, error_at: int|null, probe_at: int|null, probe_status: int|null, probe_ip: string|null}
          */
         public static function read()
         {
             $read = function ($name) {
                 $file = SiteWatch_Connector_Pulse::path($name);
                 $mtime = @filemtime($file);
-                return $mtime === false ? array(null, null) : array((int) $mtime, (int) @file_get_contents($file));
+                return $mtime === false ? array(null, '') : array((int) $mtime, trim((string) @file_get_contents($file)));
             };
             list($ok) = $read('ok');
             list($error) = $read('error');
-            list($probe, $probeStatus) = $read('probe');
-            return array('ok_at' => $ok, 'error_at' => $error, 'probe_at' => $probe, 'probe_status' => $probe !== null ? $probeStatus : null);
+            list($probe, $content) = $read('probe');
+            $parts = explode(' ', $content, 2);
+            return array(
+                'ok_at'        => $ok,
+                'error_at'     => $error,
+                'probe_at'     => $probe,
+                'probe_status' => $probe !== null ? (int) $parts[0] : null,
+                'probe_ip'     => $probe !== null && isset($parts[1]) && filter_var($parts[1], FILTER_VALIDATE_IP) ? $parts[1] : null,
+            );
         }
 
         public static function path($name)

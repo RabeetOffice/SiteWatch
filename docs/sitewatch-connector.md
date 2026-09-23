@@ -5,9 +5,9 @@ session can continue the work without re-reading the whole history.
 
 | | |
 |---|---|
-| Plugin version | **1.2.0** (`wordpress-plugin/sitewatch-connector/`) |
-| SiteWatch version | **1.8.0**, database schema **8** |
-| Last pushed commit | `1f8a44e plugin update` (23 Sep 2026); 1.8.0 / plugin 1.2.0 not pushed yet |
+| Plugin version | **1.3.0** (`wordpress-plugin/sitewatch-connector/`) |
+| SiteWatch version | **1.9.0**, database schema **9** |
+| Last pushed commit | `64a1860 New Capabilities Added in Plugin` (1.8.0 / plugin 1.2.0); 1.9.0 / plugin 1.3.0 not committed yet |
 | Requirements | WordPress 5.2+, PHP 7.2+ (plugin); rollback on failed self-update needs WordPress 6.6+ |
 
 ---
@@ -23,6 +23,7 @@ Connector plugin runs inside WordPress and reports to SiteWatch. It:
 - keeps a **change log** (plugin/theme/core changes, admin sign-ins, new administrators, failed sign-ins);
 - **updates itself** from the SiteWatch server;
 - **watches `wp-config.php` and `.htaccess`** and reports changes made outside WordPress (fingerprints only);
+- measures **page generation time** on a sample of requests and, if switched on, counts **PHP warnings and deprecations**;
 - tells SiteWatch whether WordPress is **serving pages**, so outages caused by SiteWatch's checks being blocked do not
   produce false alerts.
 
@@ -63,10 +64,11 @@ WordPress site                                     SiteWatch server
 Body: `{v: 1, reason, site_url, sent_at, status: {...}, snapshot?: {...}, events?: [...]}`
 
 - `reason`: `hello | heartbeat | fatal | event | deactivated | disconnect`
-- `status`: `wp_version, php_version, plugin_version, multisite, maintenance, loader, pulse{ok_at, error_at, probe_at, probe_status}, last_update{version, at, result, message}`
+- `status`: `wp_version, php_version, plugin_version, multisite, maintenance, loader, pulse{ok_at, error_at, probe_at, probe_status, probe_ip (1.3.0+)}, last_update{version, at, result, message}`
+- `snapshot.performance` and `snapshot.php_warnings` (1.3.0+): see `SiteWatch_Connector_Insights::performance_summary()` / `warnings_summary()`
 - `events[]`: `{uid, type, severity (info|warning|critical), title, data, at}`
 
-Reply `data`: `{website, want_snapshot, received, interval, server_time, auto_update, plugin_update: {version, package, requires, requires_php, tested, url, notes} | null, update_now}`
+Reply `data`: `{website, want_snapshot, received, interval, server_time, auto_update, collect_warnings, perf_sample, plugin_update: {version, package, requires, requires_php, tested, url, notes} | null, update_now}`
 
 **Connection key** (pasted into WordPress → Settings → SiteWatch): `"swc1_" + base64url({"u": SiteWatch URL, "i": website ID, "s": 64-hex secret})`.
 The secret is stored in SiteWatch encrypted with `APP_KEY` (`connector_sites.secret`).
@@ -87,7 +89,8 @@ typed properties, `str_contains`, named arguments or nullsafe operator.
 | `includes/mu-loader.php` | Copied to `wp-content/mu-plugins/sitewatch-connector-loader.php`; starts error capture and pulse before other plugins load. Its `Version` header must equal the plugin version (`loader_installed()` compares them) |
 | `includes/class-sitewatch-connector-client.php` | Key parsing, signing, sending (`wp_remote_post`, or cURL/streams during a fatal error), `status()` block, state option |
 | `includes/class-sitewatch-connector-errors.php` | Fatal error capture via the `wp_php_error_message` filter plus a shutdown fallback; fingerprint = type + file + line + first message line (no stack trace, numbers normalised); sends once per 10 min per fingerprint and counts repeats; stores in `wp-content/sitewatch-connector/errors.json` (option fallback) |
-| `includes/class-sitewatch-connector-pulse.php` | Stamp files `ok.stamp`, `error.stamp`, `probe.stamp` (User-Agent contains `SiteWatch/`), written at most once a minute |
+| `includes/class-sitewatch-connector-pulse.php` | Stamp files `ok.stamp`, `error.stamp`, `probe.stamp` (User-Agent contains `SiteWatch/`; content `"<status> <REMOTE_ADDR>"` since 1.3.0), written at most once a minute |
+| `includes/class-sitewatch-connector-insights.php` | Loaded by the mu-loader. Settings in the **autoloaded** option `sitewatch_connector_insights` `{warnings, sample}` (set from the reply by `apply_reply()`, only written when changed). PHP warnings: `set_error_handler` for warning/notice/deprecated levels that counts per type+file+line (skips `@`-silenced) and passes the error on (returns the previous handler's result or `false`); merged into `warnings.json` at shutdown (max 200 places). Page speed: on 1 in `sample` requests (not cron/CLI) records ms since `$timestart`, query count, peak memory, context, status and path into `perf.json` (reservoir of 1000); with `SAVEQUERIES`, queries ≥ 50 ms with literals replaced by `?`. Files are updated under a non-blocking `flock` (a busy file is skipped). The heartbeat adds both summaries to the snapshot and deletes the files after a successful send |
 | `includes/class-sitewatch-connector-health.php` | Daily snapshot: environment, updates, plugins/themes, database, cron, admins, security checks (core checksums vs WordPress.org, PHP in uploads, registration, "admin" user, file editor, XML-RPC, debug display, HTTPS, PHP EOL…) |
 | `includes/class-sitewatch-connector-activity.php` | Change log hooks → queue option `sitewatch_connector_queue`; failed sign-ins aggregated in `sitewatch_connector_logins`; critical events flushed at shutdown. `record()` keeps a `by` passed in `data` |
 | `includes/class-sitewatch-connector-files.php` | Watches `wp-config.php` (also one folder up), `.htaccess` and, when WordPress lives in a subfolder, the site root `.htaccess`. Fingerprints (sha256, size, mtime) in `sitewatch_connector_files`; the first run is a silent baseline. Checked by every heartbeat and at shutdown of requests where WordPress may have written them (plugin (de)activation, `upgrader_process_complete`, `insert_with_markers_inline_instructions`). Event `file_changed`: `warning` with `during` when such a request explains it, otherwise `critical` with `by: outside WordPress`. Sends file, change, sizes, mtime and 12-character hash prefixes; never contents |
@@ -98,7 +101,7 @@ typed properties, `str_contains`, named arguments or nullsafe operator.
 WordPress options: `sitewatch_connector` (endpoint, site_id, secret, sitewatch_url, connected_at),
 `sitewatch_connector_state` (last_ok, last_error, last_snapshot, want_snapshot, update, auto_update, last_update),
 `sitewatch_connector_queue`, `sitewatch_connector_logins`, `sitewatch_connector_errors` (fallback),
-`sitewatch_connector_files` (file fingerprints, 1.2.0+).
+`sitewatch_connector_files` (file fingerprints, 1.2.0+), `sitewatch_connector_insights` (autoloaded, 1.3.0+).
 User meta: `sitewatch_last_login`.
 
 ### SiteWatch side
@@ -115,31 +118,38 @@ User meta: `sitewatch_last_login`.
 | `api/connector/plugin.php` | Plugin zip for signed-in users ("Download plugin") |
 | `api/connector/manage.php` | `create`, `show`, `refresh`, `update`, `revoke` (permission `websites.manage`) |
 | `api/connector/show.php` | Data for the website page |
-| `assets/js/website-connector.js` | WordPress section on the website details page (tabs: Errors, Security, Updates, Plugins & themes, Activity, Environment) |
+| `assets/js/website-connector.js` | WordPress section on the website details page (tabs: Errors (+ PHP warnings), Security (+ vulnerabilities), Updates, Plugins & themes, Performance, Activity, Environment) and the reachability banner |
 | `admin/dashboard.php` | "WordPress plugin" card (connected count, recent critical events) |
 | `assets/js/websites.js` | Plug badge next to connected sites, "WordPress plugin" filter, "Alert held" label |
 | `app/Monitoring/IncidentManager.php` | `setInsideEvidence()` + `insideVerdict()`: holds outage confirmation (section 5) |
 | `app/Notifications/NotificationManager.php` | `wordpressError()`, `wordpressSecurity()` (adds File/Size rows for `file_changed`), `wordpressVulnerabilities()`, cause line in down alerts (`setCauseResolver`) |
 | `app/Monitoring/MonitorManager.php` | Wires the cause resolver and inside-evidence provider |
 | `tests/Unit/ConnectorServiceTest.php` | Key format, signatures, event validation, summaries, state, evidence decision, package signature |
+| `tests/Unit/ConnectorReachabilityTest.php` | `ConnectorService::reachability()`: cached vs blocked, the cases with nothing to say, grace period after connecting |
 | `tests/Unit/VulnerabilityTest.php` | Feed normalising (titles, entities, links, scores), version ranges, report matching and dedupe, new-item detection |
 
-Database (see `database/schema.sql`, `App\Core\Migrator` steps 6, 7 and 8):
+Database (see `database/schema.sql`, `App\Core\Migrator` steps 6 to 9):
 - `connector_sites`: one row per website with a key (secret, connected_at, last_seen_at, last_reason, versions,
   updates_pending, security_issues, snapshot JSON, want_snapshot, pulse_ok_at, pulse_error_at, probe_seen_at,
-  probe_status, want_update, update_result, update_at, vuln_count, vuln_report JSON, vuln_checked_at, vuln_incomplete).
+  probe_status, probe_ip, want_update, update_result, update_at, vuln_count, vuln_report JSON, vuln_checked_at, vuln_incomplete).
 - `vulnerability_feed`: (component, slug) → normalised answer JSON, status ok|error, fetched_at. Shared by all sites;
   rows unused for 7 days are removed by the daily cleanup (`ConnectorService::purge()`).
 - `connector_events`: errors and activity (event_uid unique per site, type, severity, title, data JSON,
   fingerprint, occurrences, notified_at). Purged after 90 days by the daily cleanup.
 
 Settings: `alert_wp_error`, `alert_security`, `alert_vulnerability` (Notifications → alert rules; the per-site
-override for the last two is the website's "security" switch), `connector_auto_update` (Monitoring Settings →
-WordPress plugin).
+override for the last two is the website's "security" switch); `connector_auto_update`, `connector_perf_sample`
+(0, 10, 20, 50, 100; default 20) and `connector_php_warnings` (default off) under Monitoring Settings → WordPress plugin.
+
+`ConnectorService::reachability()` (shown on the website page): when WordPress served pages within 15 min, the plugin
+reports, monitoring is active and checked recently, but no SiteWatch check reached WordPress for 2 h (grace period
+after connecting), the state is `blocked` if the website's status is a failure or suspected down, otherwise `cached`
+(a page cache or CDN answers the checks). Help shows the User-Agent token from `MONITOR_USER_AGENT`, the SiteWatch
+server's public `SERVER_ADDR` if any, and the last `probe_ip`.
 
 ## 4. Done and tested
 
-All of the following was tested end to end on a local WordPress 7.1.2 (see section 8), plus 170 unit tests, the
+All of the following was tested end to end on a local WordPress 7.1.2 (see section 8), plus 174 unit tests, the
 30 scenarios and the 32-step lifecycle test.
 
 **Setup and connection**
@@ -185,6 +195,13 @@ All of the following was tested end to end on a local WordPress 7.1.2 (see secti
 - [x] `wp-config.php` edited and `.htaccess` created by hand → two critical `file_changed` events and security alerts ("… outside WordPress")
 - [x] Permalinks saved (WordPress writes `.htaccess`) → warning "… changed while writing "WordPress" rules", by the signed-in admin
 
+**Inside views (SiteWatch 1.9.0, plugin 1.3.0)**
+- [x] 1.2.0 → 1.3.0 self-update; the reply stores `{warnings, sample}` in the autoloaded option
+- [x] `?warn=1` on the crash-test plugin ×4: deprecation, warning and undefined-key warning, each counted 4 times with the plugin name, file and line; shown under Errors → PHP warnings
+- [x] Sampling at 1 in 1: 8 of 9 requests recorded (one skipped by the non-blocking lock); Performance tab percentiles per context, slowest requests, SAVEQUERIES hint; files deleted after delivery
+- [x] A WP-Cron heartbeat during the test re-applied SiteWatch's rate from the reply, as intended
+- [x] Reachability: probe 3 h old with the website DOWN → "SiteWatch is probably blocked" with User-Agent and probe address; ONLINE → the "cache or CDN" note
+
 **False alert protection**
 - [x] Checks fail but WordPress is serving pages → alert held, "Alert held: site OK inside WordPress"
 - [x] Held for more than 30 min → alert sent with a "SiteWatch is probably being blocked" note
@@ -207,7 +224,7 @@ SiteWatch check that reached WordPress) is shown for diagnosis but not used in t
 ## 6. Deploying (production: Hostinger, auto-deploy from GitHub)
 
 1. After a push that raises `Migrator::VERSION`, open **System → Updates → Update database**. Schema 8 is needed
-   for 1.8.0. The monitoring cron needs outbound HTTPS to `www.wpvulnerability.net` for vulnerability lookups.
+   for 1.8.0, schema 9 for 1.9.0. The monitoring cron needs outbound HTTPS to `www.wpvulnerability.net` for vulnerability lookups.
 2. Sites still on plugin **1.0.0** need one manual update to 1.1.0: SiteWatch → website → Download plugin, then
    WordPress → Plugins → Add New → Upload Plugin → "Replace current with uploaded". From 1.1.0 on, updates are
    automatic.
@@ -232,13 +249,13 @@ Recommended order is top to bottom.
    and a fleet-wide "vulnerable sites" list on the dashboard (`fleet()` already returns `vulnerabilities` per site).
 2. ~~Watch `wp-config.php` and `.htaccess`~~: done in plugin 1.2.0. Known limit: a change made outside WordPress
    in the same request as a plugin update or permalink save is attributed to WordPress (warning, not critical).
-3. **Recent PHP warnings.** Optional, off by default: a `set_error_handler` wrapper counting warnings/deprecations
-   per file, sent as a daily summary. Watch the performance cost.
-4. **Performance from inside.** Page generation time (sampled, e.g. 1 in 20 requests) and slow queries (only when
-   `SAVEQUERIES` is on or via a sampled `query` filter). Report percentiles, not raw data.
-5. **Use `probe_seen_at` in the decision.** If SiteWatch's checks have not reached WordPress for a long time while
-   pages are served, show a persistent "SiteWatch is blocked on this site" warning with allow-listing help (User-Agent
-   `SiteWatch/1.0`, server IP).
+3. ~~Recent PHP warnings~~: done in 1.9.0 / plugin 1.3.0 (off by default). Messages are sent as PHP wrote them
+   (paths stripped); a warning that prints user data would carry it, as fatal error messages already do.
+4. ~~Performance from inside~~: done in 1.9.0 / plugin 1.3.0. Only the latest day is kept (inside the snapshot); a
+   history table with a chart would be the next step. Slow queries need `SAVEQUERIES`; a `query`-filter sampler was
+   not built because the filter cannot time queries.
+5. ~~Use `probe_seen_at`~~: done in 1.9.0 as the reachability banner. The outage decision (`judgeEvidence()`) is
+   unchanged.
 
 ### v3: remote actions (needs design and security review)
 The plugin currently accepts no commands. Suggested design: add commands to the **heartbeat reply** (pull model,
@@ -259,6 +276,10 @@ Limit: commands only run as often as the heartbeat (5 min, depending on WP-Cron)
 
 ### Smaller items
 - Multisite (network activation) is only partly tested.
+- `wp-content/sitewatch-connector/` is closed by `.htaccess`, which nginx ignores: on nginx, `errors.json`,
+  `warnings.json` and `perf.json` can be fetched by anyone who guesses the path. Consider random file names or
+  storing them in options when the server is not Apache/LiteSpeed.
+- The "Slow database queries" and "PHP warnings" views keep only the latest daily summary.
 - The plugin's "Captured errors" list has no pagination (keeps the last 30).
 - Consider sending the snapshot compressed (gzip) for very large plugin lists.
 - A `SiteWatch/` probe that reaches WordPress but gets a 5xx is recorded as `probe_status`; it could be shown in the
@@ -273,6 +294,7 @@ Limit: commands only run as often as the heartbeat (5 min, depending on WP-Cron)
 | Test website in SiteWatch | "WP Test (local)", id 44, connected |
 | Crash plugin | `wp-test/wp-content/plugins/crash-test`: `?crash=1` crashes a request; a `crash-on-load.flag` file in its folder crashes while plugins load |
 | Local-only mu-plugin | `wp-test/wp-content/mu-plugins/local-test-allow-localhost.php` lets WordPress download packages from localhost (production does not need it) |
+| Warnings for tests | The crash-test plugin also answers `?warn=1` with a deprecation, a warning and an undefined-key warning (switch on "Collect PHP warnings" in SiteWatch first) |
 | Vulnerable plugin for tests | Create `wp-test/wp-content/plugins/contact-form-7/wp-contact-form-7.php` containing only a plugin header with `Version: 5.3.1` (no code), send a heartbeat with a snapshot, then run `VulnerabilityScanner::create()->scanDue()`. Delete the folder afterwards |
 
 To reinstall the plugin on the test site: delete `wp-test/wp-content/plugins/sitewatch-connector` and copy
@@ -292,7 +314,7 @@ To reinstall the plugin on the test site: delete `wp-test/wp-content/plugins/sit
 ## 9. Prompt to continue in a new chat
 
 > Read `docs/sitewatch-connector.md` in the SiteWatch repo (C:\xampp\htdocs\sitewatch). It describes the SiteWatch
-> Connector WordPress plugin and its SiteWatch side. Continue with section 7, starting with item 3 (recent PHP
-> warnings). Keep plugin code PHP 7.2-compatible, add database changes as a new Migrator step with a new
+> Connector WordPress plugin and its SiteWatch side. Continue with section 7 "v3: remote actions" (start with a short
+> design and security review before code). Keep plugin code PHP 7.2-compatible, add database changes as a new Migrator step with a new
 > release in `App\Core\Release` and `CHANGELOG.md`, bump the plugin version in all three places, and test on the
 > local WordPress at http://localhost/wp-test/.

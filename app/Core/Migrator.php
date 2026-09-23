@@ -24,7 +24,7 @@ use RuntimeException;
  */
 final class Migrator
 {
-    public const VERSION = 8;
+    public const VERSION = 9;
     /** Version of databases created before schema versions were recorded. */
     public const BASELINE = 1;
     public const SETTING = 'schema_version';
@@ -90,6 +90,13 @@ final class Migrator
             'changes' => [
                 'Creates the vulnerability_feed table, a shared cache of known vulnerabilities per plugin, theme and WordPress version.',
                 'Adds connector_sites columns for the latest vulnerability report of each site (count, details, time of the last check).',
+            ],
+        ],
+        9 => [
+            'release' => '1.9.0',
+            'title'   => 'Page speed and PHP warnings from inside WordPress',
+            'changes' => [
+                'Adds connector_sites.probe_ip, the address SiteWatch\'s checks reach WordPress from, shown as allow-listing help when checks are blocked.',
             ],
         ],
     ];
@@ -203,7 +210,18 @@ final class Migrator
             6 => fn () => $this->connectorTables(),
             7 => fn () => $this->connectorPulseAndUpdates(),
             8 => fn () => $this->connectorVulnerabilities(),
+            9 => fn () => $this->connectorProbeIp(),
         ];
+    }
+
+    /**
+     * v9 (1.9.0): where SiteWatch's checks come from, as seen by WordPress.
+     */
+    private function connectorProbeIp(): void
+    {
+        if (!$this->columnExists('connector_sites', 'probe_ip')) {
+            $this->db->pdo()->exec("ALTER TABLE `connector_sites` ADD COLUMN `probe_ip` VARCHAR(45) NULL COMMENT 'address the last SiteWatch check came from, as WordPress saw it' AFTER `probe_status`");
+        }
     }
 
     /**

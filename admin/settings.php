@@ -272,6 +272,22 @@ $timezones = DateTimeZone::listIdentifiers();
                     When SiteWatch has a newer plugin version, connected sites install it within a few minutes through WordPress's own updater,
                     which restores the previous version if the update breaks the site. When off, use "Update now" on a website or the WordPress Plugins screen.
                 </div>
+                <div class="row g-3 mt-1">
+                    <div class="col-md-6">
+                        <label class="form-label" for="connector_perf_sample">Measure page speed inside WordPress</label>
+                        <select class="form-select" id="connector_perf_sample" name="connector_perf_sample">
+                            <?php foreach ([0 => 'Off', 10 => '1 in 10 requests', 20 => '1 in 20 requests', 50 => '1 in 50 requests', 100 => '1 in 100 requests'] as $rate => $label): ?><option value="<?= $rate ?>"<?= (int) ($s['connector_perf_sample'] ?? 20) === $rate ? ' selected' : '' ?>><?= e($label) ?></option><?php endforeach; ?>
+                        </select>
+                        <div class="form-text">Page generation time, database queries and memory of sampled requests, reported daily as percentiles (plugin 1.3.0+).</div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="form-check form-switch mt-md-4">
+                            <input class="form-check-input" type="checkbox" role="switch" id="connector_php_warnings" name="connector_php_warnings" value="1"<?= !empty($s['connector_php_warnings']) ? ' checked' : '' ?>>
+                            <label class="form-check-label" for="connector_php_warnings">Collect PHP warnings and deprecations</label>
+                        </div>
+                        <div class="form-text">Counts warnings, notices and deprecation notices per file and line, sent with the daily report. Adds a little work to requests that trigger warnings.</div>
+                    </div>
+                </div>
             </div>
         </section>
 

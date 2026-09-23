@@ -2,7 +2,7 @@
 /**
  * Plugin Name: SiteWatch Connector (early error capture)
  * Description: Starts SiteWatch Connector's fatal error capture before other plugins load. Added and removed automatically by the SiteWatch Connector plugin; delete it only if you have removed that plugin.
- * Version:     1.2.0
+ * Version:     1.3.0
  * Author:      SiteWatch
  */
 
@@ -28,5 +28,10 @@ call_user_func(function () {
     if (is_readable($dir . '/includes/class-sitewatch-connector-pulse.php')) {
         require_once $dir . '/includes/class-sitewatch-connector-pulse.php';
         SiteWatch_Connector_Pulse::init();
+    }
+    // PHP warnings must be counted from the start; page timing is sampled at the end of the request.
+    if (is_readable($dir . '/includes/class-sitewatch-connector-insights.php')) {
+        require_once $dir . '/includes/class-sitewatch-connector-insights.php';
+        SiteWatch_Connector_Insights::init();
     }
 });

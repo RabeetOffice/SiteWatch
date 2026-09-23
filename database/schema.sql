@@ -384,6 +384,7 @@ CREATE TABLE IF NOT EXISTS `connector_sites` (
   `pulse_error_at`  DATETIME     NULL COMMENT 'last page WordPress answered with a 5xx or fatal error',
   `probe_seen_at`   DATETIME     NULL COMMENT 'last SiteWatch check that reached WordPress',
   `probe_status`    SMALLINT UNSIGNED NULL,
+  `probe_ip`        VARCHAR(45)  NULL COMMENT 'address the last SiteWatch check came from, as WordPress saw it',
   `want_update`     TINYINT(1)   NOT NULL DEFAULT 0 COMMENT '"Update now" requested in SiteWatch',
   `update_result`   VARCHAR(255) NULL COMMENT 'last self-update attempt reported by the plugin',
   `update_at`       DATETIME     NULL,

@@ -244,6 +244,9 @@ final class ConnectorService
         }
         if (isset($update['probe_seen_at'])) {
             $update['probe_status'] = max(0, min(999, (int) ($pulse['probe_status'] ?? 0)));
+            if (is_string($pulse['probe_ip'] ?? null) && filter_var($pulse['probe_ip'], FILTER_VALIDATE_IP) !== false) {
+                $update['probe_ip'] = $pulse['probe_ip'];
+            }
         }
         $lastUpdate = is_array($status['last_update'] ?? null) ? $status['last_update'] : null;
         if ($lastUpdate !== null && self::unixToDb($lastUpdate['at'] ?? null) !== null) {
@@ -307,6 +310,9 @@ final class ConnectorService
             'interval'      => 300,
             'server_time'   => time(),
             'auto_update'   => App::settings()->getBool('connector_auto_update', true),
+            // Read by plugin 1.3.0+ (ignored by older versions).
+            'collect_warnings' => App::settings()->getBool('connector_php_warnings', false),
+            'perf_sample'      => App::settings()->getInt('connector_perf_sample', 20),
             'plugin_update' => null,
             'update_now'    => false,
         ];
@@ -433,6 +439,54 @@ final class ConnectorService
             $result['reason'] = 'WordPress served pages normally ' . ($now - $ok < 60 ? 'within the last minute' : intdiv($now - $ok, 60) . ' min ago') . '.';
         }
         return $result;
+    }
+
+    /** The part of the check User-Agent a firewall rule can match ("SiteWatch/1.0"). */
+    private static function probeAgentToken(): string
+    {
+        $agent = (string) App::config()->get('app.monitor.user_agent', '');
+        return preg_match('#SiteWatch/[^\s;)]+#', $agent, $m) ? $m[0] : 'SiteWatch/1.0';
+    }
+
+    /** SiteWatch's checks have not reached WordPress for this long while WordPress serves pages: worth a note. */
+    public const PROBE_MISSING_AFTER = 7200;
+
+    /**
+     * Do SiteWatch's checks reach WordPress? When WordPress keeps serving pages but has not seen a SiteWatch check for
+     * PROBE_MISSING_AFTER, something in front of WordPress answers them: a page cache or CDN (harmless while checks
+     * pass) or a firewall (the likely reason when checks fail). Null when there is nothing to say.
+     *
+     * @param array<string, mixed> $row connector_sites row
+     * @param array<string, mixed>|null $website websites row
+     * @return array{state: string, probe_ago: ?int, checks_failing: bool, probe_ip: ?string, user_agent: string, server_ip: ?string}|null
+     */
+    public static function reachability(array $row, ?array $website, int $now, string $userAgent = 'SiteWatch/1.0'): ?array
+    {
+        $ts = static fn (?string $v): ?int => $v !== null && $v !== '' ? (int) strtotime($v . ' UTC') : null;
+        $ok = $ts($row['pulse_ok_at'] ?? null);
+        $seen = $ts($row['last_seen_at'] ?? null);
+        $checked = $ts($website['last_checked_at'] ?? null);
+        if ($website === null || empty($website['monitoring_enabled']) || $ok === null || $now - $ok > self::EVIDENCE_FRESH
+            || $seen === null || $now - $seen > self::STALE_AFTER || $checked === null || $now - $checked > self::STALE_AFTER
+            || in_array($row['last_reason'] ?? '', ['deactivated', 'disconnect'], true)) {
+            return null; // WordPress quiet, plugin not reporting or checks not running: no basis for a judgement
+        }
+        $probe = $ts($row['probe_seen_at'] ?? null);
+        // Pulse data exists since plugin 1.1.0; give a newly connected site time to see a check.
+        $since = $ts($row['connected_at'] ?? null) ?? $now;
+        if (($probe !== null && $now - $probe <= self::PROBE_MISSING_AFTER) || ($probe === null && $now - $since <= self::PROBE_MISSING_AFTER)) {
+            return null;
+        }
+        $failing = Status::isFailure((string) ($website['status'] ?? '')) || ($website['status'] ?? '') === Status::SUSPECTED_DOWN;
+        $serverIp = $_SERVER['SERVER_ADDR'] ?? null;
+        return [
+            'state'          => $failing ? 'blocked' : 'cached',
+            'probe_ago'      => $probe !== null ? $now - $probe : null,
+            'checks_failing' => $failing,
+            'probe_ip'       => $row['probe_ip'] ?? null,
+            'user_agent'     => $userAgent,
+            'server_ip'      => is_string($serverIp) && filter_var($serverIp, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) !== false ? $serverIp : null,
+        ];
     }
 
     /**
@@ -690,6 +744,12 @@ final class ConnectorService
                 'probe_at'     => $row['probe_seen_at'] ?? null,
                 'probe_ago'    => time_ago($row['probe_seen_at'] ?? null, 'Not seen yet'),
                 'probe_status' => isset($row['probe_status']) ? (int) $row['probe_status'] : null,
+                'probe_ip'     => $row['probe_ip'] ?? null,
+            ],
+            'reachability'    => $row === null ? null : self::reachability($row, $this->websites->find($websiteId), time(), self::probeAgentToken()),
+            'insights'        => [
+                'php_warnings' => App::settings()->getBool('connector_php_warnings', false),
+                'perf_sample'  => App::settings()->getInt('connector_perf_sample', 20),
             ],
             'snapshot'        => is_array($snapshot) ? $snapshot : null,
             'vulnerabilities' => self::presentVulnerabilities($row),

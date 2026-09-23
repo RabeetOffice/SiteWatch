@@ -88,6 +88,9 @@ switch ($section) {
             }
             $values['domain_geo_lookup'] = $bool('domain_geo_lookup');
             $values['connector_auto_update'] = $bool('connector_auto_update');
+            $values['connector_php_warnings'] = $bool('connector_php_warnings');
+            $sample = $int('connector_perf_sample', 20);
+            $values['connector_perf_sample'] = in_array($sample, [0, 10, 20, 50, 100], true) ? $sample : 20;
             if ($str('ipinfo_token') !== '') {
                 $values['ipinfo_token'] = $str('ipinfo_token');
             }

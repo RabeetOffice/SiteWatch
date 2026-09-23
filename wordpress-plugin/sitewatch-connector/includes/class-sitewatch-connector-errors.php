@@ -208,7 +208,7 @@ if (!class_exists('SiteWatch_Connector_Errors')) {
         }
 
         /** Which plugin, theme or core area a file belongs to. */
-        private static function component($path)
+        public static function component($path)
         {
             $path = str_replace('\\', '/', $path);
             $result = array('type' => 'other', 'slug' => '', 'name' => '', 'version' => '');
@@ -297,7 +297,7 @@ if (!class_exists('SiteWatch_Connector_Errors')) {
         }
 
         /** Paths relative to the WordPress root, so server layout is not disclosed. */
-        private static function relative($path)
+        public static function relative($path)
         {
             $path = str_replace('\\', '/', $path);
             $abs = defined('ABSPATH') ? str_replace('\\', '/', ABSPATH) : '';
@@ -311,7 +311,7 @@ if (!class_exists('SiteWatch_Connector_Errors')) {
             return basename($path);
         }
 
-        private static function scrub($message)
+        public static function scrub($message)
         {
             // Stack traces print Windows paths with doubled backslashes.
             $message = str_replace(array('\\\\', '\\'), '/', $message);
@@ -330,7 +330,7 @@ if (!class_exists('SiteWatch_Connector_Errors')) {
         // Storage: a small JSON file, falling back to an option.
         // --------------------------------------------------------------
 
-        private static function dir()
+        public static function dir()
         {
             return (defined('WP_CONTENT_DIR') ? WP_CONTENT_DIR : ABSPATH . 'wp-content') . '/sitewatch-connector';
         }

@@ -3,7 +3,7 @@
  * Plugin Name:       SiteWatch Connector
  * Plugin URI:        https://github.com/RabeetOffice/SiteWatch
  * Description:       Connects this WordPress site to SiteWatch monitoring: real causes of fatal errors (without turning on debug), a daily health and security report, and a log of plugin, theme and admin changes.
- * Version:           1.2.0
+ * Version:           1.3.0
  * Requires at least: 5.2
  * Requires PHP:      7.2
  * Author:            SiteWatch
@@ -16,7 +16,7 @@
 
 defined('ABSPATH') || exit;
 
-define('SITEWATCH_CONNECTOR_VERSION', '1.2.0');
+define('SITEWATCH_CONNECTOR_VERSION', '1.3.0');
 define('SITEWATCH_CONNECTOR_FILE', __FILE__);
 define('SITEWATCH_CONNECTOR_DIR', __DIR__);
 define('SITEWATCH_CONNECTOR_BASENAME', plugin_basename(__FILE__));
@@ -24,6 +24,7 @@ define('SITEWATCH_CONNECTOR_BASENAME', plugin_basename(__FILE__));
 require_once __DIR__ . '/includes/class-sitewatch-connector-client.php';
 require_once __DIR__ . '/includes/class-sitewatch-connector-errors.php';
 require_once __DIR__ . '/includes/class-sitewatch-connector-pulse.php';
+require_once __DIR__ . '/includes/class-sitewatch-connector-insights.php';
 require_once __DIR__ . '/includes/class-sitewatch-connector-updater.php';
 require_once __DIR__ . '/includes/class-sitewatch-connector-health.php';
 require_once __DIR__ . '/includes/class-sitewatch-connector-activity.php';
@@ -44,6 +45,7 @@ final class SiteWatch_Connector
         // Normally already started by the must-use loader; this covers sites where it could not be installed.
         SiteWatch_Connector_Errors::init();
         SiteWatch_Connector_Pulse::init();
+        SiteWatch_Connector_Insights::init();
         SiteWatch_Connector_Updater::init();
 
         add_filter('cron_schedules', array(__CLASS__, 'cron_schedules'));
@@ -99,6 +101,8 @@ final class SiteWatch_Connector
         $extra = array('events' => array_merge($errors, $events));
         if ($snapshot_due) {
             $extra['snapshot'] = SiteWatch_Connector_Health::snapshot();
+            $extra['snapshot']['performance'] = SiteWatch_Connector_Insights::performance_summary();
+            $extra['snapshot']['php_warnings'] = SiteWatch_Connector_Insights::warnings_summary();
         }
 
         $result = SiteWatch_Connector_Client::send('heartbeat', $extra, 20);
@@ -107,6 +111,7 @@ final class SiteWatch_Connector
             SiteWatch_Connector_Errors::mark_sent($errors);
             if ($snapshot_due) {
                 SiteWatch_Connector_Client::update_state(array('last_snapshot' => time(), 'want_snapshot' => false));
+                SiteWatch_Connector_Insights::reset();
             }
         }
         return $result;

@@ -18,7 +18,7 @@ namespace App\Core;
  */
 final class Release
 {
-    public const VERSION = '1.8.0';
+    public const VERSION = '1.9.0';
 
     /**
      * Newest first. 'schema' is the database schema version the release requires (null: unchanged).
@@ -26,6 +26,16 @@ final class Release
      * @var array<string, array{date: string, title: string, schema: ?int, added?: array<int, string>, improved?: array<int, string>, fixed?: array<int, string>}>
      */
     public const NOTES = [
+        '1.9.0' => [
+            'date'     => '2026-09-23',
+            'title'    => 'Page speed and PHP warnings from inside WordPress',
+            'schema'   => 9,
+            'added'    => [
+                'Page speed from inside WordPress: SiteWatch Connector 1.3.0 times 1 in 20 requests (adjustable, or off, under Monitoring Settings → WordPress plugin) and reports page generation time percentiles, database query counts, memory and the slowest pages daily. With SAVEQUERIES on, queries slower than 50 ms are listed with their values replaced by "?". See the new Performance tab.',
+                'Optional PHP warning summary: switch on "Collect PHP warnings and deprecations" to see warnings, notices and deprecation notices per file and line, with the plugin or theme responsible, on the Errors tab. The plugin only counts them; logging and display are unchanged.',
+                'A note on the website page when SiteWatch\'s checks have not reached WordPress for two hours while visitors are served: a page cache or CDN (harmless while checks pass) or, when checks fail, a firewall blocking SiteWatch, with the User-Agent and addresses to allow-list.',
+            ],
+        ],
         '1.8.0' => [
             'date'     => '2026-09-23',
             'title'    => 'Known vulnerabilities and protected file changes',

@@ -7,6 +7,21 @@ The in-app copy of these notes (System → Updates) comes from `app/Core/Release
 both files. `tests/ReleaseTest.php` fails if they disagree. A release that changes the database also gets a
 `Migrator` step. Its schema number is listed below, so the code and database versions can be compared.
 
+## [1.9.0] - 2026-09-23 · database schema 9
+
+Page speed and PHP warnings from inside WordPress.
+
+### Added
+- Page speed from inside WordPress: SiteWatch Connector 1.3.0 times 1 in 20 requests (adjustable, or off, under Monitoring Settings → WordPress plugin) and reports page generation time percentiles, database query counts, memory and the slowest pages daily. With SAVEQUERIES on, queries slower than 50 ms are listed with their values replaced by "?". See the new Performance tab.
+- Optional PHP warning summary: switch on "Collect PHP warnings and deprecations" to see warnings, notices and deprecation notices per file and line, with the plugin or theme responsible, on the Errors tab. The plugin only counts them; logging and display are unchanged.
+- A note on the website page when SiteWatch's checks have not reached WordPress for two hours while visitors are served: a page cache or CDN (harmless while checks pass) or, when checks fail, a firewall blocking SiteWatch, with the User-Agent and addresses to allow-list.
+
+### Upgrading
+- Apply the database update under System → Updates. Connected sites install plugin 1.3.0 by themselves when automatic plugin updates are on.
+
+### Database (schema 9)
+- New `connector_sites` column `probe_ip`.
+
 ## [1.8.0] - 2026-09-23 · database schema 8
 
 Known vulnerabilities and protected file changes.

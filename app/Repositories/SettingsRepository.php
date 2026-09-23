@@ -71,6 +71,9 @@ final class SettingsRepository
         'alert_wp_error' => 1,
         // SiteWatch Connector: sites install new plugin versions from this server by themselves.
         'connector_auto_update' => 1,
+        // Inside views sent with the daily health report: PHP warnings (opt-in) and 1-in-N page timing samples (0 = off).
+        'connector_php_warnings' => 0,
+        'connector_perf_sample'  => 20,
         'alert_security' => 1,
         'alert_vulnerability' => 1,
 

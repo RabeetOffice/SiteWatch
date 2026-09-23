@@ -55,7 +55,7 @@ Manage Administrator, Manager, Viewer, and custom roles with server-side permiss
 | **Website portfolio** | Add and edit websites, CSV import/export, client labels, search, filters, sorting, pause/resume, and manual checks. |
 | **Availability** | Scheduled HTTP/HTTPS checks; DNS, connection, timeout, redirect, HTTP, and SSL failure classification. |
 | **WordPress diagnostics** | Detect critical errors, database connection failures, maintenance pages, and exposed PHP fatal errors. |
-| **WordPress plugin** | Optional SiteWatch Connector: fatal errors with file, line and responsible plugin (no debug mode needed), daily health and security report, and a WordPress change log. |
+| **WordPress plugin** | Optional SiteWatch Connector: fatal errors with file, line and responsible plugin (no debug mode needed), daily health and security report, known vulnerabilities in plugins and themes, `wp-config.php`/`.htaccess` change alerts, page speed and PHP warnings from inside, and a WordPress change log. |
 | **Incident tracking** | Configurable consecutive-failure confirmation, recovery thresholds, incident history, and supporting diagnostics. |
 | **Alerts** | Email through SMTP, Telegram, WhatsApp (free through GREEN-API or CallMeBot, or Meta’s Cloud API) and Discord webhooks; global and per-website alert controls, recovery notifications, and delivery logs. |
 | **Performance & Core Web Vitals** | TTFB measured on every check; LCP, CLS, INP and Lighthouse scores for mobile and desktop through Google PageSpeed Insights, with historical trends. |
@@ -169,6 +169,10 @@ WordPress and pushes signed reports to SiteWatch.
   `www.wpvulnerability.net`.
 - **File watch**: changes to `wp-config.php` and `.htaccess` made outside WordPress are alerted; the contents never
   leave the site.
+- **Page speed and PHP warnings from inside**: page generation time percentiles from sampled requests (slow queries
+  with `SAVEQUERIES`), and an optional daily summary of PHP warnings and deprecations. Both are set under Monitoring
+  Settings → WordPress plugin. The website page also says when SiteWatch's checks stop reaching WordPress (page cache,
+  CDN or a firewall blocking SiteWatch).
 
 Set up per website: open the website → **WordPress** → **Download plugin**, install and activate it in WordPress,
 click **Create connection key** in SiteWatch and paste the key under **Settings → SiteWatch** in WordPress.
