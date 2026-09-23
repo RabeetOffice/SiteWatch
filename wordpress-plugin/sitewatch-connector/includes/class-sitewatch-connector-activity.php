@@ -161,6 +161,9 @@ final class SiteWatch_Connector_Activity
                 }
             }
             foreach ($files as $file) {
+                if ($file === SITEWATCH_CONNECTOR_BASENAME) {
+                    continue; // Self-updates are reported by SiteWatch_Connector_Updater.
+                }
                 $info = self::plugin_info($file);
                 $verb = $action === 'install' ? 'installed' : 'updated';
                 self::record('plugin_' . $verb, 'info', 'Plugin ' . $verb . ': ' . $info['name'] . ' ' . $info['version'], $info);

@@ -44,6 +44,14 @@ final class ConnectorService
     private const RATE_LIMIT = 30;
     /** Two fatal error alerts for the same website are at least this far apart. */
     private const ERROR_ALERT_GAP = 600;
+    /** First plugin version that can update itself. */
+    public const SELF_UPDATE_SINCE = '1.1.0';
+    /** Signed plugin download links are valid this long. */
+    private const PACKAGE_TTL = 86400;
+    /** Inside evidence must be this recent to hold back an alert. */
+    public const EVIDENCE_FRESH = 900;
+    /** Longest an alert is held back while WordPress reports that it is serving pages. */
+    public const HOLD_MAX = 1800;
 
     public const EVENT_LABELS = [
         'fatal_error'        => 'Fatal error',
@@ -62,6 +70,8 @@ final class ConnectorService
         'admin_granted'      => 'Administrator role granted',
         'admin_deleted'      => 'Administrator deleted',
         'setting_changed'    => 'Setting changed',
+        'connector_updated'  => 'Plugin self-update',
+        'connector_update_failed' => 'Plugin self-update failed',
     ];
 
     public function __construct(
@@ -223,6 +233,28 @@ final class ConnectorService
             'wp_version'     => self::version($status['wp_version'] ?? null),
             'php_version'    => self::version($status['php_version'] ?? null),
         ];
+        $pulse = is_array($status['pulse'] ?? null) ? $status['pulse'] : [];
+        foreach (['ok_at' => 'pulse_ok_at', 'error_at' => 'pulse_error_at', 'probe_at' => 'probe_seen_at'] as $key => $column) {
+            $at = self::unixToDb($pulse[$key] ?? null);
+            if ($at !== null) {
+                $update[$column] = $at;
+            }
+        }
+        if (isset($update['probe_seen_at'])) {
+            $update['probe_status'] = max(0, min(999, (int) ($pulse['probe_status'] ?? 0)));
+        }
+        $lastUpdate = is_array($status['last_update'] ?? null) ? $status['last_update'] : null;
+        if ($lastUpdate !== null && self::unixToDb($lastUpdate['at'] ?? null) !== null) {
+            $update['update_result'] = mb_substr(ucfirst((string) ($lastUpdate['result'] ?? '')) . ' (' . (string) ($lastUpdate['version'] ?? '?') . ')'
+                . (!empty($lastUpdate['message']) ? ': ' . (string) $lastUpdate['message'] : ''), 0, 255);
+            $update['update_at'] = self::unixToDb($lastUpdate['at']);
+        }
+        $bundled = $this->bundledPluginVersion();
+        $outdated = $update['plugin_version'] !== null && $bundled !== null && version_compare($update['plugin_version'], $bundled, '<');
+        if (!$outdated) {
+            $update['want_update'] = 0;
+        }
+
         $firstContact = empty($connector['connected_at']);
         if ($firstContact || $reason === 'hello') {
             $update['connected_at'] = $now;
@@ -266,13 +298,139 @@ final class ConnectorService
         }
 
         $wantSnapshot = !$snapshotStored && ((int) ($connector['want_snapshot'] ?? 0) === 1 || empty($connector['snapshot_at']));
-        return [
+        $reply = [
             'website'       => (string) $website['name'],
             'want_snapshot' => $wantSnapshot,
             'received'      => $received,
             'interval'      => 300,
             'server_time'   => time(),
+            'auto_update'   => App::settings()->getBool('connector_auto_update', true),
+            'plugin_update' => null,
+            'update_now'    => false,
         ];
+        if ($outdated) {
+            $secret = $this->crypto->decrypt((string) $connector['secret']);
+            $reply['plugin_update'] = [
+                'version'      => $bundled,
+                'package'      => $this->packageUrl($websiteId, $secret, (string) $bundled),
+                'requires'     => '5.2',
+                'requires_php' => '7.2',
+                'tested'       => '',
+                'url'          => rtrim(base_url(), '/'),
+                'notes'        => 'SiteWatch Connector ' . $bundled . ', supplied by your SiteWatch server.',
+            ];
+            $reply['update_now'] = (int) ($connector['want_update'] ?? 0) === 1;
+        }
+        return $reply;
+    }
+
+    private static function unixToDb(mixed $value): ?string
+    {
+        if (!is_numeric($value)) {
+            return null;
+        }
+        $ts = (int) $value;
+        $now = time();
+        return $ts > $now - 30 * 86400 && $ts <= $now + 300 ? gmdate('Y-m-d H:i:s', min($ts, $now)) : null;
+    }
+
+    // ------------------------------------------------------------------
+    // Plugin self-update
+    // ------------------------------------------------------------------
+
+    /**
+     * Short-lived download link for the plugin zip, signed with the site's secret. WordPress downloads packages with
+     * a plain GET and no custom headers, so the proof travels in the query string.
+     */
+    public function packageUrl(int $websiteId, string $secret, string $version, ?int $expires = null): string
+    {
+        $expires ??= time() + self::PACKAGE_TTL;
+        return base_url('api/connector/package.php') . '?' . http_build_query([
+            'site'    => $websiteId,
+            'v'       => $version,
+            'expires' => $expires,
+            'sig'     => self::packageSignature($secret, $websiteId, $version, $expires),
+        ]);
+    }
+
+    public static function packageSignature(string $secret, int $websiteId, string $version, int $expires): string
+    {
+        return hash_hmac('sha256', 'package|' . $websiteId . '|' . $version . '|' . $expires, $secret);
+    }
+
+    /**
+     * @throws ConnectorException
+     */
+    public function verifyPackage(int $websiteId, string $version, int $expires, string $signature, ?int $now = null): void
+    {
+        $now ??= time();
+        if ($websiteId <= 0 || !preg_match('/^[a-f0-9]{64}$/', $signature) || $expires < $now || $expires > $now + 2 * self::PACKAGE_TTL) {
+            throw new ConnectorException('This download link is invalid or has expired.', 403);
+        }
+        $row = $this->repo->find($websiteId);
+        $secret = $row !== null ? $this->crypto->decrypt((string) $row['secret']) : '';
+        if ($secret === '' || !hash_equals(self::packageSignature($secret, $websiteId, $version, $expires), $signature)) {
+            throw new ConnectorException('This download link is invalid or has expired.', 403);
+        }
+    }
+
+    public function requestUpdate(int $websiteId): void
+    {
+        $this->repo->update($websiteId, ['want_update' => 1]);
+    }
+
+    // ------------------------------------------------------------------
+    // Inside evidence (false alert protection)
+    // ------------------------------------------------------------------
+
+    /**
+     * Does WordPress itself say the site is serving pages? Used before an outage is confirmed: if SiteWatch's checks
+     * fail but real visitors keep getting pages, the checks are most likely being blocked.
+     *
+     * @return array{healthy: bool, reason: string, ok_ago: ?int, probe_seen_ago: ?int, probe_status: ?int}|null Null when the plugin is not reporting.
+     */
+    public function insideEvidence(int $websiteId): ?array
+    {
+        $row = $this->repo->find($websiteId);
+        if ($row === null || empty($row['connected_at'])) {
+            return null;
+        }
+        $recentFatal = $this->repo->latestFatal($websiteId, utc_now()->modify('-' . self::EVIDENCE_FRESH . ' seconds')->format('Y-m-d H:i:s')) !== null;
+        return self::judgeEvidence($row, time(), $recentFatal);
+    }
+
+    /**
+     * The decision behind insideEvidence(), kept pure for testing.
+     *
+     * @param array<string, mixed> $row connector_sites row
+     * @return array{healthy: bool, reason: string, ok_ago: ?int, probe_seen_ago: ?int, probe_status: ?int}|null
+     */
+    public static function judgeEvidence(array $row, int $now, bool $recentFatal): ?array
+    {
+        $ts = static fn (?string $v): ?int => $v !== null && $v !== '' ? (int) strtotime($v . ' UTC') : null;
+        $seen = $ts($row['last_seen_at'] ?? null);
+        if ($seen === null || $now - $seen > self::EVIDENCE_FRESH || in_array($row['last_reason'] ?? '', ['deactivated', 'disconnect'], true)) {
+            return null;
+        }
+        $ok = $ts($row['pulse_ok_at'] ?? null);
+        $error = $ts($row['pulse_error_at'] ?? null);
+        $probe = $ts($row['probe_seen_at'] ?? null);
+        $result = [
+            'healthy'        => false,
+            'reason'         => '',
+            'ok_ago'         => $ok !== null ? $now - $ok : null,
+            'probe_seen_ago' => $probe !== null ? $now - $probe : null,
+            'probe_status'   => isset($row['probe_status']) ? (int) $row['probe_status'] : null,
+        ];
+        if ($ok === null || $now - $ok > self::EVIDENCE_FRESH) {
+            $result['reason'] = 'WordPress has not served a page recently.';
+        } elseif ($recentFatal || ($error !== null && $now - $error <= self::EVIDENCE_FRESH)) {
+            $result['reason'] = 'WordPress also reported server errors.';
+        } else {
+            $result['healthy'] = true;
+            $result['reason'] = 'WordPress served pages normally ' . ($now - $ok < 60 ? 'within the last minute' : intdiv($now - $ok, 60) . ' min ago') . '.';
+        }
+        return $result;
     }
 
     /**
@@ -516,6 +674,21 @@ final class ConnectorService
             'snapshot_at'     => $row['snapshot_at'] ?? null,
             'snapshot_label'  => $row !== null && $row['snapshot_at'] ? time_ago($row['snapshot_at']) : null,
             'want_snapshot'   => $row !== null && (int) $row['want_snapshot'] === 1,
+            'want_update'     => $row !== null && (int) ($row['want_update'] ?? 0) === 1,
+            // Self-update arrived in plugin 1.1.0; older copies must be replaced by hand once.
+            'can_self_update' => $row !== null && !empty($row['plugin_version']) && version_compare((string) $row['plugin_version'], self::SELF_UPDATE_SINCE, '>='),
+            'auto_update'     => App::settings()->getBool('connector_auto_update', true),
+            'update_result'   => $row['update_result'] ?? null,
+            'update_label'    => $row !== null && !empty($row['update_at']) ? time_ago($row['update_at']) : null,
+            'pulse'           => $row === null ? null : [
+                'ok_at'        => $row['pulse_ok_at'] ?? null,
+                'ok_ago'       => time_ago($row['pulse_ok_at'] ?? null, 'Not recorded yet'),
+                'error_at'     => $row['pulse_error_at'] ?? null,
+                'error_ago'    => time_ago($row['pulse_error_at'] ?? null, 'None recorded'),
+                'probe_at'     => $row['probe_seen_at'] ?? null,
+                'probe_ago'    => time_ago($row['probe_seen_at'] ?? null, 'Not seen yet'),
+                'probe_status' => isset($row['probe_status']) ? (int) $row['probe_status'] : null,
+            ],
             'snapshot'        => is_array($snapshot) ? $snapshot : null,
             'errors'          => $errors,
             'activity'        => $activity,

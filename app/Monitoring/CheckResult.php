@@ -48,6 +48,26 @@ final class CheckResult
         );
     }
 
+    /** The same result with a sentence added to its error message (shown in the list, the check log and alerts). */
+    public function withNote(string $note): self
+    {
+        return new self(
+            $this->status,
+            $this->isFailure,
+            $this->httpStatus,
+            $this->responseTime,
+            $this->ttfb,
+            $this->errorType,
+            trim(($this->errorMessage !== null && $this->errorMessage !== '' ? rtrim($this->errorMessage, '. ') . '. ' : '') . $note),
+            $this->redirectCount,
+            $this->finalUrl,
+            $this->sslDaysRemaining,
+            $this->diagnostics,
+            $this->checkedAt,
+            $this->source
+        );
+    }
+
     public function label(): string
     {
         return Status::label($this->status);

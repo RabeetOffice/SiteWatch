@@ -262,6 +262,20 @@ $timezones = DateTimeZone::listIdentifiers();
         </section>
 
         <section class="sw-card mb-4">
+            <div class="sw-card-header"><div><h3>WordPress plugin</h3><p class="sub">SiteWatch Connector on your WordPress sites</p></div></div>
+            <div class="sw-card-body">
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" role="switch" id="connector_auto_update" name="connector_auto_update" value="1"<?= !empty($s['connector_auto_update']) ? ' checked' : '' ?>>
+                    <label class="form-check-label" for="connector_auto_update">Update the plugin automatically</label>
+                </div>
+                <div class="form-text">
+                    When SiteWatch has a newer plugin version, connected sites install it within a few minutes through WordPress's own updater,
+                    which restores the previous version if the update breaks the site. When off, use "Update now" on a website or the WordPress Plugins screen.
+                </div>
+            </div>
+        </section>
+
+        <section class="sw-card mb-4">
             <div class="sw-card-header"><div><h3>Data retention</h3><p class="sub">Incidents and daily statistics are always kept</p></div></div>
             <div class="sw-card-body">
                 <div class="row g-3">

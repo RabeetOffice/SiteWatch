@@ -380,6 +380,13 @@ CREATE TABLE IF NOT EXISTS `connector_sites` (
   `snapshot`        MEDIUMTEXT   NULL COMMENT 'latest health snapshot (JSON)',
   `snapshot_at`     DATETIME     NULL,
   `want_snapshot`   TINYINT(1)   NOT NULL DEFAULT 0,
+  `pulse_ok_at`     DATETIME     NULL COMMENT 'last page WordPress served without a server error',
+  `pulse_error_at`  DATETIME     NULL COMMENT 'last page WordPress answered with a 5xx or fatal error',
+  `probe_seen_at`   DATETIME     NULL COMMENT 'last SiteWatch check that reached WordPress',
+  `probe_status`    SMALLINT UNSIGNED NULL,
+  `want_update`     TINYINT(1)   NOT NULL DEFAULT 0 COMMENT '"Update now" requested in SiteWatch',
+  `update_result`   VARCHAR(255) NULL COMMENT 'last self-update attempt reported by the plugin',
+  `update_at`       DATETIME     NULL,
   PRIMARY KEY (`website_id`),
   KEY `idx_connector_seen` (`last_seen_at`),
   CONSTRAINT `fk_connector_website` FOREIGN KEY (`website_id`) REFERENCES `websites` (`id`) ON DELETE CASCADE

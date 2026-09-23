@@ -62,6 +62,10 @@
             if (data.state === 'none') {
                 html.push('<button type="button" class="btn btn-sm btn-primary" data-wp="create"><i class="bi bi-key" aria-hidden="true"></i> Create connection key</button>');
             } else {
+                if (data.plugin_outdated && data.can_self_update) {
+                    html.push('<button type="button" class="btn btn-sm btn-primary" data-wp="update"' + (data.want_update ? ' disabled' : '') + '><i class="bi bi-arrow-up-circle" aria-hidden="true"></i> ' +
+                        (data.want_update ? 'Update requested' : 'Update plugin to ' + esc(data.bundled_version)) + '</button>');
+                }
                 if (data.state !== 'pending') html.push('<button type="button" class="btn btn-sm btn-light" data-wp="refresh"><i class="bi bi-arrow-repeat" aria-hidden="true"></i> Refresh health report</button>');
                 html.push('<div class="dropdown"><button type="button" class="btn-icon btn-sm" data-bs-toggle="dropdown" aria-expanded="false" aria-label="More connector actions"><i class="bi bi-three-dots" aria-hidden="true"></i></button>' +
                     '<ul class="dropdown-menu dropdown-menu-end">' +
@@ -109,6 +113,19 @@
             tile('Updates', updates === null ? '—' : String(updates), updates ? 'warning' : 'success', 'Core, plugin and theme updates waiting') +
             tile('Security', issues === null ? '—' : (issues ? issues + ' to fix' : 'OK'), issues ? 'danger' : 'success', 'Security checks in warning or critical state') +
             '</div>';
+    }
+
+    /** What WordPress itself saw: used to tell a real outage from SiteWatch's checks being blocked. */
+    function insideView() {
+        const p = data.pulse;
+        if (!p) return '';
+        const probe = p.probe_at
+            ? esc(p.probe_ago) + (p.probe_status ? ' (HTTP ' + esc(p.probe_status) + ')' : '')
+            : 'Not seen yet';
+        return '<div class="wp-inside mb-3" title="Recorded inside WordPress. When SiteWatch checks fail but WordPress keeps serving pages, the alert is held for up to 30 minutes.">' +
+            '<span><i class="bi bi-check-circle text-success" aria-hidden="true"></i> Last page served: <b>' + esc(p.ok_ago) + '</b></span>' +
+            '<span><i class="bi bi-x-circle ' + (p.error_at ? 'text-danger' : 'text-muted') + '" aria-hidden="true"></i> Last server error: <b>' + esc(p.error_ago) + '</b></span>' +
+            '<span><i class="bi bi-broadcast text-muted" aria-hidden="true"></i> Last SiteWatch check that reached WordPress: <b>' + probe + '</b></span></div>';
     }
 
     function tabErrors() {
@@ -244,12 +261,21 @@
             html += '<div class="alert alert-warning py-2 fs-13">' + esc(why) + '</div>';
         }
         if (data.plugin_outdated) {
-            html += '<div class="alert alert-info py-2 fs-13">Plugin version ' + esc(data.bundled_version) + ' is available. Download it above and upload it in WordPress (Plugins → Add New → Upload, then "Replace current with uploaded").</div>';
+            html += '<div class="alert alert-info py-2 fs-13">Plugin version ' + esc(data.bundled_version) + ' is available (this site runs ' + esc(data.plugin_version) + '). ' +
+                (!data.can_self_update ? 'This copy cannot update itself yet: click <b>Download plugin</b>, then in WordPress go to Plugins → Add New → Upload Plugin and choose <b>Replace current with uploaded</b>. Later versions install themselves.'
+                    : data.want_update ? 'Update requested: the site installs it after its next report.'
+                    : data.auto_update ? 'The site installs it automatically within a few minutes.'
+                    : 'Automatic updates are off (Monitoring Settings); click "Update plugin" above.') + '</div>';
+        }
+        if (data.update_result) {
+            const failed = /^failed/i.test(data.update_result);
+            html += '<p class="fs-12 mb-2 ' + (failed ? 'text-warning' : 'text-muted') + '"><i class="bi ' + (failed ? 'bi-exclamation-triangle' : 'bi-arrow-up-circle') + '" aria-hidden="true"></i> Last self-update ' +
+                esc(data.update_label || '') + ': ' + esc(data.update_result) + '</p>';
         }
         if (data.want_snapshot) {
             html += '<p class="fs-12 text-muted">A fresh health report was requested; it arrives with the next report from the site.</p>';
         }
-        html += keyBox() + tiles();
+        html += keyBox() + tiles() + insideView();
 
         const counts = {
             errors: data.errors.length,
@@ -307,6 +333,8 @@
                     title: 'Replace the connection key?', danger: true, confirmText: 'Replace key',
                     message: 'The plugin stops reporting until the new key is pasted in WordPress (Settings → SiteWatch).',
                 });
+            } else if (action === 'update') {
+                manage('update');
             } else if (action === 'revoke') {
                 manage('revoke', { title: 'Revoke the connection key?', message: 'The plugin on this site can no longer send reports. Stored errors and activity are kept.', confirmText: 'Revoke key' });
             } else {

@@ -84,6 +84,7 @@ final class SiteWatch_Connector_Admin
         $config['connected_at'] = time();
         update_option(SiteWatch_Connector_Client::OPTION, $config, false);
         SiteWatch_Connector_Client::update_state(array('last_snapshot' => time(), 'want_snapshot' => false, 'last_ok' => time(), 'last_error' => ''));
+        SiteWatch_Connector_Errors::ensure_dir();
         SiteWatch_Connector::install_loader();
         wp_clear_scheduled_hook(SiteWatch_Connector::CRON_HOOK);
         wp_schedule_event(time() + 300, SiteWatch_Connector::CRON_SCHEDULE, SiteWatch_Connector::CRON_HOOK);

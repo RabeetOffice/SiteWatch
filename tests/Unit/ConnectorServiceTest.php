@@ -91,4 +91,43 @@ final class ConnectorServiceTest extends TestCase
         ])]);
         self::assertSame('Elementor Pro 3.21.0: Fatal error: Uncaught Error: Call to undefined function foo() (wp-content/plugins/elementor-pro/modules/forms.php:142)', $line);
     }
+
+    public function testInsideEvidenceOnlyHoldsWhenWordPressIsCleanlyServingPages(): void
+    {
+        $now = 1_800_000_000;
+        $at = static fn (int $ago): string => gmdate('Y-m-d H:i:s', $now - $ago);
+        $base = ['connected_at' => $at(86400), 'last_seen_at' => $at(120), 'last_reason' => 'heartbeat', 'pulse_ok_at' => $at(90), 'pulse_error_at' => null, 'probe_seen_at' => $at(3600), 'probe_status' => 200];
+
+        $healthy = ConnectorService::judgeEvidence($base, $now, false);
+        self::assertTrue($healthy['healthy']);
+        self::assertSame(90, $healthy['ok_ago']);
+        self::assertSame(3600, $healthy['probe_seen_ago'], 'SiteWatch checks have not reached WordPress for an hour: they are being blocked.');
+
+        self::assertFalse(ConnectorService::judgeEvidence(['pulse_error_at' => $at(300)] + $base, $now, false)['healthy'], 'A recent 5xx inside WordPress means the outage is real.');
+        self::assertFalse(ConnectorService::judgeEvidence($base, $now, true)['healthy'], 'A recent fatal error means the outage is real.');
+        self::assertFalse(ConnectorService::judgeEvidence(['pulse_ok_at' => $at(3600)] + $base, $now, false)['healthy'], 'No page served recently.');
+        self::assertTrue(ConnectorService::judgeEvidence(['pulse_error_at' => $at(7200)] + $base, $now, false)['healthy'], 'Old errors do not count.');
+
+        self::assertNull(ConnectorService::judgeEvidence(['last_seen_at' => $at(3600)] + $base, $now, false), 'A plugin that stopped reporting is no evidence at all.');
+        self::assertNull(ConnectorService::judgeEvidence(['last_reason' => 'deactivated'] + $base, $now, false));
+    }
+
+    public function testPackageSignatureIsBoundToSiteVersionAndExpiry(): void
+    {
+        $secret = str_repeat('cd', 32);
+        $sig = ConnectorService::packageSignature($secret, 12, '1.0.1', 1_800_000_000);
+        self::assertSame(64, strlen($sig));
+        self::assertNotSame($sig, ConnectorService::packageSignature($secret, 13, '1.0.1', 1_800_000_000));
+        self::assertNotSame($sig, ConnectorService::packageSignature($secret, 12, '1.0.2', 1_800_000_000));
+        self::assertNotSame($sig, ConnectorService::packageSignature($secret, 12, '1.0.1', 1_800_000_001));
+        self::assertNotSame($sig, ConnectorService::packageSignature(str_repeat('ce', 32), 12, '1.0.1', 1_800_000_000));
+    }
+
+    public function testCheckResultWithNoteAppendsToTheMessage(): void
+    {
+        $result = new \App\Monitoring\CheckResult('HTTP_503', true, 503, 120, null, null, 'Server returned HTTP 503.');
+        self::assertSame('Server returned HTTP 503. Alert held.', $result->withNote('Alert held.')->errorMessage);
+        self::assertSame('Alert held.', (new \App\Monitoring\CheckResult('TIMEOUT', true))->withNote('Alert held.')->errorMessage);
+        self::assertSame('HTTP_503', $result->withNote('x')->status);
+    }
 }

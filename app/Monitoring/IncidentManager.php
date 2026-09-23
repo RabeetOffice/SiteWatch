@@ -11,6 +11,7 @@ use App\Repositories\DailyStatsRepository;
 use App\Repositories\IncidentRepository;
 use App\Repositories\SettingsRepository;
 use App\Repositories\WebsiteRepository;
+use App\Services\ConnectorService;
 use Psr\Log\LoggerInterface;
 use Throwable;
 
@@ -30,6 +31,12 @@ final class IncidentManager
     /** Seconds after confirmation during which an unsent down alert is retried. */
     private const ALERT_RETRY_WINDOW = 3600;
 
+    /** Failures that a firewall or rate limit in front of the site can cause while real visitors are served fine. */
+    private const BLOCKABLE = [Status::DOWN, Status::TIMEOUT, Status::HTTP_500, Status::HTTP_502, Status::HTTP_503, Status::HTTP_504, Status::HTTP_ERROR];
+
+    /** @var (callable(int): ?array)|null Inside evidence from the WordPress plugin (ConnectorService::insideEvidence). */
+    private $insideEvidence = null;
+
     /** Delay before re-checking a website that just failed but is not confirmed down yet. */
     private const SUSPECTED_RECHECK_SECONDS = 60;
 
@@ -43,6 +50,45 @@ final class IncidentManager
         private readonly SettingsRepository $settings,
         private readonly LoggerInterface $log
     ) {
+    }
+
+    /**
+     * Let the WordPress plugin's view of the site hold back alerts caused by blocked checks.
+     *
+     * @param callable(int): ?array $provider Website ID → evidence (see ConnectorService::judgeEvidence) or null.
+     */
+    public function setInsideEvidence(callable $provider): void
+    {
+        $this->insideEvidence = $provider;
+    }
+
+    /**
+     * Before confirming an outage: if WordPress reports it is serving pages normally, the failure is probably
+     * SiteWatch being blocked. Returns [hold, note]: hold the alert (up to ConnectorService::HOLD_MAX since the
+     * site was last seen online), or confirm with an explanatory note.
+     *
+     * @param array<string, mixed> $website
+     * @return array{0: bool, 1: ?string}
+     */
+    private function insideVerdict(array $website, CheckResult $result): array
+    {
+        if ($this->insideEvidence === null || !in_array($result->status, self::BLOCKABLE, true)) {
+            return [false, null];
+        }
+        try {
+            $evidence = ($this->insideEvidence)((int) $website['id']);
+        } catch (Throwable $e) {
+            $this->log->warning('Inside evidence lookup failed', ['website_id' => $website['id'], 'error' => $e->getMessage()]);
+            return [false, null];
+        }
+        if ($evidence === null || !$evidence['healthy']) {
+            return [false, null];
+        }
+        $lastOnline = !empty($website['last_online_at']) ? strtotime($website['last_online_at'] . ' UTC') : false;
+        if ($lastOnline !== false && time() - $lastOnline < ConnectorService::HOLD_MAX) {
+            return [true, 'Alert held: ' . $evidence['reason'] . ' SiteWatch\'s checks may be blocked by a firewall or security plugin; the alert is sent if this lasts 30 minutes.'];
+        }
+        return [false, $evidence['reason'] . ' Visitors may still reach the site: SiteWatch\'s checks are probably being blocked by a firewall, security plugin or the host.'];
     }
 
     /**
@@ -76,8 +122,16 @@ final class IncidentManager
             if ($open !== null) {
                 $isUp = 0; // ongoing confirmed downtime
             } elseif ($failureCount >= $failureThreshold) {
-                $isUp = 0;
-                $confirmNow = true;
+                [$hold, $note] = $this->insideVerdict($website, $result);
+                if ($note !== null) {
+                    $result = $result->withNote($note);
+                }
+                if ($hold) {
+                    $newStatus = Status::SUSPECTED_DOWN;
+                } else {
+                    $isUp = 0;
+                    $confirmNow = true;
+                }
             } else {
                 $newStatus = Status::SUSPECTED_DOWN;
             }

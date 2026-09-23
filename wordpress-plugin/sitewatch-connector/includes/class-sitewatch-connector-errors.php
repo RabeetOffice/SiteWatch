@@ -87,6 +87,9 @@ if (!class_exists('SiteWatch_Connector_Errors')) {
                     $store[$fp]['last_sent'] = $now;
                 }
                 self::write($store);
+                if (class_exists('SiteWatch_Connector_Pulse')) {
+                    SiteWatch_Connector_Pulse::mark_error();
+                }
 
                 if ($send_now && class_exists('SiteWatch_Connector_Client') && SiteWatch_Connector_Client::config() !== null) {
                     $payload = self::to_event($fp, $entry);
@@ -332,6 +335,18 @@ if (!class_exists('SiteWatch_Connector_Errors')) {
             return (defined('WP_CONTENT_DIR') ? WP_CONTENT_DIR : ABSPATH . 'wp-content') . '/sitewatch-connector';
         }
 
+        /** Create wp-content/sitewatch-connector (closed to web access) and return its path. */
+        public static function ensure_dir()
+        {
+            $dir = self::dir();
+            if (!is_dir($dir)) {
+                @mkdir($dir, 0755, true);
+                @file_put_contents($dir . '/index.php', "<?php\n// Silence is golden.\n");
+                @file_put_contents($dir . '/.htaccess', "<IfModule mod_authz_core.c>\n    Require all denied\n</IfModule>\n<IfModule !mod_authz_core.c>\n    Order allow,deny\n    Deny from all\n</IfModule>\n");
+            }
+            return $dir;
+        }
+
         private static function read()
         {
             $file = self::dir() . '/errors.json';
@@ -359,12 +374,7 @@ if (!class_exists('SiteWatch_Connector_Errors')) {
                 });
                 $store = array_slice($store, 0, self::MAX_ENTRIES, true);
             }
-            $dir = self::dir();
-            if (!is_dir($dir)) {
-                @mkdir($dir, 0755, true);
-                @file_put_contents($dir . '/index.php', "<?php\n// Silence is golden.\n");
-                @file_put_contents($dir . '/.htaccess', "<IfModule mod_authz_core.c>\n    Require all denied\n</IfModule>\n<IfModule !mod_authz_core.c>\n    Order allow,deny\n    Deny from all\n</IfModule>\n");
-            }
+            $dir = self::ensure_dir();
             $json = json_encode($store);
             if (is_dir($dir) && is_writable($dir) && @file_put_contents($dir . '/errors.json', $json, LOCK_EX) !== false) {
                 return;

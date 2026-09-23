@@ -406,7 +406,10 @@
         const selected = this.selected.has(w.id);
 
         let statusHtml = SW.badge(w.status, w.status_label, w.severity);
-        if (w.status === 'SUSPECTED_DOWN') {
+        if (w.status === 'SUSPECTED_DOWN' && w.failure_count >= w.failure_threshold) {
+            // Enough failures to alert, but the WordPress plugin reports the site is serving pages.
+            statusHtml += '<div class="fs-12 text-warning mt-1" title="' + SW.escape(w.last_error_message || '') + '"><i class="bi bi-pause-circle" aria-hidden="true"></i> Alert held: site OK inside WordPress</div>';
+        } else if (w.status === 'SUSPECTED_DOWN') {
             statusHtml += '<div class="fs-12 text-muted mt-1">' + w.failure_count + ' of ' + w.failure_threshold + ' failures</div>';
         } else if (w.recovering) {
             statusHtml += '<div class="fs-12 text-muted mt-1">recovering ' + w.success_count + ' of ' + w.recovery_threshold + '</div>';

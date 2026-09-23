@@ -19,6 +19,7 @@ final class ActivityService
         'connector.disconnected' => 'Plugin Disconnected',
         'connector.key_created'  => 'Plugin Key Created',
         'connector.revoked'      => 'Plugin Key Revoked',
+        'connector.update_requested' => 'Plugin Update Requested',
         'website.edited'     => 'Website Edited',
         'website.deleted'    => 'Website Deleted',
         'website.imported'   => 'Websites Imported',

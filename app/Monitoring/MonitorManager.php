@@ -87,6 +87,10 @@ final class MonitorManager
             return $row !== null ? ConnectorService::describeError($row) : null;
         });
         $incidents = new IncidentManager($websites, $checks, $incidentRepo, $daily, $activity, $notifications, $settings, $log);
+        // An outage is only confirmed when the WordPress plugin (if installed) does not report the site serving pages.
+        $incidents->setInsideEvidence(static function (int $websiteId): ?array {
+            return ConnectorService::create()->insideEvidence($websiteId);
+        });
         $scheduler = new MonitoringScheduler($websites, $heartbeats, $settings);
         $ssl = new SSLChecker($guard, $caFile, min(15, $settings->getInt('connect_timeout', 10) + 5));
         $maintenance = new MaintenanceService($db, $settings, $heartbeats, $scheduler, App::logger('cron'));

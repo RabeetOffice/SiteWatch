@@ -24,7 +24,7 @@ use RuntimeException;
  */
 final class Migrator
 {
-    public const VERSION = 6;
+    public const VERSION = 7;
     /** Version of databases created before schema versions were recorded. */
     public const BASELINE = 1;
     public const SETTING = 'schema_version';
@@ -74,6 +74,14 @@ final class Migrator
             'changes' => [
                 'Creates the connector_sites table: one row per website connected with the WordPress plugin (encrypted secret, last report, health snapshot).',
                 'Creates the connector_events table for fatal errors and activity reported by the plugin.',
+            ],
+        ],
+        7 => [
+            'release' => '1.7.0',
+            'title'   => 'Plugin self-update and inside-view outage checks',
+            'changes' => [
+                'Adds connector_sites columns for what WordPress itself saw: the last page served, the last server error and the last SiteWatch check that reached it.',
+                'Adds connector_sites columns for plugin self-updates: "Update now" requests and the result of the last attempt.',
             ],
         ],
     ];
@@ -185,7 +193,29 @@ final class Migrator
             4 => fn () => $this->activityRetention(),
             5 => fn () => $this->userAvatars(),
             6 => fn () => $this->connectorTables(),
+            7 => fn () => $this->connectorPulseAndUpdates(),
         ];
+    }
+
+    /**
+     * v7 (1.7.0): inside evidence against false outage alerts, and plugin self-update state.
+     */
+    private function connectorPulseAndUpdates(): void
+    {
+        $columns = [
+            'pulse_ok_at'    => "DATETIME NULL COMMENT 'last page WordPress served without a server error' AFTER `want_snapshot`",
+            'pulse_error_at' => "DATETIME NULL COMMENT 'last page WordPress answered with a 5xx or fatal error' AFTER `pulse_ok_at`",
+            'probe_seen_at'  => "DATETIME NULL COMMENT 'last SiteWatch check that reached WordPress' AFTER `pulse_error_at`",
+            'probe_status'   => 'SMALLINT UNSIGNED NULL AFTER `probe_seen_at`',
+            'want_update'    => "TINYINT(1) NOT NULL DEFAULT 0 COMMENT '\"Update now\" requested in SiteWatch' AFTER `probe_status`",
+            'update_result'  => "VARCHAR(255) NULL COMMENT 'last self-update attempt reported by the plugin' AFTER `want_update`",
+            'update_at'      => 'DATETIME NULL AFTER `update_result`',
+        ];
+        foreach ($columns as $column => $definition) {
+            if (!$this->columnExists('connector_sites', $column)) {
+                $this->db->pdo()->exec("ALTER TABLE `connector_sites` ADD COLUMN `{$column}` {$definition}");
+            }
+        }
     }
 
     /**

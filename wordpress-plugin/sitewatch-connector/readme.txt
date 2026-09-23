@@ -4,7 +4,7 @@ Tags: monitoring, uptime, errors, security, health
 Requires at least: 5.2
 Tested up to: 6.8
 Requires PHP: 7.2
-Stable tag: 1.0.0
+Stable tag: 1.1.0
 License: GPLv2 or later
 
 Connects a WordPress site to SiteWatch monitoring: the real cause of fatal errors, a daily health and security report, and a change log.
@@ -28,6 +28,10 @@ Everything is pushed from this site to your SiteWatch server over HTTPS and sign
 4. In WordPress, go to Settings → SiteWatch, paste the key and click **Connect**.
 
 == Changelog ==
+
+= 1.1.0 =
+* Updates itself from your SiteWatch server (with automatic rollback on WordPress 6.6+).
+* Reports whether WordPress is serving pages, so SiteWatch can hold back alerts caused by blocked checks.
 
 = 1.0.0 =
 * First release: fatal error capture, health and security snapshot, change log, 5-minute heartbeat.

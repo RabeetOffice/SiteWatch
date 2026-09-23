@@ -3,7 +3,7 @@
  * Plugin Name:       SiteWatch Connector
  * Plugin URI:        https://github.com/RabeetOffice/SiteWatch
  * Description:       Connects this WordPress site to SiteWatch monitoring: real causes of fatal errors (without turning on debug), a daily health and security report, and a log of plugin, theme and admin changes.
- * Version:           1.0.0
+ * Version:           1.1.0
  * Requires at least: 5.2
  * Requires PHP:      7.2
  * Author:            SiteWatch
@@ -16,13 +16,15 @@
 
 defined('ABSPATH') || exit;
 
-define('SITEWATCH_CONNECTOR_VERSION', '1.0.0');
+define('SITEWATCH_CONNECTOR_VERSION', '1.1.0');
 define('SITEWATCH_CONNECTOR_FILE', __FILE__);
 define('SITEWATCH_CONNECTOR_DIR', __DIR__);
 define('SITEWATCH_CONNECTOR_BASENAME', plugin_basename(__FILE__));
 
 require_once __DIR__ . '/includes/class-sitewatch-connector-client.php';
 require_once __DIR__ . '/includes/class-sitewatch-connector-errors.php';
+require_once __DIR__ . '/includes/class-sitewatch-connector-pulse.php';
+require_once __DIR__ . '/includes/class-sitewatch-connector-updater.php';
 require_once __DIR__ . '/includes/class-sitewatch-connector-health.php';
 require_once __DIR__ . '/includes/class-sitewatch-connector-activity.php';
 require_once __DIR__ . '/includes/class-sitewatch-connector-admin.php';
@@ -40,6 +42,8 @@ final class SiteWatch_Connector
     {
         // Normally already started by the must-use loader; this covers sites where it could not be installed.
         SiteWatch_Connector_Errors::init();
+        SiteWatch_Connector_Pulse::init();
+        SiteWatch_Connector_Updater::init();
 
         add_filter('cron_schedules', array(__CLASS__, 'cron_schedules'));
         add_action(self::CRON_HOOK, array(__CLASS__, 'heartbeat'));
@@ -75,6 +79,12 @@ final class SiteWatch_Connector
         if (SiteWatch_Connector_Client::config() === null) {
             return array('ok' => false, 'error' => 'Not connected.');
         }
+        // Keep the error/pulse folder and the early loader in place (cron runs without a signed-in user).
+        SiteWatch_Connector_Errors::ensure_dir();
+        if (!self::loader_installed()) {
+            self::install_loader();
+        }
+
         $state = SiteWatch_Connector_Client::state();
         $snapshot_due = $force_snapshot || !empty($state['want_snapshot'])
             || empty($state['last_snapshot']) || (time() - (int) $state['last_snapshot']) > DAY_IN_SECONDS;

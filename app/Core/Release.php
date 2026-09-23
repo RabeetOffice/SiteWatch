@@ -18,7 +18,7 @@ namespace App\Core;
  */
 final class Release
 {
-    public const VERSION = '1.6.0';
+    public const VERSION = '1.7.0';
 
     /**
      * Newest first. 'schema' is the database schema version the release requires (null: unchanged).
@@ -26,6 +26,18 @@ final class Release
      * @var array<string, array{date: string, title: string, schema: ?int, added?: array<int, string>, improved?: array<int, string>, fixed?: array<int, string>}>
      */
     public const NOTES = [
+        '1.7.0' => [
+            'date'     => '2026-09-23',
+            'title'    => 'Plugin self-update and fewer false outage alerts',
+            'schema'   => 7,
+            'added'    => [
+                'SiteWatch Connector 1.1.0 updates itself from your SiteWatch server through WordPress\'s own updater, which restores the previous version if an update breaks the site (WordPress 6.6+). Turn automatic updates on or off under Monitoring Settings, or use "Update plugin" on a website.',
+                'Inside view on the website page: the last page WordPress served, the last server error, and the last SiteWatch check that reached WordPress.',
+            ],
+            'improved' => [
+                'Fewer false outage alerts: when checks fail with a 5xx, timeout or connection error but the plugin reports WordPress is serving pages normally, the alert is held for up to 30 minutes and then sent with a note that SiteWatch is probably being blocked.',
+            ],
+        ],
         '1.6.0' => [
             'date'     => '2026-09-23',
             'title'    => 'SiteWatch Connector for WordPress',

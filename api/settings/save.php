@@ -87,6 +87,7 @@ switch ($section) {
                 $values[$key] = $int($key, (int) SettingsRepository::DEFAULTS[$key]);
             }
             $values['domain_geo_lookup'] = $bool('domain_geo_lookup');
+            $values['connector_auto_update'] = $bool('connector_auto_update');
             if ($str('ipinfo_token') !== '') {
                 $values['ipinfo_token'] = $str('ipinfo_token');
             }

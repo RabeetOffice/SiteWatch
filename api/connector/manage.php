@@ -8,6 +8,7 @@ declare(strict_types=1);
  *   POST action=create   create (or replace) the connection key; returns it
  *   POST action=show     return the current key again
  *   POST action=refresh  ask the plugin for a fresh health snapshot on its next report
+ *   POST action=update   ask the plugin to install the newest version on its next report
  *   POST action=revoke   delete the key; the plugin can no longer report (stored reports are kept)
  */
 
@@ -53,11 +54,16 @@ switch (Request::string('action')) {
         $service->requestSnapshot($id);
         Response::success('A fresh health report was requested. It arrives with the plugin\'s next report (within about 5 minutes).', ['connector' => $service->details($id)]);
 
+    case 'update':
+        $service->requestUpdate($id);
+        ActivityService::log('connector.update_requested', sprintf('Plugin update requested for %s', $website['name']), $id);
+        Response::success('Update requested. The plugin installs it after its next report (within about 5 minutes).', ['connector' => $service->details($id)]);
+
     case 'revoke':
         $service->revoke($id);
         ActivityService::log('connector.revoked', sprintf('Connection key revoked for %s', $website['name']), $id);
         Response::success('Connection key revoked. The plugin on this site can no longer report.', ['connector' => $service->details($id)]);
 
     default:
-        Response::error('Unknown action.', ['action' => 'Use create, show, refresh or revoke.'], 422);
+        Response::error('Unknown action.', ['action' => 'Use create, show, refresh, update or revoke.'], 422);
 }

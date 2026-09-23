@@ -69,6 +69,8 @@ final class SettingsRepository
         'alert_slow'     => 1,
         'alert_recovery' => 1,
         'alert_wp_error' => 1,
+        // SiteWatch Connector: sites install new plugin versions from this server by themselves.
+        'connector_auto_update' => 1,
         'alert_security' => 1,
 
         // Email

@@ -94,6 +94,8 @@ if (!class_exists('SiteWatch_Connector_Client')) {
                 'multisite'      => function_exists('is_multisite') && is_multisite(),
                 'maintenance'    => file_exists(ABSPATH . '.maintenance'),
                 'loader'         => class_exists('SiteWatch_Connector') ? SiteWatch_Connector::loader_installed() : true,
+                'pulse'          => class_exists('SiteWatch_Connector_Pulse') ? SiteWatch_Connector_Pulse::read() : null,
+                'last_update'    => isset(self::state()['last_update']) ? self::state()['last_update'] : null,
             );
         }
 
@@ -155,6 +157,9 @@ if (!class_exists('SiteWatch_Connector_Client')) {
                     }
                 }
                 self::update_state($changes);
+                if ($ok && class_exists('SiteWatch_Connector_Updater')) {
+                    SiteWatch_Connector_Updater::handle_reply($data);
+                }
             }
 
             return array('ok' => $ok, 'code' => $code, 'error' => $ok ? '' : $error, 'data' => $data);

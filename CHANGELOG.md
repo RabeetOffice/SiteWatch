@@ -7,6 +7,23 @@ The in-app copy of these notes (System → Updates) comes from `app/Core/Release
 both files. `tests/ReleaseTest.php` fails if they disagree. A release that changes the database also gets a
 `Migrator` step. Its schema number is listed below, so the code and database versions can be compared.
 
+## [1.7.0] - 2026-09-23 · database schema 7
+
+Plugin self-update and fewer false outage alerts.
+
+### Added
+- SiteWatch Connector 1.1.0 updates itself from your SiteWatch server through WordPress's own updater, which restores the previous version if an update breaks the site (WordPress 6.6+). Turn automatic updates on or off under Monitoring Settings, or use "Update plugin" on a website.
+- Inside view on the website page: the last page WordPress served, the last server error, and the last SiteWatch check that reached WordPress.
+
+### Improved
+- Fewer false outage alerts: when checks fail with a 5xx, timeout or connection error but the plugin reports WordPress is serving pages normally, the alert is held for up to 30 minutes and then sent with a note that SiteWatch is probably being blocked.
+
+### Upgrading
+- Sites running plugin 1.0.0 need one manual update to 1.1.0 (Download plugin, then Plugins → Add New → Upload → "Replace current with uploaded"). From 1.1.0 on, the plugin updates itself.
+
+### Database (schema 7)
+- New `connector_sites` columns: `pulse_ok_at`, `pulse_error_at`, `probe_seen_at`, `probe_status`, `want_update`, `update_result`, `update_at`.
+
 ## [1.6.0] - 2026-09-23 · database schema 6
 
 SiteWatch Connector for WordPress.
