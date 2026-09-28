@@ -21,5 +21,5 @@ $report = ServiceFactory::reports()->uptimeReport([
 ]);
 
 $export = ReportService::exportRows($report['rows']);
-$mode = Request::string('mode', 'uptime') === 'performance' ? 'performance' : 'uptime';
-Response::csv('sitewatch-' . $mode . '-report-' . $report['range']['from'] . '_' . $report['range']['to'] . '.csv', $export['headers'], $export['rows']);
+
+Response::csv('sitewatch-uptime-report-' . $report['range']['from'] . '_' . $report['range']['to'] . '.csv', $export['headers'], $export['rows']);

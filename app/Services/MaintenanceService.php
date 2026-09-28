@@ -34,13 +34,13 @@ final class MaintenanceService
     }
 
     /**
-     * @return array{connector: int, checks: int, activity: int, notifications: int, heartbeats: int, vitals: int, screenshots: int, login_attempts: int, remember_tokens: int, duration_ms: int}
+     * @return array{connector: int, checks: int, activity: int, notifications: int, heartbeats: int, vitals: int, screenshots: int, countries: int, login_attempts: int, remember_tokens: int, duration_ms: int}
      */
     public function cleanup(): array
     {
         $started = microtime(true);
         $heartbeatId = $this->heartbeats->start('cleanup');
-        $result = ['connector' => 0, 'checks' => 0, 'activity' => 0, 'notifications' => 0, 'heartbeats' => 0, 'vitals' => 0, 'screenshots' => 0, 'login_attempts' => 0, 'remember_tokens' => 0, 'duration_ms' => 0];
+        $result = ['connector' => 0, 'checks' => 0, 'activity' => 0, 'notifications' => 0, 'heartbeats' => 0, 'vitals' => 0, 'screenshots' => 0, 'countries' => 0, 'login_attempts' => 0, 'remember_tokens' => 0, 'duration_ms' => 0];
 
         try {
             $checkDays = $this->clampRetention($this->settings->getInt('check_retention_days', 30), 7, 365);
@@ -74,6 +74,12 @@ final class MaintenanceService
                 $result['screenshots'] = PerformanceService::create()->pruneScreenshots();
             } catch (Throwable $e) {
                 $this->log->warning('Screenshot cleanup failed', ['error' => $e->getMessage()]);
+            }
+
+            try {
+                $result['countries'] = CountryCheckService::create()->purge();
+            } catch (Throwable $e) {
+                $this->log->warning('Country history cleanup failed', ['error' => $e->getMessage()]);
             }
 
             $result['heartbeats'] = $this->heartbeats->purgeOlderThan(utc_now()->modify('-14 days')->format('Y-m-d H:i:s'));

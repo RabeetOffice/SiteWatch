@@ -46,14 +46,37 @@ ServerSignature Off
 </IfModule>
 
 # ---------------------------------------------------------------------------
+# Installable app (PWA)
+# ---------------------------------------------------------------------------
+AddType application/manifest+json .webmanifest
+AddType font/woff2 .woff2
+
+# ---------------------------------------------------------------------------
 # Static asset caching
+# Asset URLs carry the version and file time (?v=…), so browsers may keep them for a year. The service
+# worker and the manifest must always be revalidated so updates reach installed apps.
 # ---------------------------------------------------------------------------
 <IfModule mod_expires.c>
     ExpiresActive On
-    ExpiresByType text/css "access plus 7 days"
-    ExpiresByType application/javascript "access plus 7 days"
+    ExpiresByType text/css "access plus 1 year"
+    ExpiresByType application/javascript "access plus 1 year"
+    ExpiresByType text/javascript "access plus 1 year"
+    ExpiresByType font/woff2 "access plus 1 year"
     ExpiresByType image/svg+xml "access plus 30 days"
     ExpiresByType image/png "access plus 30 days"
+</IfModule>
+<IfModule mod_headers.c>
+    <FilesMatch "\.(css|js|woff2)$">
+        Header set Cache-Control "public, max-age=31536000, immutable"
+    </FilesMatch>
+    <FilesMatch "^(sw\.js|manifest\.webmanifest|offline\.html)$">
+        Header set Cache-Control "no-cache"
+    </FilesMatch>
+</IfModule>
+
+# Compress text responses
+<IfModule mod_deflate.c>
+    AddOutputFilterByType DEFLATE text/html text/css text/plain application/javascript text/javascript application/json application/manifest+json image/svg+xml
 </IfModule>
 
 DirectoryIndex index.php

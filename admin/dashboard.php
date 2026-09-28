@@ -9,12 +9,11 @@ use App\Services\ServiceFactory;
 
 $pageTitle = 'Dashboard';
 $activeNav = 'dashboard';
-$pageScripts = ['websites.js', 'dashboard.js'];
+$pageScripts = ['dashboard.js'];
 $needsCharts = true;
 $canIncidents = can('incidents.view');
 $canActivity = can('activity.view');
-$headerActions = (can('reports.view') ? '<a href="' . e(base_url('admin/reports.php')) . '" class="btn btn-light"><i class="bi bi-bar-chart-line"></i>Reports</a>' : '')
-    . (can('websites.manage') ? '<a href="' . e(base_url('admin/website-add.php')) . '" class="btn btn-primary"><i class="bi bi-plus-lg"></i>Add Website</a>' : '');
+$headerActions = can('websites.manage') ? '<a href="' . e(base_url('admin/website-add.php')) . '" class="btn btn-primary"><i class="bi bi-plus-lg" aria-hidden="true"></i>Add website</a>' : '';
 
 $dashboard = ServiceFactory::dashboard();
 
@@ -27,6 +26,14 @@ $initial = [
 $pageData = ['initial' => $initial, 'websiteCount' => ServiceFactory::websites()->count()];
 
 $kpi = $initial['stats']['kpi'];
+$countryProblems = 0;
+if (can('reports.view')) {
+    try {
+        $countryProblems = (int) ServiceFactory::countryChecks()->pageData(false, false)['counts']['problem'];
+    } catch (Throwable) {
+        // Country checks are optional; never let them break the dashboard.
+    }
+}
 $fleet = ConnectorService::create()->fleet();
 $fleetTones = ['connected' => 'success', 'pending' => 'info', 'stale' => 'warning', 'deactivated' => 'warning', 'disconnected' => 'warning'];
 
@@ -35,26 +42,26 @@ require dirname(__DIR__) . '/includes/header.php';
 
 <h2 class="visually-hidden">Portfolio summary</h2>
 <div class="metric-strip" id="kpiGrid">
-    <button type="button" class="metric-item" data-kpi-item="total" data-overview-filter="all" aria-pressed="false">
+    <a class="metric-item" data-kpi-item="total" href="<?= e(base_url('admin/websites.php?filter=all')) ?>">
         <span class="metric-label"><span class="marker brand" aria-hidden="true"></span>Websites</span>
         <span class="metric-value" data-kpi="total"><?= (int) $kpi['total'] ?></span>
         <span class="metric-sub" data-kpi="total_sub"><?= (int) $kpi['paused'] ?> paused<?= !empty($kpi['pending']) ? ', ' . (int) $kpi['pending'] . ' pending' : '' ?></span>
-    </button>
-    <button type="button" class="metric-item" data-kpi-item="online" data-overview-filter="online" aria-pressed="false">
+    </a>
+    <a class="metric-item" data-kpi-item="online" href="<?= e(base_url('admin/websites.php?filter=online')) ?>">
         <span class="metric-label"><span class="marker ok" aria-hidden="true"></span>Online</span>
         <span class="metric-value" data-kpi="online"><?= (int) $kpi['online'] ?></span>
         <span class="metric-sub">at the last check</span>
-    </button>
-    <button type="button" class="metric-item<?= (int) $kpi['down'] > 0 ? ' tone-danger' : '' ?>" data-kpi-item="down" data-overview-filter="down" aria-pressed="false">
+    </a>
+    <a class="metric-item<?= (int) $kpi['down'] > 0 ? ' tone-danger' : '' ?>" data-kpi-item="down" href="<?= e(base_url('admin/websites.php?filter=down')) ?>">
         <span class="metric-label"><span class="marker down" aria-hidden="true"></span>Down</span>
         <span class="metric-value" data-kpi="down"><?= (int) $kpi['down'] ?></span>
         <span class="metric-sub">confirmed failures</span>
-    </button>
-    <button type="button" class="metric-item<?= (int) $kpi['warnings'] > 0 ? ' tone-warning' : '' ?>" data-kpi-item="warnings" data-overview-filter="warning" aria-pressed="false">
+    </a>
+    <a class="metric-item<?= (int) $kpi['warnings'] > 0 ? ' tone-warning' : '' ?>" data-kpi-item="warnings" href="<?= e(base_url('admin/websites.php?filter=warning')) ?>">
         <span class="metric-label"><span class="marker warn" aria-hidden="true"></span>Warnings</span>
         <span class="metric-value" data-kpi="warnings"><?= (int) $kpi['warnings'] ?></span>
         <span class="metric-sub">slow, SSL or suspected</span>
-    </button>
+    </a>
     <<?= $canIncidents ? 'a' : 'div' ?> class="metric-item<?= (int) $kpi['open_incidents'] > 0 ? ' tone-danger' : '' ?>" data-kpi-item="open_incidents"<?= $canIncidents ? ' href="' . e(base_url('admin/incidents.php?status=OPEN')) . '"' : '' ?>>
         <span class="metric-label">Open incidents</span>
         <span class="metric-value" data-kpi="open_incidents"><?= (int) $kpi['open_incidents'] ?></span>
@@ -67,6 +74,14 @@ require dirname(__DIR__) . '/includes/header.php';
     </div>
 </div>
 
+<?php if ($countryProblems > 0): ?>
+<a class="sw-notice tone-warning mb-3" href="<?= e(base_url('admin/performance.php?tab=countries')) ?>">
+    <i class="bi bi-globe-europe-africa" aria-hidden="true"></i>
+    <span><b><?= $countryProblems ?> website<?= $countryProblems === 1 ? '' : 's' ?></b> cannot be opened from some countries.</span>
+    <span class="ms-auto fw-600">View countries <i class="bi bi-arrow-right" aria-hidden="true"></i></span>
+</a>
+<?php endif; ?>
+
 <?php if ($canIncidents): ?>
 <section class="sw-card mb-4" aria-labelledby="attentionHeading">
     <div class="sw-card-header">
@@ -74,7 +89,7 @@ require dirname(__DIR__) . '/includes/header.php';
             <h3 id="attentionHeading">Needs attention</h3>
             <p class="sub">Confirmed, currently open incidents</p>
         </div>
-        <a class="btn btn-sm btn-light" href="<?= e(base_url('admin/incidents.php?status=OPEN')) ?>">All incidents <i class="bi bi-arrow-right"></i></a>
+        <a class="btn btn-sm btn-light" href="<?= e(base_url('admin/incidents.php?status=OPEN')) ?>">All incidents <i class="bi bi-arrow-right" aria-hidden="true"></i></a>
     </div>
     <div id="recentIncidents"></div>
 </section>
@@ -88,7 +103,7 @@ require dirname(__DIR__) . '/includes/header.php';
                 <b><?= (int) $fleet['connected'] ?></b> of <?= (int) $fleet['total_websites'] ?> websites connected with SiteWatch Connector<?= $fleet['attention'] > 0 ? ' · <span class="text-warning">' . (int) $fleet['attention'] . ' not reporting</span>' : '' ?>
             </p>
         </div>
-        <?php if ($fleet['connected'] > 0): ?><button type="button" class="btn btn-sm btn-light" data-overview-filter="connector" aria-pressed="false">Show connected sites <i class="bi bi-arrow-down"></i></button><?php endif; ?>
+        <?php if ($fleet['connected'] > 0): ?><a class="btn btn-sm btn-light" href="<?= e(base_url('admin/websites.php?filter=connector')) ?>">Connected sites <i class="bi bi-arrow-right" aria-hidden="true"></i></a><?php endif; ?>
     </div>
     <?php if ($fleet['sites'] === []): ?>
         <div class="sw-card-body fs-13 text-muted">
@@ -129,8 +144,6 @@ require dirname(__DIR__) . '/includes/header.php';
         </div>
     <?php endif; ?>
 </section>
-
-<section class="sw-card mb-4" id="websiteTable" aria-label="Website inventory"></section>
 
 <div class="sw-section-head">
     <div>

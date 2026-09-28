@@ -70,6 +70,23 @@ final class IncidentRepository extends BaseRepository
     // Queries
     // ------------------------------------------------------------------
 
+    /**
+     * Incidents confirmed or resolved after $sinceUtc, oldest first (desktop notifications in open windows).
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function changesSince(string $sinceUtc, int $limit = 10): array
+    {
+        $limit = max(1, min(50, $limit));
+        return $this->db->fetchAll(
+            "SELECT i.id, i.website_id, i.title, i.status, i.confirmed_at, i.resolved_at, w.name AS website_name
+             FROM incidents i JOIN websites w ON w.id = i.website_id
+             WHERE i.confirmed_at > :s1 OR i.resolved_at > :s2
+             ORDER BY GREATEST(i.confirmed_at, COALESCE(i.resolved_at, i.confirmed_at)) ASC LIMIT {$limit}",
+            ['s1' => $sinceUtc, 's2' => $sinceUtc]
+        );
+    }
+
     public function countOpen(): int
     {
         return (int) $this->db->fetchColumn("SELECT COUNT(*) FROM incidents WHERE status = 'OPEN'");

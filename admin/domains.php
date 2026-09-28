@@ -20,14 +20,15 @@ $pageData = [
     'warningDays' => DomainService::EXPIRY_WARNING_DAYS,
 ];
 $headerActions = $canLookup
-    ? '<button type="button" class="btn btn-light" id="btnRefreshStale"><i class="bi bi-arrow-repeat"></i>Refresh outdated</button>'
+    ? '<button type="button" class="btn btn-light" id="btnRefreshStale"><i class="bi bi-arrow-repeat" aria-hidden="true"></i>Refresh outdated</button>'
+      . '<button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#lookupModal"><i class="bi bi-search" aria-hidden="true"></i>Look up a domain</button>'
     : '';
 
 require dirname(__DIR__) . '/includes/header.php';
 ?>
 
 <h2 class="visually-hidden">Domain summary</h2>
-<div class="metric-strip" id="domainMetrics">
+<div class="metric-strip mb-3" id="domainMetrics">
     <button type="button" class="metric-item" data-domain-filter="all" aria-pressed="false">
         <span class="metric-label"><span class="marker brand" aria-hidden="true"></span>Domains</span>
         <span class="metric-value" data-metric="total">—</span>
@@ -54,47 +55,6 @@ require dirname(__DIR__) . '/includes/header.php';
         <span class="metric-sub">across checked domains</span>
     </div>
 </div>
-
-<div class="row g-3 mb-4">
-    <?php if ($canLookup): ?>
-    <div class="col-xl-7">
-        <section class="sw-card h-100" aria-labelledby="lookupHeading">
-            <div class="sw-card-header">
-                <div><h3 id="lookupHeading">Domain lookup</h3><p class="sub">WHOIS registration, domain age and hosting for any domain. Nothing is saved.</p></div>
-            </div>
-            <div class="sw-card-body">
-                <form class="lookup-form" id="lookupForm" novalidate>
-                    <div class="search">
-                        <i class="bi bi-search" aria-hidden="true"></i>
-                        <input type="text" class="form-control" name="query" id="lookupQuery" maxlength="255" placeholder="example.com or https://www.example.co.uk"
-                               aria-label="Domain name or website address" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="url">
-                    </div>
-                    <button type="submit" class="btn btn-primary"><i class="bi bi-search" aria-hidden="true"></i> Look up</button>
-                </form>
-                <p class="form-text mb-0 mt-2">Registration comes from the domain's registry (RDAP, or WHOIS where RDAP is not offered). Hosting comes from DNS and the network that owns the server address.</p>
-            </div>
-        </section>
-    </div>
-    <?php endif; ?>
-    <div class="<?= $canLookup ? 'col-xl-5' : 'col-12' ?>">
-        <section class="sw-card h-100" aria-labelledby="hostingHeading">
-            <div class="sw-card-header">
-                <div><h3 id="hostingHeading">Where your websites are hosted</h3><p class="sub">Hosting companies and server countries of monitored websites</p></div>
-            </div>
-            <div class="sw-card-body" id="hostingBreakdown"><div class="skeleton skeleton-block" style="height:120px"></div></div>
-        </section>
-    </div>
-</div>
-
-<?php if ($canLookup): ?>
-<section class="sw-card mb-4" id="lookupCard" aria-labelledby="lookupResultHeading" hidden>
-    <div class="sw-card-header">
-        <div><h3 id="lookupResultHeading">Lookup result</h3></div>
-        <button type="button" class="btn btn-sm btn-light" id="lookupClear"><i class="bi bi-x-lg" aria-hidden="true"></i> Clear</button>
-    </div>
-    <div class="sw-card-body" id="lookupResult" aria-live="polite"></div>
-</section>
-<?php endif; ?>
 
 <section class="sw-card" id="domainsCard" aria-labelledby="domainsHeading">
     <div class="sw-card-header">
@@ -142,6 +102,13 @@ require dirname(__DIR__) . '/includes/header.php';
     <div class="sw-pagination" id="domainsPagination"></div>
 </section>
 
+<section class="sw-card mt-3" aria-labelledby="hostingHeading">
+    <div class="sw-card-header">
+        <div><h3 id="hostingHeading">Where your websites are hosted</h3><p class="sub">Hosting companies and server countries of monitored websites</p></div>
+    </div>
+    <div class="sw-card-body" id="hostingBreakdown"><div class="skeleton skeleton-block" style="height:120px"></div></div>
+</section>
+
 <div class="modal fade" id="domainModal" tabindex="-1" aria-labelledby="domainModalTitle" aria-hidden="true">
     <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
         <div class="modal-content">
@@ -158,5 +125,39 @@ require dirname(__DIR__) . '/includes/header.php';
         </div>
     </div>
 </div>
+
+<?php if ($canLookup): ?>
+<div class="modal fade" id="lookupModal" tabindex="-1" aria-labelledby="lookupHeading" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div>
+                    <h2 class="modal-title" id="lookupHeading">Look up a domain</h2>
+                    <p class="fs-13 text-muted mb-0">Registration, domain age and hosting for any domain. Nothing is saved.</p>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form class="lookup-form" id="lookupForm" novalidate>
+                    <div class="search">
+                        <i class="bi bi-search" aria-hidden="true"></i>
+                        <input type="text" class="form-control" name="query" id="lookupQuery" maxlength="255" placeholder="example.com or https://www.example.co.uk"
+                               aria-label="Domain name or website address" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="url">
+                    </div>
+                    <button type="submit" class="btn btn-primary"><i class="bi bi-search" aria-hidden="true"></i> Look up</button>
+                </form>
+                <p class="form-text mb-0 mt-2">Registration comes from the domain's registry (RDAP, or WHOIS where RDAP is not offered). Hosting comes from DNS and the network that owns the server address.</p>
+                <div id="lookupCard" hidden>
+                    <div class="d-flex align-items-center justify-content-between mt-3">
+                        <h3 class="fs-6 m-0" id="lookupResultHeading">Result</h3>
+                        <button type="button" class="btn btn-sm btn-light" id="lookupClear"><i class="bi bi-x-lg" aria-hidden="true"></i> Clear</button>
+                    </div>
+                    <div id="lookupResult" aria-live="polite"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<?php endif; ?>
 
 <?php require dirname(__DIR__) . '/includes/footer.php'; ?>

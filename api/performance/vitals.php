@@ -74,6 +74,8 @@ foreach (ServiceFactory::websites()->all() as $website) {
         'name'        => (string) $website['name'],
         'client_name' => (string) $website['client_name'],
         'url'         => (string) $website['url'],
+        'domain'      => (string) $website['domain'],
+        'favicon_url' => $website['favicon_url'],
         'status'      => (string) $website['status'],
         // Measured on every check, so this is current even when PageSpeed has not run recently.
         'last_ttfb'   => $website['last_ttfb'] === null ? null : (int) $website['last_ttfb'],

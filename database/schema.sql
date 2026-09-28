@@ -114,6 +114,7 @@ CREATE TABLE IF NOT EXISTS `websites` (
   `ssl_alert_level`     SMALLINT     NULL COMMENT 'last SSL expiry alert threshold sent (30/14/7/0)',
   `vitals_checked_at`     DATETIME NULL COMMENT 'last PageSpeed Insights run (both strategies)',
   `screenshot_captured_at` DATETIME NULL COMMENT 'last successful screenshot capture',
+  `country_checked_at`  DATETIME NULL COMMENT 'last availability check from other countries',
   `favicon_url`         VARCHAR(500) NULL,
   `notes`               TEXT NULL,
   `created_at`          DATETIME NOT NULL,
@@ -473,4 +474,72 @@ CREATE TABLE IF NOT EXISTS `connector_daily` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_connector_daily_period` (`website_id`, `period_end`),
   CONSTRAINT `fk_connector_daily_website` FOREIGN KEY (`website_id`) REFERENCES `websites` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---------------------------------------------------------------------------
+-- Country availability (2.0.0): latest result per website and country, plus 90 days of history.
+-- Checks run on Globalping (and check-host.net as a fallback) probes, not on this server.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `country_status` (
+  `website_id`   INT UNSIGNED  NOT NULL,
+  `country`      CHAR(2)       NOT NULL COMMENT 'ISO 3166-1 alpha-2, upper case',
+  `result`       VARCHAR(20)   NOT NULL COMMENT 'reachable | slow | geo_blocked | blocked | unreachable | down | no_probe',
+  `status_code`  SMALLINT      NULL,
+  `response_ms`  INT UNSIGNED  NULL,
+  `error`        VARCHAR(255)  NULL,
+  `network`      VARCHAR(120)  NULL COMMENT 'network (ISP) of the probe that answered',
+  `city`         VARCHAR(80)   NULL,
+  `probe_type`   VARCHAR(12)   NULL COMMENT 'home | datacenter',
+  `provider`     VARCHAR(20)   NULL COMMENT 'globalping | checkhost',
+  `confirmed`    TINYINT(1)    NOT NULL DEFAULT 0 COMMENT 'a second probe on another network agreed',
+  `problem_runs` SMALLINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'consecutive runs with a problem in this country',
+  `checked_at`   DATETIME      NOT NULL,
+  `changed_at`   DATETIME      NOT NULL COMMENT 'when the result last changed',
+  `alerted_at`   DATETIME      NULL COMMENT 'problem alert sent for the current problem',
+  PRIMARY KEY (`website_id`, `country`),
+  KEY `idx_country_status_result` (`result`),
+  CONSTRAINT `fk_country_status_website` FOREIGN KEY (`website_id`) REFERENCES `websites` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `country_checks` (
+  `id`           BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `website_id`   INT UNSIGNED  NOT NULL,
+  `country`      CHAR(2)       NOT NULL,
+  `result`       VARCHAR(20)   NOT NULL,
+  `status_code`  SMALLINT      NULL,
+  `response_ms`  INT UNSIGNED  NULL,
+  `resolved_ip`  VARCHAR(45)   NULL,
+  `error`        VARCHAR(255)  NULL,
+  `network`      VARCHAR(120)  NULL,
+  `asn`          INT UNSIGNED  NULL,
+  `city`         VARCHAR(80)   NULL,
+  `probe_type`   VARCHAR(12)   NULL,
+  `provider`     VARCHAR(20)   NULL,
+  `checked_at`   DATETIME      NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_country_checks_site` (`website_id`, `country`, `checked_at`),
+  KEY `idx_country_checks_time` (`checked_at`),
+  CONSTRAINT `fk_country_checks_website` FOREIGN KEY (`website_id`) REFERENCES `websites` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---------------------------------------------------------------------------
+-- Desktop notifications (2.0.0): one row per browser or installed app that accepted Web Push.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `push_subscriptions` (
+  `id`            INT UNSIGNED  NOT NULL AUTO_INCREMENT,
+  `user_id`       INT UNSIGNED  NOT NULL,
+  `endpoint`      VARCHAR(1000) NOT NULL,
+  `endpoint_hash` CHAR(64)      NOT NULL COMMENT 'sha256 of endpoint (unique)',
+  `p256dh`        VARCHAR(255)  NOT NULL,
+  `auth`          VARCHAR(255)  NOT NULL,
+  `encoding`      VARCHAR(20)   NOT NULL DEFAULT 'aes128gcm',
+  `device`        VARCHAR(120)  NULL COMMENT 'browser and system, for the list of devices',
+  `events`        VARCHAR(255)  NULL COMMENT 'JSON list of event keys this device wants; NULL = all',
+  `created_at`    DATETIME      NOT NULL,
+  `last_used_at`  DATETIME      NULL,
+  `last_error`    VARCHAR(255)  NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_push_endpoint` (`endpoint_hash`),
+  KEY `idx_push_user` (`user_id`),
+  CONSTRAINT `fk_push_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

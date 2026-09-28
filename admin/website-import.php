@@ -6,7 +6,8 @@ require dirname(__DIR__) . '/bootstrap.php';
 
 require_permission('websites.manage');
 
-$pageTitle = 'Import Websites';
+$pageTitle = 'Import websites';
+$breadcrumbs = [['label' => 'Websites', 'href' => 'admin/websites.php'], ['label' => 'Import']];
 $pageSubtitle = 'Add many client websites at once.';
 $activeNav = 'website-add';
 $pageScripts = ['import.js'];

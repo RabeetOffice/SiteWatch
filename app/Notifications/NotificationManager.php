@@ -25,6 +25,7 @@ final class NotificationManager
         'telegram' => 'Telegram',
         'whatsapp' => 'WhatsApp',
         'discord'  => 'Discord',
+        'push'     => 'Desktop notifications',
         'none'     => 'No channel',
     ];
 
@@ -86,6 +87,7 @@ final class NotificationManager
                 new TelegramNotifier($this->settings),
                 new WhatsAppNotifier($this->settings),
                 new DiscordNotifier($this->settings),
+                new WebPushNotifier(),
             ];
         }
         return $this->notifiers;
@@ -240,6 +242,81 @@ final class NotificationManager
             return false;
         }
         return $this->dispatch($this->buildWordpressVulnerabilityMessage($website, $items), (int) $website['id'], null);
+    }
+
+    /**
+     * A website stopped (or started again) opening from one or more countries, per the country availability
+     * checks. Problems are only reported after two runs in a row agree.
+     *
+     * @param array<string, mixed>             $website
+     * @param list<array<string, mixed>>       $problems  country_status rows plus 'name'
+     * @param list<array<string, mixed>>       $recovered country_status rows plus 'name' and 'was'
+     */
+    public function countryAvailability(array $website, array $problems, array $recovered): bool
+    {
+        if ($problems === [] && $recovered === []) {
+            return false;
+        }
+        if (!$this->isAlertEnabled($website, 'country')) {
+            $this->log->log('none', AlertMessage::EVENT_COUNTRY, 'skipped', (int) $website['id'], null, null, null, 'Country availability alerts are disabled.');
+            return false;
+        }
+        return $this->dispatch($this->buildCountryMessage($website, $problems, $recovered), (int) $website['id'], null);
+    }
+
+    /**
+     * @param array<string, mixed>       $website
+     * @param list<array<string, mixed>> $problems
+     * @param list<array<string, mixed>> $recovered
+     */
+    public function buildCountryMessage(array $website, array $problems, array $recovered): AlertMessage
+    {
+        $name = (string) $website['name'];
+        $labels = \App\Countries\CountryClassifier::LABELS;
+        $problemNames = array_map(static fn (array $r): string => (string) $r['name'], $problems);
+        $recoveredNames = array_map(static fn (array $r): string => (string) $r['name'], $recovered);
+        if ($problems !== []) {
+            $headline = 'Not opening from ' . implode(', ', $problemNames);
+            $subject = 'Country problem — ' . $name . ': ' . implode(', ', $problemNames);
+            $tone = 'warning';
+        } else {
+            $headline = 'Opening again from ' . implode(', ', $recoveredNames);
+            $subject = 'Country recovered — ' . $name . ': ' . implode(', ', $recoveredNames);
+            $tone = 'success';
+        }
+        $rows = [
+            ['Website', $name],
+            ['Client', (string) ($website['client_name'] ?: '—')],
+            ['URL', (string) $website['url']],
+        ];
+        foreach ($problems as $r) {
+            $detail = $labels[$r['result']] ?? (string) $r['result'];
+            if (!empty($r['status_code'])) {
+                $detail .= ' · HTTP ' . (int) $r['status_code'];
+            } elseif (!empty($r['error'])) {
+                $detail .= ' · ' . str_limit((string) $r['error'], 120);
+            }
+            if (!empty($r['network'])) {
+                $detail .= ' · via ' . $r['network'];
+            }
+            $rows[] = [(string) $r['name'], $detail];
+        }
+        foreach ($recovered as $r) {
+            $rows[] = [(string) $r['name'], 'Reachable again (was: ' . ($labels[$r['was']] ?? (string) $r['was']) . ')'];
+        }
+        $intro = $problems !== []
+            ? 'Test servers in these countries could not open the website on two checks in a row, while other countries could. "Blocked by the site" usually means a country rule in a firewall or CDN; "Possibly blocked" means signs of blocking by the country\'s network.'
+            : 'The countries below can open the website again.';
+        $details = $this->detailsUrl((int) $website['id']);
+        $text = "{$subject}\n\n" . $this->textRows($rows) . "\n\n{$intro}\n\nOpen website details: " . $details;
+        $html = $this->htmlLayout($subject, $problems !== [] ? 'Country availability' : 'Recovered', $tone, $rows, $details, 'Open Website Details', e($intro));
+        $icon = $problems !== [] ? '🌍' : '✅';
+        $lines = array_map(static fn (array $row): string => $row[0] . ': ' . $row[1], array_slice($rows, 3));
+        $telegram = $icon . ' <b>' . self::tg($headline) . "</b>\n\n<b>" . self::tg($name) . "</b>\n" . self::tg(implode("\n", $lines)) . "\n\n" . self::tg((string) $website['url']);
+        $whatsapp = $icon . ' *' . self::wa($headline) . "*\n\n*" . self::wa($name) . "*\n" . self::wa(implode("\n", $lines)) . "\n\n" . self::wa((string) $website['url']);
+        $discord = $this->discordPayload($subject, $icon . ' ' . $headline, $tone, $rows, (string) $website['url'], (int) $website['id']);
+
+        return new AlertMessage(AlertMessage::EVENT_COUNTRY, $subject, $text, $html, $telegram, (int) $website['id'], null, $whatsapp, $discord);
     }
 
     /**

@@ -24,7 +24,7 @@ Api::boot(['POST']);
 
 $input = Request::all();
 $section = Request::string('section');
-Api::authorize(in_array($section, ['general', 'monitoring', 'performance'], true) ? 'settings.manage' : 'notifications.manage');
+Api::authorize(in_array($section, ['general', 'monitoring', 'performance', 'countries'], true) ? 'settings.manage' : 'notifications.manage');
 $settings = App::settings();
 $v = new Validator($input);
 $values = [];
@@ -188,6 +188,29 @@ switch ($section) {
         }
         break;
 
+    case 'countries':
+        $v->integer('country_check_interval_hours', 1, 168, 'Country re-check interval');
+        $v->integer('country_retention_days', 7, 365, 'Country history');
+        $v->regex('globalping_token', '/^[A-Za-z0-9_\-]{16,128}$/', 'A Globalping token is a string of letters and numbers from globalping.io → Tokens.');
+        $picked = array_values(array_filter((array) ($input['countries'] ?? []), static fn ($c): bool => is_string($c) && isset(\App\Countries\Countries::ALL[strtoupper($c)])));
+        if ($picked === []) {
+            $v->addError('countries', 'Choose at least one country.');
+        } elseif (count($picked) > \App\Countries\Countries::MAX) {
+            $v->addError('countries', 'Choose at most ' . \App\Countries\Countries::MAX . ' countries: each one is a test per website.');
+        }
+        if ($v->passes()) {
+            $values = [
+                'country_checks_enabled'       => $bool('country_checks_enabled'),
+                'country_check_interval_hours' => $int('country_check_interval_hours', 24),
+                'country_retention_days'       => $int('country_retention_days', 90),
+                'country_list'                 => implode(',', array_map('strtoupper', $picked)),
+            ];
+            if ($str('globalping_token') !== '') {
+                $values['globalping_token'] = $str('globalping_token');
+            }
+        }
+        break;
+
     case 'whatsapp':
         $provider = in_array($str('whatsapp_provider'), WhatsAppNotifier::PROVIDERS, true) ? $str('whatsapp_provider') : WhatsAppNotifier::DEFAULT_PROVIDER;
         $phone = WhatsAppNotifier::normalizePhone($str('whatsapp_phone'));
@@ -267,7 +290,7 @@ switch ($section) {
         break;
 
     case 'alerts':
-        foreach (['alert_down', 'alert_critical', 'alert_database', 'alert_http', 'alert_timeout', 'alert_ssl', 'alert_slow', 'alert_recovery', 'alert_wp_error', 'alert_security', 'alert_vulnerability'] as $key) {
+        foreach (['alert_down', 'alert_critical', 'alert_database', 'alert_http', 'alert_timeout', 'alert_ssl', 'alert_slow', 'alert_recovery', 'alert_wp_error', 'alert_security', 'alert_vulnerability', 'alert_country'] as $key) {
             $values[$key] = $bool($key);
         }
         break;

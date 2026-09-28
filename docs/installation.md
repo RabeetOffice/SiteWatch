@@ -84,7 +84,12 @@ project **including the `vendor/` directory**.
 
 Dependencies: `guzzlehttp/guzzle` (concurrent HTTP checks), `phpmailer/phpmailer` (SMTP), `monolog/monolog` (logging),
 `vlucas/phpdotenv` (.env), `dragonmantank/cron-expression` (housekeeping schedule), `composer/ca-bundle` (trusted CA
-certificates for SSL verification on hosts without a system bundle).
+certificates for SSL verification on hosts without a system bundle), `minishlink/web-push` (desktop notifications, 2.0.0).
+
+**Desktop notifications and the installable app** need the site to be served over HTTPS (`localhost` also counts for
+testing). On Windows with XAMPP, PHP's OpenSSL cannot create the Web Push keys unless Apache is started with
+`OPENSSL_CONF` pointing at `C:\xampp\php\extras\ssl\openssl.cnf` (for example as a system environment variable). Linux
+hosting needs nothing extra.
 
 ---
 
@@ -207,6 +212,14 @@ collected in the background, though the per-website **Measure now** and **Captur
 
 ```
 20 * * * * /usr/local/bin/php /home/USERNAME/monitor.agency.com/cron/vitals-check.php >/dev/null 2>&1
+```
+
+Recommended hourly job for **country availability** (2.0.0). Each run checks the websites whose country results are
+older than *Settings → Monitoring → Country availability → Check every* (24 hours by default), stays within about four
+minutes, and leaves room in the free hourly allowance of the test servers for people pressing *Check now*:
+
+```
+40 * * * * /usr/local/bin/php /home/USERNAME/monitor.agency.com/cron/country-check.php >/dev/null 2>&1
 ```
 
 **Finding the correct PHP binary.** Do not assume `/usr/local/bin/php` exists or is PHP 8.2. Determine the path with one of:
@@ -635,18 +648,20 @@ api/              JSON endpoints (Fetch API) grouped by area: dashboard, website
 app/Core/         App container, Config, Database (PDO), Session, Auth, Permission, Migrator, CSRF, Crypto, Lock, Validator, Request/Response, UrlNormalizer, ErrorHandler
 app/Domains/      DomainInspector, RdapClient/RdapParser, WhoisClient/WhoisParser, HostingInspector, HostingDetector, DomainName, HttpClient
 app/Monitoring/   WebsiteMonitor (Guzzle), SsrfGuard, ErrorDetector, StatusClassifier, SSLChecker, IncidentManager, MonitoringScheduler, UptimeCalculator, MonitorManager, Status
-app/Notifications NotificationManager, EmailNotifier (PHPMailer), TelegramNotifier, WhatsAppNotifier, DiscordNotifier, AlertMessage, NotifierInterface
+app/Countries/    Countries, GlobalpingClient, CheckHostClient, CountryClassifier, Probe (country availability)
+app/Notifications NotificationManager, EmailNotifier (PHPMailer), TelegramNotifier, WhatsAppNotifier, DiscordNotifier, WebPushNotifier, AlertMessage, NotifierInterface
 app/Performance/  PageSpeedClient (Core Web Vitals), VitalsResult, ScreenshotCapturer
 app/Repositories/ Website, Check, Incident, DailyStats, Settings, User, Role, Domain, Activity, Notification, Heartbeat, Vitals, Screenshot repositories (PDO prepared statements)
-app/Services/     DashboardService, WebsiteService (CRUD/import/export), ReportService, DomainService, PerformanceService (vitals & screenshots), TeamService (users & roles), ActivityService, MaintenanceService, ServiceFactory
-assets/           app.css (light/dark design system), vanilla JS per page
+app/Services/     DashboardService, WebsiteService (CRUD/import/export), ReportService, DomainService, PerformanceService (vitals & screenshots), CountryCheckService, PushService, TeamService (users & roles), ActivityService, MaintenanceService, ServiceFactory
+assets/           app.css (light/dark design system), app.js (in-app navigation, command palette, shortcuts), vanilla JS per page, vendor/ and fonts/ (self-hosted)
 config/           app.php, database.php (read from .env)
-cron/             monitor.php (every minute), cleanup.php (daily), ssl-check.php (daily, optional), domain-check.php (daily, recommended), vitals-check.php (hourly, recommended)
+cron/             monitor.php (every minute), cleanup.php (daily), ssl-check.php (daily, optional), domain-check.php (daily, recommended), vitals-check.php (hourly, recommended), country-check.php (hourly, recommended)
 database/         schema.sql, migrate.php (explicit schema upgrade)
-includes/         header.php, sidebar.php, footer.php, forbidden.php, website-form.php, report-layout.php
+includes/         header.php, sidebar.php, footer.php, navigation.php (sidebar, tabs, palette), forbidden.php, website-form.php, report-layout.php, pages/ (tabs of Performance, Team and Settings)
 storage/          logs/, cache/, locks/, screenshots/, install.lock (all protected from the web)
 tests/            PHPUnit unit tests, fixture server, scenario and lifecycle scripts
 install.php       Installation wizard   ·   login.php / logout.php / index.php
+manifest.webmanifest, sw.js, offline.html   Installable app and Web Push (service worker)
 ```
 
 Scale guidance: the default configuration comfortably handles roughly 50–500 websites depending on intervals and server

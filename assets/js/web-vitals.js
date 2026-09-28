@@ -1,8 +1,8 @@
-/* SiteWatch — Core Web Vitals page */
+/* SiteWatch — Performance › Core Web Vitals */
 (function () {
     'use strict';
 
-    const COLUMNS = 9;
+    const COLUMNS = 8;
     const RATING_TONE = { good: 'success', 'needs-improvement': 'warning', poor: 'danger' };
 
     let data = null;
@@ -49,7 +49,7 @@
                     ? 'Clear the filter to see every website.'
                     : (data.enabled
                         ? 'Results appear after cron/vitals-check.php runs, or use "Measure now" on a website.'
-                        : 'Enable Core Web Vitals under Monitoring Settings to start collecting results.')
+                        : 'Turn on Core Web Vitals in Settings › Monitoring to start collecting results.')
             ) + '</td></tr>';
             return;
         }
@@ -63,9 +63,7 @@
                 : '<span class="text-faint" title="Interaction to Next Paint needs real-user data, which Chrome only reports once a site has enough traffic.">—</span>';
 
             return '<tr>' +
-                '<td><div class="site-text"><a class="site-name" href="' + SW.url('admin/website-details.php', { id: r.id }) + '">' + SW.escape(r.name) + '</a>' +
-                '<span class="site-domain">' + SW.escape(r.url) + '</span></div></td>' +
-                '<td class="hide-mobile">' + (r.client_name ? SW.escape(r.client_name) : '<span class="text-faint">—</span>') + '</td>' +
+                '<td>' + SW.siteCell(r) + '</td>' +
                 '<td class="num">' + score(run) + '</td>' +
                 '<td class="num">' + metric(lab && lab.lcp) + '</td>' +
                 '<td class="num">' + metric(lab && lab.cls) + '</td>' +
@@ -79,7 +77,8 @@
 
     async function load() {
         const body = document.getElementById('cwvBody');
-        if (body) body.innerHTML = SW.skeletonRows(COLUMNS, 6);
+        if (body && !data) body.innerHTML = SW.skeletonRows(COLUMNS, 6);
+        if (body) body.classList.add('is-refreshing');
         try {
             const res = await SW.api('api/performance/vitals.php', { query: { strategy: strategy } });
             data = res.data;
@@ -87,10 +86,14 @@
             renderTable();
         } catch (e) {
             if (body) body.innerHTML = '<tr><td colspan="' + COLUMNS + '">' + SW.emptyState('bi-wifi-off', 'Unable to load Core Web Vitals', e.message) + '</td></tr>';
+        } finally {
+            if (body) body.classList.remove('is-refreshing');
         }
     }
 
     document.addEventListener('sw:ready', function () {
+        if (!document.getElementById('cwvBody')) return;
+        data = null;
         SW.qsa('#cwvStrategy button').forEach(function (btn) {
             btn.classList.toggle('active', btn.getAttribute('data-strategy') === strategy);
             btn.addEventListener('click', function () {

@@ -2,7 +2,7 @@
 (function () {
     'use strict';
 
-    const COLUMNS = 6;
+    const COLUMNS = 7;
     const state = {
         q: '',
         website_id: SW.page.preset ? SW.page.preset.website_id || '' : '',
@@ -45,34 +45,40 @@
         });
     }
 
-    /**
-     * Secondary information (verbose errors, HTTP details, resolution) lives in
-     * an expandable panel so every row keeps the same shape.
-     */
-    function details(i) {
-        const facts = [];
-        if (i.http_status) facts.push(['HTTP status', SW.escape(i.http_status)]);
-        if (i.response_time !== null && i.response_time !== undefined) facts.push(['Response time', SW.escape(SW.fmt.ms(i.response_time))]);
-        if (!i.is_open) facts.push(['Resolved', SW.escape(i.resolved_label)]);
-        if (!i.is_open && i.resolved_http_status) facts.push(['Recovery HTTP', SW.escape(i.resolved_http_status)]);
-        facts.push(['Alert sent', i.notified_at ? SW.escape(SW.fmt.date(i.notified_at, true)) : 'No send recorded']);
-        if (!i.is_open) facts.push(['Recovery alert', i.recovery_notified_at ? SW.escape(SW.fmt.date(i.recovery_notified_at, true)) : 'No send recorded']);
+    let rows = [];
 
-        const hasError = !!i.error_message;
-        if (!hasError && facts.length === 0) return '';
-        return '<details class="detail-toggle"><summary>Details</summary><div class="detail-body">' +
-            (hasError ? '<p class="mb-2 break-anywhere"><b>Error:</b> ' + SW.escape(i.error_message) + '</p>' : '') +
-            '<dl class="kv-list fs-12 mb-0">' + facts.map(function (f) {
-                return '<dt>' + f[0] + '</dt><dd>' + f[1] + '</dd>';
-            }).join('') + '</dl></div></details>';
+    /** Everything about one incident, in the side panel so the list keeps its place. */
+    function openPanel(i) {
+        const facts = [];
+        facts.push(['State', i.is_open ? '<span class="sw-pill tone-danger"><i class="bi bi-exclamation-circle" aria-hidden="true"></i>Open</span>'
+            : '<span class="sw-pill tone-success"><i class="bi bi-check-circle" aria-hidden="true"></i>Resolved</span>']);
+        facts.push(['Type', SW.escape(i.type_label)]);
+        facts.push(['Started', SW.escape(i.started_label) + ' <span class="text-muted fs-12">(' + SW.escape(SW.fmt.timeAgo(i.started_at)) + ')</span>']);
+        if (i.confirmed_at) facts.push(['Confirmed', SW.escape(SW.fmt.date(i.confirmed_at, true))]);
+        facts.push([i.is_open ? 'Ongoing for' : 'Duration', SW.escape(i.duration_label)]);
+        if (!i.is_open) facts.push(['Resolved', SW.escape(i.resolved_label)]);
+        if (i.http_status) facts.push(['HTTP status', '<span class="http-code ' + SW.fmt.httpClass(i.http_status) + '">' + SW.escape(i.http_status) + '</span>']);
+        if (i.response_time !== null && i.response_time !== undefined) facts.push(['Response time', SW.responseTime(i.response_time)]);
+        if (!i.is_open && i.resolved_http_status) facts.push(['Recovery HTTP', SW.escape(i.resolved_http_status)]);
+        facts.push(['Alert sent', i.notified_at ? SW.escape(SW.fmt.date(i.notified_at, true)) : '<span class="text-faint">No send recorded</span>']);
+        if (!i.is_open) facts.push(['Recovery alert', i.recovery_notified_at ? SW.escape(SW.fmt.date(i.recovery_notified_at, true)) : '<span class="text-faint">No send recorded</span>']);
+
+        document.getElementById('incidentPanelSite').textContent = i.website_name + (i.client_name ? ' · ' + i.client_name : '');
+        document.getElementById('incidentPanelTitle').textContent = i.title;
+        document.getElementById('incidentPanelBody').innerHTML =
+            (i.error_message ? '<div class="form-label">What SiteWatch saw</div><pre class="copy-box mb-3">' + SW.escape(i.error_message) + '</pre>' : '') +
+            '<dl class="kv-list mb-3">' + facts.map(function (f) { return '<dt>' + f[0] + '</dt><dd>' + f[1] + '</dd>'; }).join('') + '</dl>' +
+            '<div class="divider-top d-flex gap-2 flex-wrap">' +
+            '<a class="btn btn-sm btn-primary" href="' + SW.escape(i.urls.website) + '"><i class="bi bi-box-arrow-up-right" aria-hidden="true"></i>Open website</a>' +
+            '<a class="btn btn-sm btn-light" href="' + SW.url('admin/incidents.php', { website_id: i.website_id }) + '">All incidents of this website</a></div>';
+        SW.panel.open('incidentPanel');
     }
 
-    function row(i) {
-        return '<tr>' +
-            '<td><div class="site-text"><a class="site-name" href="' + SW.escape(i.urls.website) + '" title="' + SW.escape(i.website_name) + '">' + SW.escape(i.website_name) + '</a>' +
-            '<span class="site-domain" title="' + SW.escape(i.client_name || i.domain) + '">' + SW.escape(i.client_name || i.domain) + '</span></div></td>' +
+    function row(i, index) {
+        return '<tr class="is-clickable" data-index="' + index + '">' +
+            '<td>' + SW.siteCell({ id: i.website_id, name: i.website_name, domain: i.domain, client_name: i.client_name, favicon_url: i.favicon_url }, { href: i.urls.website }) + '</td>' +
             '<td><div class="min-w-0">' + SW.badge(i.type, i.type_label, i.is_open ? 'down' : 'neutral', 'no-dot') +
-            '<div class="fs-13 mt-1 break-anywhere">' + SW.escape(i.title) + '</div>' + details(i) + '</div></td>' +
+            '<div class="fs-13 mt-1 break-anywhere">' + SW.escape(i.title) + '</div></div></td>' +
             '<td>' + (i.is_open ? '<span class="sw-pill tone-danger"><i class="bi bi-exclamation-circle" aria-hidden="true"></i>Open</span>'
                 : '<span class="sw-pill tone-success"><i class="bi bi-check-circle" aria-hidden="true"></i>Resolved</span>') + '</td>' +
             '<td class="fs-13 nowrap">' + SW.escape(i.started_label) + '<div class="fs-12 text-muted">' + SW.escape(SW.fmt.timeAgo(i.started_at)) + '</div></td>' +
@@ -80,13 +86,14 @@
             '<td class="hide-mobile fs-13">' + (i.notified_at
                 ? '<span class="text-muted"><i class="bi bi-bell" aria-hidden="true"></i> Sent</span>'
                 : '<span class="text-faint">Not recorded</span>') + '</td>' +
+            '<td class="actions"><button type="button" class="btn btn-sm btn-light" data-open="' + index + '">Details</button></td>' +
             '</tr>';
     }
 
     async function load(silent) {
         const list = document.getElementById('incidentsList');
-        // A background refresh must never close an expanded row or steal focus.
-        if (silent && (list.contains(document.activeElement) || list.querySelector('details[open]'))) return;
+        // A background refresh must never move the list while someone is using it.
+        if (silent && (list.contains(document.activeElement) || SW.panel.current === 'incidentPanel')) return;
         if (!silent) list.classList.add('is-refreshing');
         if (abort) abort.abort();
         abort = new AbortController();
@@ -107,6 +114,7 @@
                     ? SW.emptyState('bi-funnel', 'No incidents match these filters.', 'Try widening the date range or clearing filters.')
                     : SW.emptyState('bi-shield-check', 'No incidents recorded.', 'Confirmed outages and errors will be listed here.')) + '</td></tr>';
             } else {
+                rows = d.rows;
                 list.innerHTML = d.rows.map(row).join('');
             }
             SW.pagination(document.getElementById('incidentsPagination'), d.page, d.per_page, d.total, function (p) { state.page = p; load(); });
@@ -167,6 +175,13 @@
                 x.setAttribute('aria-pressed', String(x.getAttribute('data-status') === ''));
             });
             load();
+        });
+
+        // A click anywhere on a row (except its links) opens the details.
+        document.getElementById('incidentsList').addEventListener('click', function (ev) {
+            if (ev.target.closest('a')) return;
+            const tr = ev.target.closest('tr[data-index]');
+            if (tr && rows[+tr.getAttribute('data-index')]) openPanel(rows[+tr.getAttribute('data-index')]);
         });
 
         load();

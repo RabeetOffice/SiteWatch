@@ -125,7 +125,7 @@ $v = static fn (string $key, mixed $default = ''): string => (string) ($website[
             <legend>Alerts</legend>
             <p class="desc">
                 Which confirmed events notify you about this website. Each one is also subject to the
-                global rule under <a href="<?= e(base_url('admin/notifications.php')) ?>">Notifications</a> —
+                global rule under <a href="<?= e(base_url('admin/settings.php?tab=notifications')) ?>">Notifications</a> —
                 if the global rule is off, no alert is sent even when enabled here.
             </p>
             <div class="option-list">
@@ -146,7 +146,7 @@ $v = static fn (string $key, mixed $default = ''): string => (string) ($website[
             <div class="sw-disclosure-body">
                 <p class="text-muted fs-13 mb-3">
                     False-positive protection. Leave both fields empty to inherit the global values from
-                    <a href="<?= e(base_url('admin/settings.php?section=monitoring')) ?>">Monitoring Settings</a>.
+                    <a href="<?= e(base_url('admin/settings.php?tab=monitoring')) ?>">Settings › Monitoring</a>.
                 </p>
                 <div class="row g-3">
                     <div class="col-sm-6">

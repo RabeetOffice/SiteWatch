@@ -6,6 +6,13 @@
         const body = {};
         SW.qsa('input, select, textarea', form).forEach(function (el) {
             if (!el.name) return;
+            // name[] checkboxes become a list of the checked values.
+            if (el.name.slice(-2) === '[]') {
+                const key = el.name.slice(0, -2);
+                body[key] = body[key] || [];
+                if (el.checked) body[key].push(el.value);
+                return;
+            }
             if (el.type === 'checkbox') { body[el.name] = el.checked ? '1' : '0'; return; }
             body[el.name] = el.value;
         });
@@ -20,6 +27,7 @@
         try {
             const res = await SW.api('api/settings/save.php', { method: 'POST', body: Object.assign({ section: section }, serialize(form)) });
             SW.toast(res.message, 'success');
+            setDirty(form, false);
             // Secrets are never echoed back: clear password fields and update placeholders.
             SW.qsa('input[type="password"]', form).forEach(function (p) { if (p.value) { p.value = ''; p.placeholder = '•••••••••• (saved — leave blank to keep)'; } });
             if (res.data && res.data.reload) setTimeout(function () { window.location.reload(); }, 600);
@@ -43,7 +51,8 @@
         email: 'bi-envelope',
         telegram: 'bi-telegram',
         whatsapp: 'bi-whatsapp',
-        discord: 'bi-discord'
+        discord: 'bi-discord',
+        push: 'bi-window-desktop'
     };
 
     // The WhatsApp card carries the credentials for both providers; only the selected one is shown.
@@ -86,8 +95,43 @@
         }
     }
 
+    /** The save bar of a form sticks to the bottom of the window while it has unsaved changes. */
+    function setDirty(form, dirty) {
+        const bar = form.querySelector('.sw-form-actions');
+        if (!bar) return;
+        bar.classList.toggle('is-dirty', dirty);
+        let note = bar.querySelector('[data-dirty-note]');
+        if (dirty && !note) {
+            note = document.createElement('span');
+            note.className = 'fs-13 text-warning me-auto';
+            note.setAttribute('data-dirty-note', '');
+            note.innerHTML = '<i class="bi bi-dot" aria-hidden="true"></i>Unsaved changes';
+            bar.insertBefore(note, bar.firstChild);
+        } else if (!dirty && note) {
+            note.remove();
+        }
+    }
+
+    /** Settings › Monitoring: how many tests the chosen countries use per day. */
+    function countryEstimate() {
+        const el = document.querySelector('[data-country-estimate]');
+        if (!el) return;
+        const count = SW.qsa('input[name="countries[]"]:checked').length;
+        const sites = parseInt(el.getAttribute('data-websites'), 10) || 0;
+        const hours = parseInt((document.getElementById('country_check_interval_hours') || {}).value, 10) || 24;
+        const perDay = Math.round(count * sites * (24 / hours));
+        el.textContent = count + ' of 15 countries chosen · about ' + SW.fmt.num(perDay) + ' tests a day for ' + sites + ' websites' +
+            (count > 15 ? ' — choose at most 15.' : '.');
+        el.classList.toggle('text-danger', count > 15 || count === 0);
+    }
+
     document.addEventListener('sw:ready', function () {
-        SW.qsa('form[data-section]').forEach(function (form) { form.addEventListener('submit', function (ev) { ev.preventDefault(); saveForm(form); }); });
+        SW.qsa('form[data-section]').forEach(function (form) {
+            form.addEventListener('submit', function (ev) { ev.preventDefault(); saveForm(form); });
+            form.addEventListener('input', function () { setDirty(form, true); });
+            form.addEventListener('change', function () { setDirty(form, true); countryEstimate(); });
+        });
+        countryEstimate();
         [['testEmail', 'email'], ['testTelegram', 'telegram'], ['testWhatsapp', 'whatsapp'], ['testDiscord', 'discord']].forEach(function (pair) {
             const btn = document.getElementById(pair[0]);
             if (btn) btn.addEventListener('click', function () { test(pair[1], btn); });

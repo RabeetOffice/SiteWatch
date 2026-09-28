@@ -35,7 +35,7 @@
         if (!conf.canManageSettings) {
             return '<p class="fs-13 mb-0">Ask an administrator to enable it under Monitoring Settings.</p>';
         }
-        return '<a class="btn btn-sm btn-primary" href="' + SW.url('admin/settings.php', { section: 'monitoring' }) + '">' +
+        return '<a class="btn btn-sm btn-primary" href="' + SW.url('admin/settings.php', { tab: 'monitoring' }) + '">' +
             '<i class="bi bi-sliders"></i> Set up ' + SW.escape(what) + '</a>';
     }
 

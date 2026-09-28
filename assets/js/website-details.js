@@ -115,6 +115,7 @@
     }
 
     async function loadTimeline() {
+        if (!document.getElementById('timelineChecks') && !document.getElementById('timelineDays')) return;
         const res = await SW.api('api/websites/timeline.php', { query: { id: id } });
         renderTimeline(res.data);
     }
@@ -134,43 +135,58 @@
                 : 'No checks recorded in the ' + (rangeLabels[rtRange] || 'selected range');
         }
 
+        if (!rtData.summary.checks) {
+            SW.chartEmpty(el, 'rtEmpty', 'bi-graph-up', 'No checks in the ' + (rangeLabels[rtRange] || 'selected range'),
+                'Pick a longer range above, or check that the monitoring cron job is running.');
+            const legend = document.getElementById('rtLegend');
+            if (legend) legend.hidden = true;
+            return;
+        }
+        SW.chartEmpty(el, 'rtEmpty');
+        const legendEl = document.getElementById('rtLegend');
+        if (legendEl) legendEl.hidden = false;
+
+        const thresholds = SW.thresholds;
         const hasMax = rtData.max && rtData.max.some(function (v) { return v !== null; });
         const datasets = [{
             label: 'Average response',
             data: rtData.values,
             borderColor: c.primary,
             backgroundColor: c.primarySoft,
-            fill: true,
-            tension: 0.3,
-            pointRadius: rtData.values.length > 80 ? 0 : 2,
+            fill: hasMax ? false : 'origin',
+            tension: 0.35,
+            pointRadius: 0,
             pointHoverRadius: 4,
             pointHitRadius: 12,
             borderWidth: 2,
             spanGaps: true,
+            order: 1,
         }];
         if (hasMax) {
+            // Filled down to the average line: the band shows how far the slowest check strayed.
             datasets.push({
-                label: 'Peak response',
+                label: 'Slowest response',
                 data: rtData.max,
-                borderColor: c.warning,
-                borderDash: [4, 4],
-                fill: false,
-                tension: 0.3,
+                borderColor: 'transparent',
+                backgroundColor: c.primarySoft,
+                fill: '-1',
+                tension: 0.35,
                 pointRadius: 0,
-                pointHoverRadius: 4,
-                borderWidth: 1.5,
+                pointHoverRadius: 3,
+                pointHoverBackgroundColor: c.primary,
+                borderWidth: 0,
                 spanGaps: true,
+                order: 2,
             });
         }
-
         const legend = document.getElementById('rtLegend');
         if (legend) {
             legend.innerHTML = '<span class="item"><span class="swatch"></span>Average response</span>' +
-                (hasMax ? '<span class="item"><span class="swatch dashed"></span>Peak response</span>' : '') +
-                '<span class="item"><span class="swatch dashed"></span>Slow threshold (' + SW.fmt.ms(SW.thresholds.slow) + ')</span>';
+                (hasMax ? '<span class="item"><span class="swatch" style="height:10px;opacity:.35"></span>Range up to the slowest check</span>' : '') +
+                '<span class="item"><span class="swatch dashed"></span>Slow threshold (' + SW.escape(SW.fmt.ms(thresholds.slow)) + ')</span>' +
+                ((rtData.down || []).some(function (d) { return d > 0; }) ? '<span class="item"><span class="swatch" style="height:10px;background:' + c.danger + ';opacity:.25"></span>Failed checks</span>' : '');
         }
 
-        const thresholds = SW.thresholds;
         rtChart = new Chart(el, {
             type: 'line',
             data: { labels: rtData.labels, datasets: datasets },
@@ -206,6 +222,25 @@
                 },
             },
             plugins: [{
+                id: 'failureBands',
+                beforeDatasetsDraw: function (chart) {
+                    const down = rtData.down || [];
+                    if (!down.some(function (d) { return d > 0; })) return;
+                    const x = chart.scales.x, area = chart.chartArea, ctx = chart.ctx;
+                    const n = rtData.labels.length;
+                    const half = n > 1 ? (x.getPixelForValue(1) - x.getPixelForValue(0)) / 2 : (area.right - area.left) / 2;
+                    ctx.save();
+                    ctx.fillStyle = c.danger;
+                    ctx.globalAlpha = 0.12;
+                    down.forEach(function (d, i) {
+                        if (!d) return;
+                        const px = x.getPixelForValue(i);
+                        const left = Math.max(area.left, px - half), right = Math.min(area.right, px + half);
+                        ctx.fillRect(left, area.top, right - left, area.bottom - area.top);
+                    });
+                    ctx.restore();
+                },
+            }, {
                 id: 'annotationLine',
                 afterDraw: function (chart, args, opts) {
                     const y = chart.scales.y;
@@ -245,6 +280,7 @@
             if (res.data.incident_opened) SW.toast('Incident opened.', 'danger');
             if (res.data.incident_resolved) SW.toast('Website recovered — incident resolved.', 'success');
             checksPage = 1;
+            document.dispatchEvent(new CustomEvent('sw:website-checked'));
             await Promise.all([loadShow(), loadChecks(), loadTimeline(), loadRt()]);
         } catch (e) { SW.toast(e.message, 'danger'); }
         finally { checkBusy = false; SW.setLoading(btn, false); }
@@ -261,7 +297,7 @@
         if (pauseBtn) pauseBtn.addEventListener('click', async function () {
             const btn = this; const enabled = btn.getAttribute('data-enabled') === '1';
             SW.setLoading(btn, true);
-            try { const res = await SW.api('api/websites/pause.php', { method: 'POST', body: { id: id, action: enabled ? 'pause' : 'resume' } }); SW.setLoading(btn, false); renderHeader(res.data.website); SW.toast(res.message, 'success'); }
+            try { const res = await SW.api('api/websites/pause.php', { method: 'POST', body: { id: id, action: enabled ? 'pause' : 'resume' } }); SW.setLoading(btn, false); renderHeader(res.data.website); SW.toast(res.message, 'success'); document.dispatchEvent(new CustomEvent('sw:website-checked')); }
             catch (e) { SW.setLoading(btn, false); SW.toast(e.message, 'danger'); }
         });
         const deleteBtn = document.getElementById('btnDelete');

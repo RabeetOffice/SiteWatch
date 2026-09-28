@@ -115,7 +115,7 @@ final class ServiceFactory
 
     public static function reports(): ReportService
     {
-        return new ReportService(self::websites(), self::dailyStats(), self::incidents());
+        return new ReportService(self::websites(), self::dailyStats(), self::incidents(), self::checks());
     }
 
     public static function vitals(): VitalsRepository
@@ -136,5 +136,10 @@ final class ServiceFactory
     public static function monitor(): MonitorManager
     {
         return MonitorManager::create();
+    }
+
+    public static function countryChecks(): CountryCheckService
+    {
+        return CountryCheckService::create();
     }
 }

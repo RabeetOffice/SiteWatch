@@ -13,7 +13,7 @@ use App\Services\ServiceFactory;
 $pageTitle = 'Incidents';
 $activeNav = 'incidents';
 $pageScripts = ['incidents.js'];
-$headerActions = '<a class="btn btn-light" id="incidentsExport" href="' . e(base_url('api/incidents/export.php')) . '"><i class="bi bi-download"></i>Export CSV</a>';
+$headerActions = '<a class="btn btn-light" id="incidentsExport" href="' . e(base_url('api/incidents/export.php')) . '"><i class="bi bi-download" aria-hidden="true"></i>Export CSV</a>';
 $pageData = [
     'websites'  => ServiceFactory::websites()->options(),
     'clients'   => ServiceFactory::websites()->clients(),
@@ -60,6 +60,7 @@ require dirname(__DIR__) . '/includes/header.php';
                     <th scope="col">Started</th>
                     <th scope="col" class="num">Duration</th>
                     <th scope="col" class="hide-mobile">Alert</th>
+                    <th scope="col" class="actions"><span class="visually-hidden">Details</span></th>
                 </tr>
             </thead>
             <tbody id="incidentsList"></tbody>
@@ -67,5 +68,17 @@ require dirname(__DIR__) . '/includes/header.php';
     </div>
     <div class="sw-pagination" id="incidentsPagination"></div>
 </div>
+
+<div class="sw-panel-backdrop" id="incidentPanelBackdrop" hidden></div>
+<aside class="sw-panel" id="incidentPanel" aria-labelledby="incidentPanelTitle" aria-hidden="true" tabindex="-1">
+    <div class="sw-panel-head">
+        <div class="min-w-0 flex-grow-1">
+            <div class="fs-12 text-muted" id="incidentPanelSite"></div>
+            <h2 id="incidentPanelTitle">Incident</h2>
+        </div>
+        <button type="button" class="btn-close" data-panel-close aria-label="Close"></button>
+    </div>
+    <div class="sw-panel-body" id="incidentPanelBody"></div>
+</aside>
 
 <?php require dirname(__DIR__) . '/includes/footer.php'; ?>

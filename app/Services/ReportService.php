@@ -6,6 +6,7 @@ namespace App\Services;
 
 use App\Monitoring\Status;
 use App\Monitoring\StatusClassifier;
+use App\Repositories\CheckRepository;
 use App\Repositories\DailyStatsRepository;
 use App\Repositories\IncidentRepository;
 use App\Repositories\WebsiteRepository;
@@ -18,8 +19,156 @@ final class ReportService
     public function __construct(
         private readonly WebsiteRepository $websites,
         private readonly DailyStatsRepository $dailyStats,
-        private readonly IncidentRepository $incidents
+        private readonly IncidentRepository $incidents,
+        private readonly ?CheckRepository $checks = null
     ) {
+    }
+
+    /** Response-time windows offered on the Performance page. */
+    public const RESPONSE_WINDOWS = ['24h' => 'last 24 hours', '7d' => 'last 7 days', '30d' => 'last 30 days', '90d' => 'last 90 days'];
+
+    /**
+     * Response times per website. The 24-hour and 7-day windows read individual checks (so the trend is
+     * fine-grained); longer windows and custom date ranges read the daily statistics, which are kept after
+     * individual checks have been cleaned up.
+     *
+     * @param array{window?: string, client?: string, from?: string, to?: string} $criteria
+     * @return array{window: string, window_label: string, range: ?array{from: string, to: string, days: int}, rows: list<array<string, mixed>>, summary: array<string, mixed>}
+     */
+    public function responseTimeReport(array $criteria, int $slowThreshold): array
+    {
+        $window = (string) ($criteria['window'] ?? '24h');
+        $custom = !empty($criteria['from']) || !empty($criteria['to']);
+        if (!$custom && !isset(self::RESPONSE_WINDOWS[$window])) {
+            $window = '24h';
+        }
+        $client = trim((string) ($criteria['client'] ?? ''));
+
+        $range = null;
+        $stats = [];
+        if (!$custom && ($window === '24h' || $window === '7d') && $this->checks !== null) {
+            $checks = $this->checks;
+            $fromUtc = utc_now()->modify($window === '7d' ? '-7 days' : '-24 hours')->format('Y-m-d H:i:s');
+            foreach ($checks->perWebsiteStats($fromUtc) as $id => $s) {
+                $stats[$id] = [
+                    'avg'    => $s['avg_rt'] !== null ? (int) round((float) $s['avg_rt']) : null,
+                    'min'    => $s['min_rt'] !== null ? (int) $s['min_rt'] : null,
+                    'max'    => $s['max_rt'] !== null ? (int) $s['max_rt'] : null,
+                    'checks' => (int) $s['checks'],
+                    'down'   => (int) $s['down'],
+                ];
+            }
+            $bucket = $window === '7d' ? 21600 : 3600;
+            $trendFor = static fn (int $id): array => array_map(static fn (array $p) => $p['avg'], $checks->responseSeries($id, $fromUtc, $bucket));
+            $label = self::RESPONSE_WINDOWS[$window];
+        } else {
+            if ($custom) {
+                $window = 'custom';
+                $range = self::range($criteria['from'] ?? null, $criteria['to'] ?? null);
+            } else {
+                $days = ['24h' => 1, '7d' => 7, '30d' => 30, '90d' => 90][$window];
+                $today = utc_now()->setTimezone(app_timezone());
+                $range = self::range($today->modify('-' . ($days - 1) . ' days')->format('Y-m-d'), $today->format('Y-m-d'));
+            }
+            foreach ($this->dailyStats->perWebsiteRangeStats($range['from'], $range['to']) as $id => $s) {
+                $stats[$id] = [
+                    'avg'    => $s['avg'] !== null ? (int) round((float) $s['avg']) : null,
+                    'min'    => $s['min'] !== null ? (int) $s['min'] : null,
+                    'max'    => $s['max'] !== null ? (int) $s['max'] : null,
+                    'checks' => (int) $s['total'],
+                    'down'   => (int) $s['down'],
+                ];
+            }
+            $daily = $this->dailyStats->perWebsiteDailyAverages($range['from'], $range['to']);
+            $trendFor = static fn (int $id): array => array_values($daily[$id] ?? []);
+            $label = $window === 'custom' ? $range['from'] . ' to ' . $range['to'] : self::RESPONSE_WINDOWS[$window];
+        }
+
+        $rows = [];
+        $sum = 0.0;
+        $weight = 0;
+        $fastest = null;
+        $slowest = null;
+        $over = 0;
+        foreach ($this->websites->all() as $w) {
+            if ($client !== '' && (string) $w['client_name'] !== $client) {
+                continue;
+            }
+            $id = (int) $w['id'];
+            $s = $stats[$id] ?? ['avg' => null, 'min' => null, 'max' => null, 'checks' => 0, 'down' => 0];
+            $status = (int) $w['monitoring_enabled'] === 1 ? (string) $w['status'] : Status::PAUSED;
+            $rows[] = [
+                'id'           => $id,
+                'name'         => $w['name'],
+                'domain'       => $w['domain'],
+                'url'          => $w['url'],
+                'client_name'  => $w['client_name'],
+                'favicon_url'  => $w['favicon_url'],
+                'status'       => $status,
+                'status_label' => Status::label($status),
+                'severity'     => Status::severity($status),
+                'current'      => $w['last_response_time'] !== null ? (int) $w['last_response_time'] : null,
+                'avg'          => $s['avg'],
+                'min'          => $s['min'],
+                'max'          => $s['max'],
+                'checks'       => $s['checks'],
+                'down'         => $s['down'],
+                'trend'        => $s['checks'] > 0 ? $trendFor($id) : [],
+                'urls'         => ['details' => base_url('admin/website-details.php?id=' . $id)],
+            ];
+            if ($s['avg'] !== null) {
+                $sum += $s['avg'] * max(1, $s['checks']);
+                $weight += max(1, $s['checks']);
+                if ($fastest === null || $s['avg'] < $fastest['avg']) {
+                    $fastest = ['name' => $w['name'], 'avg' => $s['avg']];
+                }
+                if ($slowest === null || $s['avg'] > $slowest['avg']) {
+                    $slowest = ['name' => $w['name'], 'avg' => $s['avg']];
+                }
+                if ($s['avg'] >= $slowThreshold) {
+                    $over++;
+                }
+            }
+        }
+
+        // Slowest first; websites without data last, by name.
+        usort($rows, static function (array $a, array $b): int {
+            if ($a['avg'] === null || $b['avg'] === null) {
+                return [$a['avg'] === null, $a['name']] <=> [$b['avg'] === null, $b['name']];
+            }
+            return $b['avg'] <=> $a['avg'];
+        });
+
+        return [
+            'window'       => $window,
+            'window_label' => $label,
+            'range'        => $range,
+            'rows'         => $rows,
+            'summary'      => [
+                'avg'            => $weight > 0 ? (int) round($sum / $weight) : null,
+                'fastest'        => $fastest,
+                'slowest'        => $slowest,
+                'over_threshold' => $over,
+                'websites'       => count($rows),
+                'slow_threshold' => $slowThreshold,
+            ],
+        ];
+    }
+
+    /**
+     * CSV rows for the response-time report.
+     *
+     * @param list<array<string, mixed>> $rows
+     * @return array{headers: list<string>, rows: list<list<mixed>>}
+     */
+    public static function exportResponseRows(array $rows): array
+    {
+        $headers = ['Website', 'Client', 'Domain', 'URL', 'Current Status', 'Current Response (ms)', 'Average (ms)', 'Fastest (ms)', 'Slowest (ms)', 'Checks', 'Failed Checks'];
+        $out = [];
+        foreach ($rows as $r) {
+            $out[] = [$r['name'], $r['client_name'], $r['domain'], $r['url'], $r['status_label'], $r['current'], $r['avg'], $r['min'], $r['max'], $r['checks'], $r['down']];
+        }
+        return ['headers' => $headers, 'rows' => $out];
     }
 
     /**

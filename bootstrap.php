@@ -97,9 +97,10 @@ if (!App::isCli() && !defined('SW_STATELESS')) {
             define('SW_CSP_NONCE', $nonce);
             header(
                 "Content-Security-Policy: default-src 'self'; "
-                . "script-src 'self' https://cdn.jsdelivr.net 'nonce-{$nonce}'; "
-                . "style-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; "
-                . "font-src 'self' https://cdn.jsdelivr.net data:; "
+                . "script-src 'self' 'nonce-{$nonce}'; "
+                . "style-src 'self' 'unsafe-inline'; "
+                . "font-src 'self' data:; "
+                . "worker-src 'self'; manifest-src 'self'; "
                 . "img-src 'self' data: https:; "
                 . "connect-src 'self'; frame-ancestors 'self'; base-uri 'self'; form-action 'self'; object-src 'none'"
             );

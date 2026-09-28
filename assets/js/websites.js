@@ -45,6 +45,14 @@
             q: saved.q || '', filter: saved.filter || 'all', sort: saved.sort || 'status',
             dir: saved.dir || '', client: saved.client || '', page: 1, perPage: this.opts.perPage,
         };
+        // A link such as websites.php?filter=down (dashboard tiles) starts from that view.
+        if (this.opts.initialFilter) {
+            this.state.filter = this.opts.initialFilter;
+            this.state.q = '';
+            this.state.client = '';
+            this.state.sort = 'status';
+            this.state.dir = '';
+        }
         this.rows = [];
         this.selected = new Set();
         this.busy = new Set();
@@ -932,6 +940,7 @@
         const table = new SW.WebsiteTable(mount, {
             perPage: 25,
             storageKey: 'sw-websites-page',
+            initialFilter: SW.page.filter || '',
             title: 'Website inventory',
             subtitle: '',
             exportUrl: SW.url('api/websites/export.php'),

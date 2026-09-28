@@ -18,7 +18,7 @@ namespace App\Core;
  */
 final class Release
 {
-    public const VERSION = '1.14.0';
+    public const VERSION = '2.0.0';
 
     /**
      * Newest first. 'schema' is the database schema version the release requires (null: unchanged).
@@ -26,6 +26,32 @@ final class Release
      * @var array<string, array{date: string, title: string, schema: ?int, added?: array<int, string>, improved?: array<int, string>, fixed?: array<int, string>}>
      */
     public const NOTES = [
+        '2.0.0' => [
+            'date'     => '2026-09-28',
+            'title'    => 'New look, instant pages, desktop app and notifications, country checks',
+            'schema'   => 13,
+            'added'    => [
+                'Country availability: every website is tested from 15 countries (United States, United Kingdom, Ireland, Australia, Canada, Germany, India, Pakistan, UAE, Singapore, Brazil, South Africa, Turkey, Russia and China) on free Globalping test servers, with check-host.net where Globalping has none. Each country shows Reachable, Slow, Blocked by the site, Possibly blocked, Unreachable or No test server; a problem is re-tested on a second network before it is shown, and alerted only after two runs in a row agree. See Performance → Countries and the Countries card on each website.',
+                'Desktop notifications: turn them on per browser under Profile → This device. They arrive through Web Push even when SiteWatch is closed, follow the same alert rules as the other channels and appear in the delivery history. Each device chooses which events it wants.',
+                'Install SiteWatch as an app on Windows, macOS and Linux (Chrome, Edge, and Safari\'s Add to Dock): its own window, Start menu / Dock icon, the number of open incidents on the icon, and a small offline page.',
+                'Search everything with Ctrl+K (⌘K on a Mac): websites by name, domain or client, every page and tab, and actions such as Add website. Keyboard shortcuts: g then d/w/i/p/h/r/t/s/a to jump to a page, / to search the current page, [ to collapse the sidebar, ? for the list.',
+                'Compact tables (account menu) for more rows on a laptop screen.',
+                'A Country availability alert rule, and the cron job cron/country-check.php that runs the checks (hourly; each website is checked once a day by default).',
+            ],
+            'improved' => [
+                'One place for each thing: the sidebar goes from 17 links to 9. Response Times, the Performance report and Core Web Vitals are now one Performance page with tabs; Users and Roles are one Team page; General settings, Monitoring settings and Notifications are one Settings page. Old addresses redirect to the right tab.',
+                'Pages open without a full reload: only the content changes, the sidebar and top bar stay, hovering a link starts loading it, Back shows the previous page at once, and Response time and Uptime report show their data without a second request.',
+                'A short splash when SiteWatch starts, a thin progress bar while a page loads, and empty charts show a message instead of blank axes.',
+                'The website page is split into tabs (Overview, Checks, WordPress, Performance, Domain & hosting, Configuration) with all key figures on one row; the tab is kept in the address.',
+                'Consistent layout: one page header with breadcrumbs, one filter bar with Export and Print on the right, four summary tiles per page, and the same website cell (name, domain and client) in every table. Settings and Profile use the full width.',
+                'The Dashboard no longer repeats the website list; its tiles open the Websites page already filtered. The monitoring warning lives in the top bar only.',
+                'Incidents open in a side panel, so the list keeps its place. Domain lookups open in a dialog.',
+                'The Inter typeface, Bootstrap, the icons and Chart.js are served by SiteWatch itself with long-lived caching, so nothing loads from a CDN.',
+            ],
+            'fixed'    => [
+                'Export CSV and Print on the reports no longer drop to a second line or look disabled while a report loads.',
+            ],
+        ],
         '1.14.0' => [
             'date'     => '2026-09-23',
             'title'    => 'BackWPup backups, earlier reports, background updates, new plugin page',

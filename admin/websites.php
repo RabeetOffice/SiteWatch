@@ -9,8 +9,11 @@ $activeNav = 'websites';
 $pageScripts = ['websites.js'];
 $headerActions = can('websites.manage')
     ? '<a href="' . e(base_url('admin/website-import.php')) . '" class="btn btn-light"><i class="bi bi-upload"></i>Import</a>'
-      . '<a href="' . e(base_url('admin/website-add.php')) . '" class="btn btn-primary"><i class="bi bi-plus-lg"></i>Add Website</a>'
+      . '<a href="' . e(base_url('admin/website-add.php')) . '" class="btn btn-primary"><i class="bi bi-plus-lg" aria-hidden="true"></i>Add website</a>'
     : '';
+
+$filter = (string) ($_GET['filter'] ?? '');
+$pageData = ['filter' => in_array($filter, \App\Repositories\WebsiteRepository::FILTERS, true) ? $filter : ''];
 
 require dirname(__DIR__) . '/includes/header.php';
 ?>

@@ -19,11 +19,11 @@ if ($website === null) {
     Response::redirect(base_url('admin/websites.php'));
 }
 
-$pageTitle = 'Edit Website';
+$pageTitle = 'Edit website';
+$breadcrumbs = [['label' => 'Websites', 'href' => 'admin/websites.php'], ['label' => (string) $website['name'], 'href' => 'admin/website-details.php?id=' . $id], ['label' => 'Edit']];
 $pageContext = '<span>' . e($website['name']) . '</span><span>' . e($website['domain']) . '</span>';
 $activeNav = 'websites';
 $pageScripts = ['website-form.js'];
-$headerActions = '<a href="' . e(base_url('admin/website-details.php?id=' . $id)) . '" class="btn btn-light"><i class="bi bi-arrow-left"></i>Back to details</a>';
 $formMode = 'edit';
 
 require dirname(__DIR__) . '/includes/header.php';

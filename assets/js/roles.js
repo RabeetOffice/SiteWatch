@@ -24,7 +24,7 @@
 
     function rowHtml(r) {
         const users = r.user_count
-            ? (SW.can('users.manage') ? '<a href="' + SW.url('admin/users.php', { role: r.id }) + '">' + r.user_count + '</a>' : String(r.user_count))
+            ? (SW.can('users.manage') ? '<a href="' + SW.url('admin/team.php', { role: r.id }) + '">' + r.user_count + '</a>' : String(r.user_count))
             : '<span class="text-faint">0</span>';
         let actions;
         if (r.is_system) {

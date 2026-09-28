@@ -119,6 +119,25 @@ final class DailyStatsRepository extends BaseRepository
     }
 
     /**
+     * Average response time per website per day, oldest first (sparklines on the Performance page).
+     *
+     * @return array<int, array<string, ?float>> website id => [date => average ms]
+     */
+    public function perWebsiteDailyAverages(string $fromDate, string $toDate): array
+    {
+        $rows = $this->db->fetchAll(
+            'SELECT website_id, stat_date, average_response_time FROM daily_stats
+             WHERE stat_date BETWEEN :from AND :to ORDER BY website_id, stat_date',
+            ['from' => $fromDate, 'to' => $toDate]
+        );
+        $out = [];
+        foreach ($rows as $r) {
+            $out[(int) $r['website_id']][(string) $r['stat_date']] = $r['average_response_time'] === null ? null : round((float) $r['average_response_time']);
+        }
+        return $out;
+    }
+
+    /**
      * Daily rows for a website (timeline bars / uptime trend).
      *
      * @return array<int, array<string, mixed>>

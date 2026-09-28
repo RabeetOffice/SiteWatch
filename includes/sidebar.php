@@ -3,60 +3,35 @@
 declare(strict_types=1);
 
 /**
- * Sidebar navigation. Uses $activeNav, $currentUser, $csrfToken, $initials and
- * $openIncidents, all prepared by header.php. Items the user's role cannot open are hidden.
+ * Sidebar navigation. Uses $navGroups, $activeNav, $currentUser, $csrfToken and $openIncidents, all
+ * prepared by header.php. The map itself lives in includes/navigation.php.
  */
 
-$nav = [
-    ['label' => null, 'items' => [
-        ['key' => 'dashboard', 'icon' => 'bi-grid-1x2', 'label' => 'Dashboard', 'href' => 'admin/dashboard.php'],
-    ]],
-    ['label' => 'Monitoring', 'items' => [
-        ['key' => 'websites', 'icon' => 'bi-globe2', 'label' => 'Websites', 'href' => 'admin/websites.php'],
-        ['key' => 'website-add', 'icon' => 'bi-plus-circle', 'label' => 'Add Website', 'href' => 'admin/website-add.php', 'permission' => 'websites.manage'],
-        ['key' => 'incidents', 'icon' => 'bi-exclamation-octagon', 'label' => 'Incidents', 'href' => 'admin/incidents.php', 'count' => $openIncidents, 'permission' => 'incidents.view'],
-        ['key' => 'response-times', 'icon' => 'bi-speedometer2', 'label' => 'Response Times', 'href' => 'admin/response-times.php', 'permission' => 'reports.view'],
-        ['key' => 'domains', 'icon' => 'bi-globe-americas', 'label' => 'Domains & Hosting', 'href' => 'admin/domains.php', 'permission' => 'domains.view'],
-    ]],
-    ['label' => 'Reports', 'items' => [
-        ['key' => 'reports', 'icon' => 'bi-bar-chart-line', 'label' => 'Uptime', 'href' => 'admin/reports.php', 'permission' => 'reports.view'],
-        ['key' => 'performance', 'icon' => 'bi-activity', 'label' => 'Performance', 'href' => 'admin/performance.php', 'permission' => 'reports.view'],
-        ['key' => 'web-vitals', 'icon' => 'bi-lightning-charge', 'label' => 'Core Web Vitals', 'href' => 'admin/web-vitals.php', 'permission' => 'reports.view'],
-    ]],
-    ['label' => 'Team', 'items' => [
-        ['key' => 'users', 'icon' => 'bi-people', 'label' => 'Users', 'href' => 'admin/users.php', 'permission' => 'users.manage'],
-        ['key' => 'roles', 'icon' => 'bi-shield-lock', 'label' => 'Roles & Permissions', 'href' => 'admin/roles.php', 'permission' => 'roles.manage'],
-    ]],
-    ['label' => 'System', 'items' => [
-        ['key' => 'notifications', 'icon' => 'bi-bell', 'label' => 'Notifications', 'href' => 'admin/notifications.php', 'permission' => 'notifications.manage'],
-        ['key' => 'monitoring-settings', 'icon' => 'bi-sliders', 'label' => 'Monitoring Settings', 'href' => 'admin/settings.php?section=monitoring', 'permission' => 'settings.manage'],
-        ['key' => 'settings', 'icon' => 'bi-gear', 'label' => 'General Settings', 'href' => 'admin/settings.php', 'permission' => 'settings.manage'],
-        ['key' => 'activity', 'icon' => 'bi-clock-history', 'label' => 'Activity Log', 'href' => 'admin/activity.php', 'permission' => 'activity.view'],
-        ['key' => 'updates', 'icon' => 'bi-cloud-arrow-down', 'label' => 'Updates', 'href' => 'admin/updates.php', 'permission' => '*'],
-    ]],
+// Pages that belong to a sidebar entry without being one themselves.
+$navAliases = [
+    'website-add' => 'websites', 'website-edit' => 'websites', 'website-import' => 'websites', 'website-details' => 'websites',
+    'response-times' => 'performance', 'web-vitals' => 'performance',
+    'users' => 'team', 'roles' => 'team',
+    'notifications' => 'settings', 'monitoring-settings' => 'settings',
 ];
-
-foreach ($nav as $i => $group) {
-    $nav[$i]['items'] = array_values(array_filter($group['items'], static fn (array $item): bool => !isset($item['permission']) || can($item['permission'])));
-}
-$nav = array_values(array_filter($nav, static fn (array $group): bool => $group['items'] !== []));
+$navActive = $navAliases[$activeNav] ?? $activeNav;
 ?>
 <aside class="sw-sidebar" id="sidebar" aria-label="Main navigation">
     <a class="sw-brand" href="<?= e(base_url('admin/dashboard.php')) ?>">
-        <?= sw_brand_logo(158) ?>
-        <?= sw_brand_mark(30) ?>
+        <?= sw_brand_logo(150) ?>
+        <?= sw_brand_mark(28) ?>
     </a>
     <nav class="sw-nav">
-        <?php foreach ($nav as $group): ?>
+        <?php foreach ($navGroups as $group): ?>
             <div class="sw-nav-group"<?= $group['label'] !== null ? ' role="group" aria-label="' . e($group['label']) . '"' : '' ?>>
                 <?php if ($group['label'] !== null): ?><div class="sw-nav-label" aria-hidden="true"><?= e($group['label']) ?></div><?php endif; ?>
                 <?php foreach ($group['items'] as $item): ?>
-                    <a class="sw-nav-link<?= $activeNav === $item['key'] ? ' active' : '' ?>" href="<?= e(base_url($item['href'])) ?>"
-                       <?= $activeNav === $item['key'] ? 'aria-current="page"' : '' ?>
+                    <a class="sw-nav-link<?= $navActive === $item['key'] ? ' active' : '' ?>" href="<?= e(base_url($item['href'])) ?>" data-nav="<?= e($item['key']) ?>"
+                       <?= $navActive === $item['key'] ? 'aria-current="page"' : '' ?>
                        data-bs-toggle="tooltip" data-bs-placement="right" title="<?= e($item['label']) ?>">
                         <i class="bi <?= e($item['icon']) ?>" aria-hidden="true"></i><span><?= e($item['label']) ?></span>
-                        <?php if (isset($item['count'])): ?>
-                            <span class="sw-nav-count" id="navIncidentCount"><?= $item['count'] > 0 ? (int) $item['count'] : '' ?></span>
+                        <?php if (($item['count'] ?? null) === 'incidents'): ?>
+                            <span class="sw-nav-count" id="navIncidentCount"><?= $openIncidents > 0 ? (int) $openIncidents : '' ?></span>
                         <?php endif; ?>
                     </a>
                 <?php endforeach; ?>
@@ -66,23 +41,17 @@ $nav = array_values(array_filter($nav, static fn (array $group): bool => $group[
     <div class="sw-sidebar-footer">
         <?php $swVersion = 'v' . (string) config('app.version', ''); ?>
         <?php if (can('*')): ?>
-            <a class="sw-version" href="<?= e(base_url('admin/updates.php')) ?>" title="Release notes and database version"><i class="bi bi-tag" aria-hidden="true"></i><span>SiteWatch <?= e($swVersion) ?></span></a>
+            <a class="sw-version<?= $activeNav === 'updates' ? ' active' : '' ?>" href="<?= e(base_url('admin/updates.php')) ?>" title="Release notes and database version"><i class="bi bi-tag" aria-hidden="true"></i><span>SiteWatch <?= e($swVersion) ?></span></a>
         <?php else: ?>
             <span class="sw-version"><i class="bi bi-tag" aria-hidden="true"></i><span>SiteWatch <?= e($swVersion) ?></span></span>
         <?php endif; ?>
-        <div class="d-flex align-items-center gap-1">
-            <a class="sw-user<?= $activeNav === 'profile' ? ' active' : '' ?>" href="<?= e(base_url('admin/profile.php')) ?>"
-               data-bs-toggle="tooltip" data-bs-placement="right" title="Profile">
-                <?= user_avatar($currentUser) ?>
-                <span class="sw-user-text">
-                    <span class="n"><?= e($currentUser['name']) ?></span>
-                    <span class="e"><?= e(!empty($currentUser['role_name']) ? $currentUser['role_name'] : $currentUser['email']) ?></span>
-                </span>
-            </a>
-            <form method="post" action="<?= e(base_url('logout.php')) ?>" class="ms-auto">
-                <input type="hidden" name="_token" value="<?= e($csrfToken) ?>">
-                <button type="submit" class="btn-icon btn-sm" aria-label="Sign out" data-bs-toggle="tooltip" data-bs-placement="right" title="Sign out"><i class="bi bi-box-arrow-right" aria-hidden="true"></i></button>
-            </form>
-        </div>
+        <a class="sw-user<?= $activeNav === 'profile' ? ' active' : '' ?>" href="<?= e(base_url('admin/profile.php')) ?>" data-nav="profile"
+           data-bs-toggle="tooltip" data-bs-placement="right" title="Profile">
+            <?= user_avatar($currentUser) ?>
+            <span class="sw-user-text">
+                <span class="n"><?= e($currentUser['name']) ?></span>
+                <span class="e"><?= e(!empty($currentUser['role_name']) ? $currentUser['role_name'] : $currentUser['email']) ?></span>
+            </span>
+        </a>
     </div>
 </aside>

@@ -12,22 +12,25 @@ $user = App::auth()->user();
 
 $pageTitle = 'Profile';
 $activeNav = 'profile';
-$pageScripts = ['profile.js'];
+$pageScripts = ['profile.js', 'profile-device.js'];
+$pageSubtitle = 'Your account, and how SiteWatch behaves on this device.';
 $hasAvatar = AvatarService::url($user) !== null;
 
 require dirname(__DIR__) . '/includes/header.php';
 ?>
 
-<div class="sw-form-col">
-    <div class="profile-identity mb-4">
+<div class="profile-identity mb-3">
         <?= user_avatar($user, 'lg') ?>
         <div class="min-w-0">
             <div class="fw-600" style="font-size:16px"><?= e($user['name']) ?></div>
             <div class="text-muted fs-13"><?= e($user['email']) ?> · <?= e($user['role_name'] ?? '') ?></div>
         </div>
-    </div>
+</div>
 
-    <section class="sw-card mb-4" aria-labelledby="avatarTitle">
+<div class="sw-form-grid">
+<div class="d-flex flex-column gap-3 min-w-0">
+
+    <section class="sw-card" aria-labelledby="avatarTitle">
         <div class="sw-card-header"><div><h3 id="avatarTitle">Profile picture</h3><p class="sub">Shown in the top bar, the sidebar and the Users list</p></div></div>
         <div class="sw-card-body">
             <div class="avatar-editor">
@@ -45,7 +48,7 @@ require dirname(__DIR__) . '/includes/header.php';
     </section>
 
     <form id="profileForm" novalidate>
-        <section class="sw-card mb-4">
+        <section class="sw-card">
             <div class="sw-card-header"><div><h3>Account details</h3><p class="sub">Your name and sign-in email address</p></div></div>
             <div class="sw-card-body">
                 <div class="row g-3">
@@ -67,7 +70,7 @@ require dirname(__DIR__) . '/includes/header.php';
     </form>
 
     <form id="passwordForm" novalidate>
-        <section class="sw-card mb-4">
+        <section class="sw-card">
             <div class="sw-card-header"><div><h3>Password</h3><p class="sub">Use at least 10 characters</p></div></div>
             <div class="sw-card-body">
                 <div class="row g-3">
@@ -93,16 +96,59 @@ require dirname(__DIR__) . '/includes/header.php';
         </section>
     </form>
 
+</div>
+
+<div class="d-flex flex-column gap-3 min-w-0">
+    <section class="sw-card" id="device" aria-labelledby="deviceTitle" style="scroll-margin-top:80px">
+        <div class="sw-card-header"><div><h3 id="deviceTitle">This device</h3><p class="sub">Settings that belong to this browser, not to your account</p></div></div>
+        <div class="sw-card-body">
+            <div class="device-row">
+                <div class="activity-icon tone-primary" aria-hidden="true"><i class="bi bi-window-plus"></i></div>
+                <div class="min-w-0 flex-grow-1">
+                    <div class="fw-600">SiteWatch app</div>
+                    <div class="fs-13 text-muted" data-installed-note hidden>You are using the installed app.</div>
+                    <div class="fs-13 text-muted" data-install-hint>Install SiteWatch to open it from the Start menu, Dock or desktop in its own window, with open incidents on its icon.</div>
+                </div>
+                <button type="button" class="btn btn-light" data-install-app hidden><i class="bi bi-download" aria-hidden="true"></i>Install</button>
+            </div>
+            <div class="device-row">
+                <div class="activity-icon tone-primary" aria-hidden="true"><i class="bi bi-bell"></i></div>
+                <div class="min-w-0 flex-grow-1">
+                    <div class="fw-600">Desktop notifications</div>
+                    <div class="fs-13 text-muted" data-push-status>Checking this browser…</div>
+                </div>
+                <div class="form-check form-switch m-0">
+                    <input class="form-check-input" type="checkbox" role="switch" id="pushToggle" aria-describedby="pushHelp" disabled>
+                    <label class="visually-hidden" for="pushToggle">Desktop notifications on this device</label>
+                </div>
+            </div>
+            <div data-push-options hidden>
+                <div class="breakdown-title mt-3">Notify me about</div>
+                <div class="sw-check-grid" data-push-events></div>
+                <div class="d-flex gap-2 mt-3 flex-wrap">
+                    <button type="button" class="btn btn-sm btn-light" data-push-test><i class="bi bi-send" aria-hidden="true"></i>Send a test</button>
+                </div>
+            </div>
+            <p class="form-text mb-0 mt-3" id="pushHelp">Notifications arrive even when SiteWatch is closed. They use the same alert rules as email and the other channels.</p>
+        </div>
+    </section>
+
+    <section class="sw-card" aria-labelledby="devicesTitle" data-push-devices-card hidden>
+        <div class="sw-card-header"><div><h3 id="devicesTitle">Devices with notifications</h3><p class="sub">Browsers and apps where you turned them on</p></div></div>
+        <ul class="device-list" data-push-devices></ul>
+    </section>
+
     <details class="sw-disclosure">
         <summary>Session details <span class="hint">last sign-in</span></summary>
         <div class="sw-disclosure-body">
             <dl class="kv-list mb-0">
-                <dt>Role</dt><dd><?= e($user['role_name'] ?? '') ?><?= can('roles.manage') ? ' · <a href="' . e(base_url('admin/roles.php')) . '">roles &amp; permissions</a>' : '' ?></dd>
+                <dt>Role</dt><dd><?= e($user['role_name'] ?? '') ?><?= can('roles.manage') ? ' · <a href="' . e(base_url('admin/team.php?tab=roles')) . '">roles &amp; permissions</a>' : '' ?></dd>
                 <dt>Last sign-in</dt><dd><?= e($user['last_login_at'] ? format_datetime($user['last_login_at']) . ' (' . time_ago($user['last_login_at']) . ')' : 'Unknown') ?></dd>
                 <?php if (!empty($user['last_login_ip'])): ?><dt>From IP address</dt><dd class="mono"><?= e($user['last_login_ip']) ?></dd><?php endif; ?>
             </dl>
         </div>
     </details>
+</div>
 </div>
 
 <div class="modal fade" id="cropModal" tabindex="-1" aria-labelledby="cropTitle" aria-hidden="true" data-bs-backdrop="static">

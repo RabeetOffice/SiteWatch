@@ -24,7 +24,7 @@ use RuntimeException;
  */
 final class Migrator
 {
-    public const VERSION = 12;
+    public const VERSION = 13;
     /** Version of databases created before schema versions were recorded. */
     public const BASELINE = 1;
     public const SETTING = 'schema_version';
@@ -119,6 +119,15 @@ final class Migrator
             'title'   => 'History of page speed and PHP warnings',
             'changes' => [
                 'Creates the connector_daily table: one row per daily report from the WordPress plugin with page generation times and PHP warning counts, kept for 90 days.',
+            ],
+        ],
+        13 => [
+            'release' => '2.0.0',
+            'title'   => 'Country availability checks and desktop notifications',
+            'changes' => [
+                'Creates the country_status table (latest result per website and country) and country_checks (90 days of history) for the new country availability checks.',
+                'Adds websites.country_checked_at, used to schedule those checks.',
+                'Creates the push_subscriptions table: one row per browser or installed app that turned on desktop notifications.',
             ],
         ],
     ];
@@ -236,7 +245,21 @@ final class Migrator
             10 => fn () => $this->connectorRemoteActions(),
             11 => fn () => $this->connectorAutofix(),
             12 => fn () => $this->createTable('connector_daily'),
+            13 => fn () => $this->countriesAndPush(),
         ];
+    }
+
+    /**
+     * v13 (2.0.0): country availability checks and Web Push subscriptions.
+     */
+    private function countriesAndPush(): void
+    {
+        $this->createTable('country_status');
+        $this->createTable('country_checks');
+        $this->createTable('push_subscriptions');
+        if (!$this->columnExists('websites', 'country_checked_at')) {
+            $this->db->pdo()->exec("ALTER TABLE `websites` ADD COLUMN `country_checked_at` DATETIME NULL COMMENT 'last availability check from other countries' AFTER `screenshot_captured_at`");
+        }
     }
 
     /**

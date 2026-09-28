@@ -31,6 +31,8 @@ final class SettingsRepository
         'whatsapp_green_token',
         'discord_webhook_url',
         'pagespeed_api_key',
+        'globalping_token',
+        'push_vapid_private',
     ];
 
     public const DEFAULTS = [
@@ -76,6 +78,7 @@ final class SettingsRepository
         'connector_perf_sample'  => 20,
         'alert_security' => 1,
         'alert_vulnerability' => 1,
+        'alert_country'  => 1,
 
         // Email
         'email_enabled'           => 0,
@@ -130,6 +133,17 @@ final class SettingsRepository
         'domain_check_interval_hours' => 24,   // WHOIS/RDAP and hosting details are refreshed no more often than this
         'domain_geo_lookup'           => 1,    // city-level hosting location via ipinfo.io
         'ipinfo_token'                => '',   // optional, raises ipinfo.io rate limits
+
+        // Country availability (Globalping probes; check-host.net when Globalping has none in a country)
+        'country_checks_enabled'       => 1,
+        'country_check_interval_hours' => 24,
+        'country_list'                 => 'US,GB,IE,AU,CA,DE,IN,PK,AE,SG,BR,ZA,TR,RU,CN',
+        'globalping_token'             => '',   // optional free token: 500 instead of 250 tests an hour
+        'country_retention_days'       => 90,
+
+        // Desktop notifications (Web Push). The key pair is created on first use.
+        'push_vapid_public'  => '',
+        'push_vapid_private' => '',
     ];
 
     /** @var array<string, string|null>|null */

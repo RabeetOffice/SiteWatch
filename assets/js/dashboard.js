@@ -3,7 +3,6 @@
     'use strict';
 
     const charts = {};
-    let websiteTable = null;
     let chartData = null;
 
     function setText(key, value) {
@@ -269,43 +268,9 @@
         }
         refreshCharts().catch(function (e) { SW.toast(e.message, 'danger'); });
 
-        if (window.SW.WebsiteTable) {
-            websiteTable = new SW.WebsiteTable(document.getElementById('websiteTable'), {
-                perPage: 8,
-                storageKey: 'sw-dashboard-table',
-                title: 'Websites',
-                subtitle: 'Most severe first',
-                bulk: false,
-                compact: true,
-                footerLink: { href: SW.url('admin/websites.php'), label: 'Open the full website list' },
-            });
-        }
-
-        SW.qsa('[data-overview-filter]').forEach(function (button) {
-            button.addEventListener('click', function () {
-                if (!websiteTable) return;
-                const filter = button.dataset.overviewFilter;
-                websiteTable.state.filter = filter;
-                websiteTable.state.q = '';
-                websiteTable.state.client = '';
-                websiteTable.state.page = 1;
-                websiteTable.state.sort = 'status';
-                websiteTable.state.dir = '';
-                websiteTable.persist();
-                websiteTable.syncControls();
-                websiteTable.load();
-                SW.qsa('[data-overview-filter]').forEach(function (b) { b.setAttribute('aria-pressed', String(b === button)); });
-                const target = document.getElementById('websiteTable');
-                target.scrollIntoView({ block: 'start', behavior: 'smooth' });
-                const search = target.querySelector('[data-search]');
-                if (search) search.focus({ preventScroll: true });
-            });
-        });
-
         let tickCount = 0;
         SW.poll(async function () {
             await refreshStats();
-            if (websiteTable) await websiteTable.refresh(true);
             tickCount++;
             if (tickCount % 4 === 0) await refreshCharts();
         }, Math.max(15000, (SW.config.refresh || 30) * 1000));

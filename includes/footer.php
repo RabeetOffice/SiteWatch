@@ -3,7 +3,10 @@
 declare(strict_types=1);
 
 /**
- * Page shell footer: closes layout, toast container, confirm modal, scripts.
+ * Page shell footer: closes layout, toast container, confirm dialog, command palette, scripts.
+ *
+ * Scripts marked data-page-script belong to the page and are run again after every in-app navigation;
+ * the others (Bootstrap, Chart.js, app.js) load once per session.
  */
 ?>
         </main>
@@ -37,15 +40,41 @@ declare(strict_types=1);
     </div>
 </div>
 
+<div class="sw-palette" id="swPalette" role="dialog" aria-modal="true" aria-label="Search websites and pages" hidden>
+    <div class="sw-palette-backdrop" data-palette-close></div>
+    <div class="sw-palette-panel">
+        <div class="sw-palette-input">
+            <i class="bi bi-search" aria-hidden="true"></i>
+            <input type="text" id="swPaletteInput" placeholder="Search websites, pages and actions…" autocomplete="off" spellcheck="false"
+                   role="combobox" aria-expanded="true" aria-controls="swPaletteList" aria-autocomplete="list">
+            <kbd class="sw-kbd">Esc</kbd>
+        </div>
+        <ul class="sw-palette-list" id="swPaletteList" role="listbox"></ul>
+        <div class="sw-palette-foot"><span><kbd class="sw-kbd">↑</kbd><kbd class="sw-kbd">↓</kbd> move</span><span><kbd class="sw-kbd">Enter</kbd> open</span><span><kbd class="sw-kbd">?</kbd> shortcuts</span></div>
+    </div>
+</div>
+
+<div class="modal fade" id="swShortcuts" tabindex="-1" aria-labelledby="swShortcutsTitle" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" style="max-width:460px">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title" id="swShortcutsTitle">Keyboard shortcuts</h2>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body"><dl class="sw-shortcut-list" id="swShortcutList"></dl></div>
+        </div>
+    </div>
+</div>
+
 <script id="sw-config" type="application/json"><?= json_out($swConfig) ?></script>
 <script id="sw-page-data" type="application/json"><?= json_out($pageData) ?></script>
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
+<script src="<?= e(asset('vendor/bootstrap/bootstrap.bundle.min.js')) ?>"></script>
 <?php if (!empty($needsCharts)): ?>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script src="<?= e(asset('vendor/chartjs/chart.umd.min.js')) ?>"></script>
 <?php endif; ?>
 <script src="<?= e(asset('js/app.js')) ?>"></script>
 <?php foreach ($pageScripts as $script): ?>
-<script src="<?= e(asset('js/' . $script)) ?>"></script>
+<script src="<?= e(asset('js/' . $script)) ?>" data-page-script></script>
 <?php endforeach; ?>
 </body>
 </html>

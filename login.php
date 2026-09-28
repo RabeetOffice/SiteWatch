@@ -66,14 +66,20 @@ require __DIR__ . '/includes/brand.php';
     <meta name="robots" content="noindex, nofollow">
     <title>Sign in · <?= e($appName) ?></title>
     <link rel="icon" href="<?= e(sw_brand_asset('favicon')) ?>" type="image/svg+xml">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+    <link rel="apple-touch-icon" href="<?= e(sw_brand_asset('apple')) ?>">
+    <link rel="manifest" href="<?= e(base_url('manifest.webmanifest')) ?>">
+    <meta name="theme-color" content="#F6F7F9">
+    <?= sw_splash_head() ?>
+    <link href="<?= e(asset('vendor/bootstrap/bootstrap.min.css')) ?>" rel="stylesheet">
+    <link href="<?= e(asset('vendor/bootstrap-icons/bootstrap-icons.min.css')) ?>" rel="stylesheet">
     <link href="<?= e(asset('css/app.css')) ?>" rel="stylesheet">
     <script nonce="<?= e($nonce) ?>">
         (function () { try { var t = localStorage.getItem('sw-theme'); if (t !== 'dark' && t !== 'light') { t = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'; } document.documentElement.setAttribute('data-bs-theme', t); } catch (e) {} })();
+        <?= sw_splash_script() ?>
     </script>
 </head>
 <body class="sw-body">
+<?= sw_brand_splash() ?>
 <div class="auth-page">
     <button type="button" class="btn-icon auth-theme-toggle" aria-label="Toggle dark mode"><i class="bi bi-moon-stars" aria-hidden="true"></i></button>
     <div class="auth-shell">
@@ -109,7 +115,7 @@ require __DIR__ . '/includes/brand.php';
         <div class="auth-footer">Website monitoring for agencies</div>
     </div>
 </div>
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
+<script src="<?= e(asset('vendor/bootstrap/bootstrap.bundle.min.js')) ?>"></script>
 <script src="<?= e(asset('js/app.js')) ?>"></script>
 </body>
 </html>

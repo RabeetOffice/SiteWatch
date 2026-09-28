@@ -1016,14 +1016,14 @@ final class ConnectorService
                 'updates'        => $row['updates_pending'] !== null ? (int) $row['updates_pending'] : null,
                 'issues'         => $row['security_issues'] !== null ? (int) $row['security_issues'] : null,
                 'vulnerabilities' => isset($row['vuln_count']) ? (int) $row['vuln_count'] : null,
-                'url'            => base_url('admin/website-details.php?id=' . (int) $row['website_id']) . '#wordpressSection',
+                'url'            => base_url('admin/website-details.php?id=' . (int) $row['website_id'] . '&tab=wordpress'),
             ];
         }
         $recent = array_map(static function (array $row): array {
             return self::presentEvent($row) + [
                 'website_id'   => (int) $row['website_id'],
                 'website_name' => (string) $row['website_name'],
-                'url'          => base_url('admin/website-details.php?id=' . (int) $row['website_id']) . '#wordpressSection',
+                'url'          => base_url('admin/website-details.php?id=' . (int) $row['website_id'] . '&tab=wordpress'),
             ];
         }, $this->repo->recentImportant(6));
 

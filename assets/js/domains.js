@@ -339,6 +339,8 @@
         if (refreshAll) refreshAll.addEventListener('click', function () { refreshOutdated(refreshAll); });
         const lookupForm = document.getElementById('lookupForm');
         if (lookupForm) lookupForm.addEventListener('submit', lookup);
+        const lookupModal = document.getElementById('lookupModal');
+        if (lookupModal) lookupModal.addEventListener('shown.bs.modal', function () { document.getElementById('lookupQuery').focus(); });
         const lookupClear = document.getElementById('lookupClear');
         if (lookupClear) lookupClear.addEventListener('click', function () {
             document.getElementById('lookupCard').hidden = true;
