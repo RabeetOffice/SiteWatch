@@ -60,6 +60,7 @@ final class ReportService
             }
             $bucket = $window === '7d' ? 21600 : 3600;
             $trendFor = static fn (int $id): array => array_map(static fn (array $p) => $p['avg'], $checks->responseSeries($id, $fromUtc, $bucket));
+            $fleetFor = static fn (array $ids): array => $checks->fleetSeries($fromUtc, $window === '7d' ? 3600 : 900, $ids);
             $label = self::RESPONSE_WINDOWS[$window];
         } else {
             if ($custom) {
@@ -81,6 +82,8 @@ final class ReportService
             }
             $daily = $this->dailyStats->perWebsiteDailyAverages($range['from'], $range['to']);
             $trendFor = static fn (int $id): array => array_values($daily[$id] ?? []);
+            $dailyStats = $this->dailyStats;
+            $fleetFor = static fn (array $ids): array => $dailyStats->fleetDailyAverages($range['from'], $range['to'], $ids);
             $label = $window === 'custom' ? $range['from'] . ' to ' . $range['to'] : self::RESPONSE_WINDOWS[$window];
         }
 
@@ -116,7 +119,8 @@ final class ReportService
                 'trend'        => $s['checks'] > 0 ? $trendFor($id) : [],
                 'urls'         => ['details' => base_url('admin/website-details.php?id=' . $id)],
             ];
-            if ($s['avg'] !== null) {
+            // Paused websites and averages of 0 ms (no real responses) say nothing about speed.
+            if ($s['avg'] !== null && $s['avg'] > 0 && $status !== Status::PAUSED) {
                 $sum += $s['avg'] * max(1, $s['checks']);
                 $weight += max(1, $s['checks']);
                 if ($fastest === null || $s['avg'] < $fastest['avg']) {
@@ -139,11 +143,23 @@ final class ReportService
             return $b['avg'] <=> $a['avg'];
         });
 
+        // How many websites fall in each speed band (healthy, moderate, slow, critical) by their average.
+        $moderate = (int) setting('moderate_threshold', 2000);
+        $critical = (int) setting('critical_performance_threshold', 10000);
+        $spread = ['fast' => 0, 'moderate' => 0, 'slow' => 0, 'critical' => 0, 'none' => 0];
+        foreach ($rows as $row) {
+            $avg = $row['avg'] !== null && $row['avg'] > 0 && $row['status'] !== Status::PAUSED ? $row['avg'] : null;
+            $spread[$avg === null ? 'none' : ($avg >= $critical ? 'critical' : ($avg >= $slowThreshold ? 'slow' : ($avg >= $moderate ? 'moderate' : 'fast')))]++;
+        }
+
         return [
             'window'       => $window,
             'window_label' => $label,
             'range'        => $range,
             'rows'         => $rows,
+            'fleet'        => $fleetFor(array_column($rows, 'id')),
+            'spread'       => $spread,
+            'thresholds'   => ['moderate' => $moderate, 'slow' => $slowThreshold, 'critical' => $critical],
             'summary'      => [
                 'avg'            => $weight > 0 ? (int) round($sum / $weight) : null,
                 'fastest'        => $fastest,

@@ -14,55 +14,65 @@ $isCustom = $criteria['from'] !== '' || $criteria['to'] !== '';
     <p><span id="rtPrintRange">—</span> · Times in <?= e(app_timezone()->getName()) ?></p>
 </div>
 
-<div class="sw-card mb-3">
-    <div class="sw-filterbar" style="border-bottom:0">
-        <select class="form-select form-select-sm" id="rtClient" aria-label="Filter by client">
-            <option value="">All clients</option>
-            <?php foreach ($pageData['clients'] as $client): ?>
-                <option value="<?= e($client) ?>"<?= $criteria['client'] === $client ? ' selected' : '' ?>><?= e($client) ?></option>
-            <?php endforeach; ?>
-        </select>
-        <div class="segmented" id="rtWindow" role="group" aria-label="Time window">
-            <?php foreach (['24h' => '24 hours', '7d' => '7 days', '30d' => '30 days', '90d' => '90 days', 'custom' => 'Custom'] as $key => $label): ?>
-                <?php $on = $isCustom ? $key === 'custom' : $criteria['window'] === $key; ?>
-                <button type="button" data-window="<?= e($key) ?>"<?= $on ? ' class="active" aria-pressed="true"' : ' aria-pressed="false"' ?>><?= e($label) ?></button>
-            <?php endforeach; ?>
-        </div>
-        <div class="date-range" id="rtDates"<?= $isCustom ? '' : ' hidden' ?>>
-            <label class="inline-label" for="rtFrom">From</label>
-            <input type="date" class="form-control form-control-sm" id="rtFrom" value="<?= e($criteria['from']) ?>">
-            <label class="inline-label" for="rtTo">to</label>
-            <input type="date" class="form-control form-control-sm" id="rtTo" value="<?= e($criteria['to']) ?>">
-        </div>
-        <div class="spacer"></div>
-        <span class="fs-13 text-muted" id="rtRangeLabel"></span>
+<div class="sw-filterbar rt-filters">
+    <select class="form-select form-select-sm" id="rtClient" aria-label="Filter by client">
+        <option value="">All clients</option>
+        <?php foreach ($pageData['clients'] as $client): ?>
+            <option value="<?= e($client) ?>"<?= $criteria['client'] === $client ? ' selected' : '' ?>><?= e($client) ?></option>
+        <?php endforeach; ?>
+    </select>
+    <div class="segmented" id="rtWindow" role="group" aria-label="Time window">
+        <?php foreach (['24h' => '24 hours', '7d' => '7 days', '30d' => '30 days', '90d' => '90 days', 'custom' => 'Custom'] as $key => $label): ?>
+            <?php $on = $isCustom ? $key === 'custom' : $criteria['window'] === $key; ?>
+            <button type="button" data-window="<?= e($key) ?>"<?= $on ? ' class="active" aria-pressed="true"' : ' aria-pressed="false"' ?>><?= e($label) ?></button>
+        <?php endforeach; ?>
     </div>
+    <div class="date-range" id="rtDates"<?= $isCustom ? '' : ' hidden' ?>>
+        <label class="inline-label" for="rtFrom">From</label>
+        <input type="date" class="form-control form-control-sm" id="rtFrom" value="<?= e($criteria['from']) ?>">
+        <label class="inline-label" for="rtTo">to</label>
+        <input type="date" class="form-control form-control-sm" id="rtTo" value="<?= e($criteria['to']) ?>">
+    </div>
+    <div class="spacer"></div>
+    <span class="rt-range" id="rtRangeLabel"></span>
 </div>
 
 <h2 class="visually-hidden">Summary</h2>
-<div class="summary-strip cols-4 mb-3" id="rtSummary">
-    <div class="summary-item"><div class="l">Average response</div><div class="v" data-sum="avg">—</div><div class="s" data-sum="window_label">&nbsp;</div></div>
-    <div class="summary-item"><div class="l">Fastest website</div><div class="v" data-sum="fastest">—</div><div class="s" data-sum="fastest_name">&nbsp;</div></div>
-    <div class="summary-item"><div class="l">Slowest website</div><div class="v" data-sum="slowest">—</div><div class="s" data-sum="slowest_name">&nbsp;</div></div>
-    <div class="summary-item"><div class="l">Over slow threshold</div><div class="v" data-sum="over">—</div><div class="s" data-sum="threshold_label">&nbsp;</div></div>
+<div class="rt-tiles mb-3" id="rtSummary">
+    <div class="ov-tile">
+        <div class="l">Average response</div>
+        <div class="v" data-sum="avg">—</div>
+        <div class="viz" data-sum="fleet"></div>
+        <div class="s" data-sum="window_label">&nbsp;</div>
+    </div>
+    <div class="ov-tile">
+        <div class="l">Fastest website</div>
+        <div class="v tone-success" data-sum="fastest">—</div>
+        <div class="rt-site" data-sum="fastest_site">&nbsp;</div>
+        <div class="s" data-sum="fastest_note">&nbsp;</div>
+    </div>
+    <div class="ov-tile">
+        <div class="l">Slowest website</div>
+        <div class="v" data-sum="slowest">—</div>
+        <div class="rt-site" data-sum="slowest_site">&nbsp;</div>
+        <div class="s" data-sum="slowest_note">&nbsp;</div>
+    </div>
+    <div class="ov-tile">
+        <div class="l">Speed of all websites</div>
+        <div class="v" data-sum="over">—</div>
+        <div class="viz"><div class="rt-spread" data-sum="spread"></div></div>
+        <div class="s" data-sum="spread_note">&nbsp;</div>
+    </div>
 </div>
 
-<div class="sw-card mb-3">
+<section class="sw-card mb-3" aria-labelledby="rtRankTitle">
     <div class="sw-card-header">
-        <div><h3>Slowest websites</h3><p class="sub" id="rtChartSub">Average response time</p></div>
-        <div class="chart-legend m-0">
-            <span class="item"><span class="swatch"></span>Within threshold</span>
-            <span class="item"><span class="swatch" style="background:var(--sw-warning-solid)"></span>Slow</span>
-            <span class="item"><span class="swatch" style="background:var(--sw-danger-solid)"></span>Critically slow</span>
-        </div>
+        <div><h3 id="rtRankTitle">Slowest websites</h3><p class="sub" id="rtChartSub">Average response time</p></div>
+        <div class="rt-legend" id="rtLegend"></div>
     </div>
-    <div class="sw-card-body">
-        <div class="chart-box" style="height:300px">
-            <canvas id="chartSlowest" role="img" aria-label="Slowest websites by average response time"></canvas>
-            <div class="chart-empty" id="rtChartEmpty" hidden></div>
-        </div>
-    </div>
-</div>
+    <div class="rt-rank" id="rtRank"></div>
+    <div class="rt-rank-foot" id="rtRankFoot" hidden><button type="button" class="btn btn-sm btn-ghost" id="rtRankMore"></button></div>
+</section>
 
 <div class="sw-card">
     <div class="sw-card-header">

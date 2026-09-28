@@ -32,7 +32,6 @@ if ($activeTab === 'response') {
     ];
     $pageSubtitle = 'How quickly each website answers, from SiteWatch\'s own checks.';
     $pageScripts = ['performance-response.js'];
-    $needsCharts = true;
     $pageData = [
         'criteria' => $criteria,
         'clients'  => ServiceFactory::websites()->clients(),

@@ -188,6 +188,30 @@ final class CheckRepository extends BaseRepository
     }
 
     /**
+     * Average response time of a group of websites per time bucket (Performance › Response time trend).
+     *
+     * @param list<int> $websiteIds
+     * @return list<?float>
+     */
+    public function fleetSeries(string $fromUtc, int $bucketSeconds, array $websiteIds): array
+    {
+        if ($websiteIds === []) {
+            return [];
+        }
+        $bucket = max(60, $bucketSeconds);
+        [$in, $params] = $this->in($websiteIds, 'w');
+        $rows = $this->db->fetchAll(
+            "SELECT FLOOR(UNIX_TIMESTAMP(checked_at) / {$bucket}) * {$bucket} AS t,
+                    AVG(CASE WHEN is_failure = 0 THEN response_time END) AS avg_rt
+             FROM website_checks
+             WHERE checked_at >= :from AND website_id IN ({$in})
+             GROUP BY t ORDER BY t ASC",
+            $params + ['from' => $fromUtc]
+        );
+        return array_map(static fn (array $r): ?float => $r['avg_rt'] === null ? null : round((float) $r['avg_rt']), $rows);
+    }
+
+    /**
      * Per-website response statistics over a window (Response Times page).
      *
      * @return array<int, array<string, mixed>> keyed by website_id

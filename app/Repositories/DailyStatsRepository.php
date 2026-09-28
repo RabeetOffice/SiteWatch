@@ -119,6 +119,27 @@ final class DailyStatsRepository extends BaseRepository
     }
 
     /**
+     * Average response time of a group of websites per day, oldest first (weighted by checks).
+     *
+     * @param list<int> $websiteIds
+     * @return list<?float>
+     */
+    public function fleetDailyAverages(string $fromDate, string $toDate, array $websiteIds): array
+    {
+        if ($websiteIds === []) {
+            return [];
+        }
+        [$in, $params] = $this->db->inClause($websiteIds, 'w');
+        $rows = $this->db->fetchAll(
+            "SELECT stat_date, SUM(average_response_time * total_checks) / NULLIF(SUM(total_checks), 0) AS avg_rt
+             FROM daily_stats WHERE stat_date BETWEEN :from AND :to AND website_id IN ({$in})
+             GROUP BY stat_date ORDER BY stat_date",
+            $params + ['from' => $fromDate, 'to' => $toDate]
+        );
+        return array_map(static fn (array $r): ?float => $r['avg_rt'] === null ? null : round((float) $r['avg_rt']), $rows);
+    }
+
+    /**
      * Average response time per website per day, oldest first (sparklines on the Performance page).
      *
      * @return array<int, array<string, ?float>> website id => [date => average ms]
