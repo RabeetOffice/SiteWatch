@@ -2610,3 +2610,21 @@ a.ov-tile:hover { border-color: var(--sw-border-strong); text-decoration: none; 
     .ov-days-legend { display: none; }
 }
 @media (prefers-reduced-motion: reduce) { .ov-state .pulse.live::after { animation: none; } }
+
+/* Overview screenshot slot: thumbnail that opens a preview, or a placeholder */
+.ov-shot-slot { flex: 0 0 168px; }
+.ov-shot { position: relative; display: block; width: 168px; height: 105px; padding: 0; border: 1px solid var(--sw-border); border-radius: var(--sw-radius-control); overflow: hidden; background: var(--sw-sunken); cursor: zoom-in; }
+.ov-shot img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: top; transition: transform .25s ease; }
+.ov-shot:hover { border-color: var(--sw-border-strong); }
+.ov-shot:hover img { transform: scale(1.03); }
+.ov-shot:focus-visible { outline: 2px solid var(--sw-primary); outline-offset: 2px; }
+.ov-shot-cap { position: absolute; left: 6px; bottom: 6px; display: inline-flex; align-items: center; gap: 4px; padding: 2px 7px; border-radius: 999px; font-size: 11px; font-weight: 600; background: rgba(17, 19, 21, .72); color: #fff; }
+.ov-shot.empty { cursor: default; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; text-align: center; border-style: dashed; border-color: var(--sw-border-strong); color: var(--sw-muted); font-size: 12px; }
+.ov-shot.empty > i { font-size: 22px; color: var(--sw-decor); }
+.ov-shot-act { border: 0; background: none; padding: 0; font-size: 12px; font-weight: 600; color: var(--sw-primary-text); cursor: pointer; }
+.ov-shot-act:hover { text-decoration: underline; }
+.shot-preview-body { background: var(--sw-sunken); max-height: 75vh; overflow: auto; }
+.shot-preview-body img { display: block; width: 100%; height: auto; }
+.shot-frame[data-shot-preview] { cursor: zoom-in; }
+@media (max-width: 991.98px) { .ov-shot-slot { display: none; } }
+.ov-shot.empty { line-height: 1.35; padding: 8px; }

@@ -87,7 +87,12 @@ final class WebsiteOverviewService
             try {
                 $shot = ServiceFactory::screenshots()->latest($id);
                 if ($shot !== null) {
-                    $screenshot = ['url' => base_url('api/websites/screenshot.php?id=' . (int) $shot['id']), 'captured_at' => $shot['captured_at'] ?? $shot['created_at'] ?? null];
+                    $screenshot = [
+                        'url'            => base_url('api/websites/screenshot.php?id=' . (int) $shot['id']),
+                        'captured_at'    => $shot['captured_at'] ?? null,
+                        'captured_label' => format_datetime($shot['captured_at'] ?? null),
+                        'provider'       => (string) ($shot['provider'] ?? ''),
+                    ];
                 }
             } catch (Throwable) {
                 // Screenshots are optional.

@@ -48,15 +48,57 @@
         set('meta', meta.join('') || '&nbsp;');
 
         // The current error is already shown under the website name, on every tab.
-        const shot = document.querySelector('[data-ov="shot"]');
+        renderShot(b.screenshot);
+    }
+
+    // ------------------------------------------------------------------
+    // Screenshot: thumbnail, or a placeholder that says why there is none
+    // ------------------------------------------------------------------
+    function renderShot(shot) {
+        const slot = document.querySelector('[data-ov="shot"]');
+        if (!slot) return;
+        const perf = SW.page.performance || {};
         if (shot) {
-            shot.hidden = !b.screenshot;
-            if (b.screenshot) {
-                shot.href = b.screenshot.url;
-                const img = shot.querySelector('img');
-                if (img.getAttribute('src') !== b.screenshot.url) img.src = b.screenshot.url;
-            }
+            const current = slot.querySelector('img');
+            if (current && current.getAttribute('src') === shot.url) return;
+            slot.innerHTML = '<button type="button" class="ov-shot" data-shot-preview="' + SW.escape(shot.url) + '" data-shot-label="' + SW.escape('Captured ' + shot.captured_label + (shot.provider ? ' · ' + shot.provider : '')) + '" title="Preview the screenshot">' +
+                '<img src="' + SW.escape(shot.url) + '" alt="Latest screenshot of the website" loading="lazy">' +
+                '<span class="ov-shot-cap"><i class="bi bi-zoom-in" aria-hidden="true"></i> ' + SW.escape(SW.fmt.timeAgo(shot.captured_at)) + '</span></button>';
+            return;
         }
+        let text, action = '';
+        if (!perf.screenshotsEnabled) {
+            text = 'Screenshots are off';
+            if (perf.canManageSettings) action = '<a class="ov-shot-act" href="' + SW.url('admin/settings.php', { tab: 'monitoring' }) + '#screenshot_enabled">Turn on</a>';
+        } else {
+            text = 'No screenshot yet';
+            if (perf.canRun) action = '<button type="button" class="ov-shot-act" data-shot-capture-now>Capture now</button>';
+        }
+        slot.innerHTML = '<div class="ov-shot empty"><i class="bi bi-image" aria-hidden="true"></i><span>' + text + '</span>' + action + '</div>';
+    }
+
+    async function capture(btn) {
+        SW.setLoading(btn, true, 'Capturing…');
+        try {
+            const res = await SW.api('api/performance/run.php', { method: 'POST', body: { website_id: SW.page.id, action: 'screenshot' } });
+            SW.toast(res.message, 'success');
+            await load();
+            return true;
+        } catch (e) {
+            SW.toast(e.message, 'danger', { delay: 9000, title: 'Capture failed' });
+            return false;
+        } finally {
+            if (document.contains(btn)) SW.setLoading(btn, false);
+        }
+    }
+
+    function preview(url, label) {
+        const modal = document.getElementById('shotPreview');
+        if (!modal) { window.open(url, '_blank', 'noopener'); return; }
+        modal.querySelector('[data-shot-image]').src = url;
+        modal.querySelector('[data-shot-full]').href = url;
+        modal.querySelector('[data-shot-caption]').textContent = label || '';
+        bootstrap.Modal.getOrCreateInstance(modal).show();
     }
 
     function nextCheckText(utc) {
@@ -244,6 +286,24 @@
         if (!document.getElementById('ovBanner')) return;
         SW.countryMap([]);
         load().catch(function (e) { set('state', '<span>' + SW.escape(e.message) + '</span>'); });
+
+        // Screenshots open in a preview window, from the banner and from the Performance tab.
+        document.addEventListener('click', function (ev) {
+            const t = ev.target.closest ? ev.target : null;
+            if (!t) return;
+            const open = t.closest('[data-shot-preview]');
+            if (open) { ev.preventDefault(); preview(open.getAttribute('data-shot-preview'), open.getAttribute('data-shot-label')); return; }
+            const now = t.closest('[data-shot-capture-now]');
+            if (now) { capture(now); return; }
+            const again = t.closest('[data-shot-recapture]');
+            if (again) {
+                capture(again).then(function (ok) {
+                    if (!ok || !data || !data.banner.screenshot) return;
+                    preview(data.banner.screenshot.url, 'Captured ' + data.banner.screenshot.captured_label + (data.banner.screenshot.provider ? ' · ' + data.banner.screenshot.provider : ''));
+                    document.dispatchEvent(new CustomEvent('sw:screenshot-captured'));
+                });
+            }
+        });
 
         const ring = document.getElementById('ovScore');
         ring.addEventListener('click', function () {

@@ -148,7 +148,7 @@ require dirname(__DIR__) . '/includes/header.php';
             <div class="ov-state" data-ov="state"><span class="skeleton skeleton-line" style="width:240px;display:inline-block">&nbsp;</span></div>
             <div class="ov-meta" data-ov="meta">&nbsp;</div>
         </div>
-        <a class="ov-shot" data-ov="shot" hidden target="_blank" rel="noopener" title="Open the latest screenshot"><img alt="Latest screenshot of the website" loading="lazy"></a>
+        <?php if ($canViewReports): ?><div class="ov-shot-slot" data-ov="shot"><div class="ov-shot empty"><span class="skeleton" style="position:absolute;inset:0"></span></div></div><?php endif; ?>
     </div>
     <div class="ov-score-parts" id="ovScoreParts" hidden></div>
 </section>
@@ -354,6 +354,26 @@ require dirname(__DIR__) . '/includes/header.php';
         </div>
     </div>
 </div>
+</div>
+
+<div class="modal fade" id="shotPreview" tabindex="-1" aria-labelledby="shotPreviewTitle" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="min-w-0">
+                    <h2 class="modal-title" id="shotPreviewTitle">Screenshot of <?= e($website['name']) ?></h2>
+                    <p class="fs-13 text-muted mb-0" data-shot-caption></p>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-0 shot-preview-body"><img alt="Screenshot of <?= e($website['name']) ?>" data-shot-image></div>
+            <div class="modal-footer">
+                <a class="btn btn-light me-auto" href="<?= e($website['url']) ?>" target="_blank" rel="noopener noreferrer"><i class="bi bi-box-arrow-up-right" aria-hidden="true"></i>Open the website</a>
+                <a class="btn btn-light" href="#" target="_blank" rel="noopener" data-shot-full><i class="bi bi-arrows-fullscreen" aria-hidden="true"></i>Full size</a>
+                <?php if ($canRunChecks): ?><button type="button" class="btn btn-primary" data-shot-recapture><i class="bi bi-camera" aria-hidden="true"></i>Capture again</button><?php endif; ?>
+            </div>
+        </div>
+    </div>
 </div>
 
 <?php require dirname(__DIR__) . '/includes/footer.php'; ?>

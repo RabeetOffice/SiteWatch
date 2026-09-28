@@ -130,7 +130,7 @@
         const src = SW.url('api/websites/screenshot.php', { id: shot.id });
         // Not lazy-loaded: this is the one image the panel exists to show, and a lazy image inserted into
         // a frame that has no height until it loads can sit unloaded indefinitely.
-        body.innerHTML = '<a href="' + src + '" target="_blank" rel="noopener" class="shot-frame">' +
+        body.innerHTML = '<a href="' + src + '" target="_blank" rel="noopener" class="shot-frame" data-shot-preview="' + src + '" data-shot-label="' + SW.escape('Captured ' + shot.captured_label + ' · ' + shot.provider) + '">' +
             '<img src="' + src + '" alt="Screenshot of this website, captured ' + SW.escape(shot.captured_label) + '" decoding="async">' +
             '</a>';
     }
@@ -161,7 +161,7 @@
         try {
             const res = await SW.api('api/performance/run.php', { method: 'POST', body: { website_id: id, action: action } });
             SW.toast(res.message, 'success');
-            if (action === 'screenshot') { await loadScreenshot(); } else { summary = res.data.summary; renderVitals(); }
+            if (action === 'screenshot') { await loadScreenshot(); document.dispatchEvent(new CustomEvent('sw:website-checked')); } else { summary = res.data.summary; renderVitals(); }
         } catch (e) {
             SW.toast(e.message, 'danger', { delay: 9000, title: action === 'screenshot' ? 'Capture failed' : 'Measurement failed' });
         } finally {
@@ -190,5 +190,7 @@
 
         loadVitals();
         loadScreenshot();
+        // "Capture again" in the preview window took a new one.
+        document.addEventListener('sw:screenshot-captured', function () { loadScreenshot(); });
     });
 })();
