@@ -24,7 +24,7 @@ use RuntimeException;
  */
 final class Migrator
 {
-    public const VERSION = 13;
+    public const VERSION = 14;
     /** Version of databases created before schema versions were recorded. */
     public const BASELINE = 1;
     public const SETTING = 'schema_version';
@@ -128,6 +128,14 @@ final class Migrator
                 'Creates the country_status table (latest result per website and country) and country_checks (90 days of history) for the new country availability checks.',
                 'Adds websites.country_checked_at, used to schedule those checks.',
                 'Creates the push_subscriptions table: one row per browser or installed app that turned on desktop notifications.',
+            ],
+        ],
+        14 => [
+            'release' => '2.1.0',
+            'title'   => 'Branded client reports',
+            'changes' => [
+                'Creates the report_brands table: brand kits (logo, colours, contact details) for client reports. Logos are kept in storage/brands.',
+                'Creates the client_reports table: saved client reports with their shareable link, period, sections and view count.',
             ],
         ],
     ];
@@ -246,7 +254,17 @@ final class Migrator
             11 => fn () => $this->connectorAutofix(),
             12 => fn () => $this->createTable('connector_daily'),
             13 => fn () => $this->countriesAndPush(),
+            14 => fn () => $this->clientReports(),
         ];
+    }
+
+    /**
+     * v14 (2.1.0): brand kits and shareable client reports.
+     */
+    private function clientReports(): void
+    {
+        $this->createTable('report_brands');
+        $this->createTable('client_reports');
     }
 
     /**

@@ -12,11 +12,13 @@ use App\Monitoring\SsrfGuard;
 use App\Monitoring\UptimeCalculator;
 use App\Repositories\ActivityRepository;
 use App\Repositories\CheckRepository;
+use App\Repositories\ClientReportRepository;
 use App\Repositories\DailyStatsRepository;
 use App\Repositories\DomainRepository;
 use App\Repositories\HeartbeatRepository;
 use App\Repositories\IncidentRepository;
 use App\Repositories\NotificationRepository;
+use App\Repositories\ReportBrandRepository;
 use App\Repositories\RoleRepository;
 use App\Repositories\ScreenshotRepository;
 use App\Repositories\UserRepository;
@@ -116,6 +118,20 @@ final class ServiceFactory
     public static function reports(): ReportService
     {
         return new ReportService(self::websites(), self::dailyStats(), self::incidents(), self::checks());
+    }
+
+    public static function clientReports(): ClientReportService
+    {
+        return new ClientReportService(
+            new ClientReportRepository(App::db()),
+            new ReportBrandRepository(App::db()),
+            self::websites(),
+            self::reports(),
+            self::dailyStats(),
+            self::incidents(),
+            self::vitals(),
+            self::domains()
+        );
     }
 
     public static function vitals(): VitalsRepository

@@ -46,6 +46,7 @@ if (!function_exists('sw_nav')) {
             ]],
             ['label' => 'Reports', 'items' => [
                 ['key' => 'reports', 'icon' => 'bi-bar-chart-line', 'label' => 'Uptime report', 'href' => 'admin/reports.php', 'permission' => 'reports.view', 'shortcut' => 'g r'],
+                ['key' => 'client-reports', 'icon' => 'bi-file-earmark-richtext', 'label' => 'Client reports', 'href' => 'admin/client-reports.php', 'permission' => 'reports.view', 'shortcut' => 'g c'],
             ]],
             ['label' => 'Admin', 'items' => [
                 ['key' => 'team', 'icon' => 'bi-people', 'label' => 'Team', 'href' => 'admin/team.php', 'permission' => ['users.manage', 'roles.manage'], 'shortcut' => 'g t'],
@@ -77,6 +78,10 @@ if (!function_exists('sw_page_tabs')) {
                 ['key' => 'response', 'label' => 'Response time', 'icon' => 'bi-stopwatch', 'href' => 'admin/performance.php', 'permission' => 'reports.view'],
                 ['key' => 'vitals', 'label' => 'Core Web Vitals', 'icon' => 'bi-lightning-charge', 'href' => 'admin/performance.php?tab=vitals', 'permission' => 'reports.view'],
                 ['key' => 'countries', 'label' => 'Countries', 'icon' => 'bi-globe-europe-africa', 'href' => 'admin/performance.php?tab=countries', 'permission' => 'reports.view'],
+            ],
+            'client-reports' => [
+                ['key' => 'reports', 'label' => 'Reports', 'icon' => 'bi-file-earmark-richtext', 'href' => 'admin/client-reports.php', 'permission' => 'reports.view'],
+                ['key' => 'brands', 'label' => 'Brand kits', 'icon' => 'bi-palette', 'href' => 'admin/client-reports.php?tab=brands', 'permission' => 'reports.view'],
             ],
             'team' => [
                 ['key' => 'users', 'label' => 'Users', 'icon' => 'bi-person', 'href' => 'admin/team.php', 'permission' => 'users.manage'],

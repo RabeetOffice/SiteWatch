@@ -543,3 +543,52 @@ CREATE TABLE IF NOT EXISTS `push_subscriptions` (
   KEY `idx_push_user` (`user_id`),
   CONSTRAINT `fk_push_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---------------------------------------------------------------------------
+-- Client reports (2.1.0): brand kits (logo, colours, contact details) and branded reports with a
+-- shareable link. Logos live in storage/brands; report pages are served by report.php (/r/<token>).
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `report_brands` (
+  `id`              INT UNSIGNED  NOT NULL AUTO_INCREMENT,
+  `name`            VARCHAR(150)  NOT NULL COMMENT 'brand shown on the report, usually the client company',
+  `client_name`     VARCHAR(150)  NOT NULL DEFAULT '' COMMENT 'websites.client_name this brand is the default for',
+  `logo`            VARCHAR(80)   NULL COMMENT 'file name in storage/brands',
+  `primary_color`   CHAR(7)       NOT NULL DEFAULT '#EA580C',
+  `accent_color`    CHAR(7)       NOT NULL DEFAULT '#0F172A',
+  `prepared_by`     VARCHAR(150)  NULL COMMENT 'agency or person named as the author',
+  `website`         VARCHAR(255)  NULL,
+  `email`           VARCHAR(190)  NULL,
+  `phone`           VARCHAR(60)   NULL,
+  `footer_text`     VARCHAR(500)  NULL,
+  `white_label`     TINYINT(1)    NOT NULL DEFAULT 0 COMMENT 'hide the Powered by SiteWatch line',
+  `created_at`      DATETIME      NOT NULL,
+  `updated_at`      DATETIME      NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_report_brands_client` (`client_name`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `client_reports` (
+  `id`              INT UNSIGNED  NOT NULL AUTO_INCREMENT,
+  `token`           CHAR(32)      NOT NULL COMMENT 'random, part of the share link',
+  `title`           VARCHAR(150)  NOT NULL,
+  `brand_id`        INT UNSIGNED  NULL,
+  `client_name`     VARCHAR(150)  NOT NULL DEFAULT '' COMMENT 'empty = every client',
+  `website_ids`     VARCHAR(2000) NULL COMMENT 'JSON list of website ids; NULL = every website of the client',
+  `period`          VARCHAR(12)   NOT NULL DEFAULT '30d' COMMENT '7d | 30d | 90d | this_month | last_month | custom',
+  `date_from`       DATE          NULL COMMENT 'custom period only',
+  `date_to`         DATE          NULL COMMENT 'custom period only',
+  `sections`        VARCHAR(255)  NOT NULL COMMENT 'JSON list of section keys',
+  `intro`           TEXT          NULL COMMENT 'message to the client at the top of the report',
+  `is_active`       TINYINT(1)    NOT NULL DEFAULT 1 COMMENT 'share link works',
+  `expires_at`      DATETIME      NULL COMMENT 'share link stops working (UTC)',
+  `view_count`      INT UNSIGNED  NOT NULL DEFAULT 0,
+  `last_viewed_at`  DATETIME      NULL,
+  `created_by`      INT UNSIGNED  NULL,
+  `created_at`      DATETIME      NOT NULL,
+  `updated_at`      DATETIME      NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_client_reports_token` (`token`),
+  KEY `idx_client_reports_client` (`client_name`),
+  CONSTRAINT `fk_client_reports_brand` FOREIGN KEY (`brand_id`) REFERENCES `report_brands` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_client_reports_user` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

@@ -26,6 +26,7 @@ final class Permission
         'Monitoring data' => [
             'incidents.view' => ['View incidents', 'Incident history, the dashboard incident panel and incident exports'],
             'reports.view'   => ['View reports', 'Uptime reports, performance, response times and report exports'],
+            'reports.share'  => ['Create client reports', 'Create branded client reports and brand kits, download them as PDF and share them by link with people outside SiteWatch'],
         ],
         'Domains & hosting' => [
             'domains.view'   => ['View domain & hosting info', 'Domain age, WHOIS registration, expiry dates and hosting location'],

@@ -13,6 +13,9 @@ ServerSignature Off
     RewriteEngine On
     RewriteRule ^(app|config|database|storage|cron|vendor|tests)(/|$) - [F,L]
     RewriteRule ^(\.env|\.env\.example|composer\.json|composer\.lock|phpunit\.xml|README\.md)$ - [F,L]
+
+    # Client report share links: /r/<token> and /r/<token>.pdf
+    RewriteRule ^r/([a-f0-9]{32})(\.pdf)?$ report.php?t=$1&pdf=$2 [L,QSA]
 </IfModule>
 
 # Sensitive files (belt and braces in case mod_rewrite is unavailable)

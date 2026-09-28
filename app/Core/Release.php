@@ -18,7 +18,7 @@ namespace App\Core;
  */
 final class Release
 {
-    public const VERSION = '2.0.0';
+    public const VERSION = '2.1.0';
 
     /**
      * Newest first. 'schema' is the database schema version the release requires (null: unchanged).
@@ -26,6 +26,21 @@ final class Release
      * @var array<string, array{date: string, title: string, schema: ?int, added?: array<int, string>, improved?: array<int, string>, fixed?: array<int, string>}>
      */
     public const NOTES = [
+        '2.1.0' => [
+            'date'     => '2026-09-28',
+            'title'    => 'Branded client reports with PDF download and share links',
+            'schema'   => 14,
+            'added'    => [
+                'Client reports (Reports → Client reports): branded uptime and performance reports for your clients. Pick a client or individual websites, a period (last 7, 30 or 90 days, this month, last month or custom dates) and the sections to show: executive summary with an overall health verdict and comparison with the previous period, daily availability and response time charts, a per-website breakdown, the incident log, page speed scores, and SSL and domain renewals.',
+                'Share links: every report has a private link (/r/…) that opens without signing in, always shows current figures for its period, and can expire on a date, be switched off, or be given a new address. SiteWatch counts how often it was opened.',
+                'Designed PDF downloads, generated on the server, with the client\'s logo and colours, page numbers and a branded footer, from the report page, the share link (/r/….pdf) or the reports list.',
+                'Brand kits: a logo, brand and table colours, a prepared-by name, contact details, a footer line and an optional white label (no "Monitoring by SiteWatch"), with a live preview. A brand can be linked to a client so its reports use it automatically.',
+                'A Create client reports permission for making reports, brand kits and share links. New installations give it to the Manager role.',
+            ],
+            'improved' => [
+                'Reports → Uptime report is joined by Client reports in the sidebar (shortcut g then c).',
+            ],
+        ],
         '2.0.0' => [
             'date'     => '2026-09-28',
             'title'    => 'New look, instant pages, desktop app and notifications, country checks',

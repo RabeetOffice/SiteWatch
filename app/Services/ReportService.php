@@ -284,7 +284,7 @@ final class ReportService
      * @param array<int, array<string, mixed>> $rows
      * @return array<string, mixed>
      */
-    private function summarise(array $rows): array
+    public function summarise(array $rows): array
     {
         $checks = 0;
         $weightedUp = 0.0;

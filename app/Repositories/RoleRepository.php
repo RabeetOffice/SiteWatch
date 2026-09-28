@@ -24,7 +24,7 @@ final class RoleRepository extends BaseRepository
             'slug'        => 'manager',
             'name'        => 'Manager',
             'description' => 'Manages websites and monitoring data. No access to users, roles, settings or notifications.',
-            'permissions' => ['websites.manage', 'websites.check', 'websites.delete', 'incidents.view', 'reports.view', 'domains.view', 'domains.lookup', 'activity.view'],
+            'permissions' => ['websites.manage', 'websites.check', 'websites.delete', 'incidents.view', 'reports.view', 'reports.share', 'domains.view', 'domains.lookup', 'activity.view'],
             'is_system'   => 0,
         ],
         [

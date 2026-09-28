@@ -7,6 +7,8 @@
 !/storage/screenshots/.htaccess
 /storage/avatars/*
 !/storage/avatars/.htaccess
+/storage/brands/*
+!/storage/brands/.htaccess
 /storage/install.lock
 !/storage/**/.gitkeep
 /.phpunit.cache/

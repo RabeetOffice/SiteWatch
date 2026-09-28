@@ -25,6 +25,29 @@ final class DomainRepository extends BaseRepository
     }
 
     /**
+     * Stored details for several websites, keyed by website id.
+     *
+     * @param list<int> $websiteIds
+     * @return array<int, array<string, mixed>>
+     */
+    public function forWebsites(array $websiteIds): array
+    {
+        if ($websiteIds === []) {
+            return [];
+        }
+        [$in, $params] = $this->in($websiteIds, 'w');
+        $out = [];
+        foreach ($this->db->fetchAll(
+            "SELECT website_id, domain, registrar, registered_at, expires_at, hosting_provider, cdn, country_code, checked_at
+             FROM domain_info WHERE website_id IN ({$in})",
+            $params
+        ) as $row) {
+            $out[(int) $row['website_id']] = $row;
+        }
+        return $out;
+    }
+
+    /**
      * Insert or replace the details for a website.
      *
      * @param array<string, mixed> $inspection DomainInspector::inspect() output

@@ -197,6 +197,39 @@ final class DailyStatsRepository extends BaseRepository
     }
 
     /**
+     * Daily uptime and response time of a group of websites, keyed by date (client reports).
+     *
+     * @param list<int> $websiteIds
+     * @return array<string, array{uptime: ?float, avg: ?float, checks: int, down: int, incidents: int}>
+     */
+    public function groupDaily(string $fromDate, string $toDate, array $websiteIds): array
+    {
+        if ($websiteIds === []) {
+            return [];
+        }
+        [$in, $params] = $this->db->inClause($websiteIds, 'w');
+        $rows = $this->db->fetchAll(
+            "SELECT stat_date, SUM(total_checks) AS total, SUM(successful_checks) AS up, SUM(failed_checks) AS down,
+                    SUM(average_response_time * total_checks) / NULLIF(SUM(total_checks), 0) AS avg_rt,
+                    SUM(incident_count) AS incidents
+             FROM daily_stats WHERE stat_date BETWEEN :from AND :to AND website_id IN ({$in})
+             GROUP BY stat_date ORDER BY stat_date ASC",
+            $params + ['from' => $fromDate, 'to' => $toDate]
+        );
+        $out = [];
+        foreach ($rows as $r) {
+            $out[(string) $r['stat_date']] = [
+                'uptime'    => (int) $r['total'] > 0 ? round((int) $r['up'] / (int) $r['total'] * 100, 3) : null,
+                'avg'       => $r['avg_rt'] === null ? null : round((float) $r['avg_rt']),
+                'checks'    => (int) $r['total'],
+                'down'      => (int) $r['down'],
+                'incidents' => (int) $r['incidents'],
+            ];
+        }
+        return $out;
+    }
+
+    /**
      * Lifetime uptime for a website (all daily rows).
      *
      * @return array{total:int, up:int, down:int, uptime:?float, avg:?float, min:?int, max:?int, incidents:int, days:int}
